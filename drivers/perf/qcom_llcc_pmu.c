@@ -149,6 +149,7 @@ static int qcom_llcc_event_init(struct perf_event *event)
 
 	if (config == LLCC_RD_EV) {
 		event->hw.config_base = event->attr.config;
+		event->readable_on_cpus = CPU_MASK_ALL;
 		return 0;
 	} else
 		return -ENOENT;
