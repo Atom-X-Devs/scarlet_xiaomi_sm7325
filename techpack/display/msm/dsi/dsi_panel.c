@@ -1830,6 +1830,8 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"mi,mdss-dsi-fps-60-gamma-command",
 	"mi,mdss-dsi-fps-90-gamma-command",
 	"mi,mdss-dsi-fps-120-gamma-command",
+	"mi,mdss-dsi-panel-hbm-on-command",
+	"mi,mdss-dsi-panel-hbm-off-command",
 	"mi,mdss-dsi-doze-hbm-command",
 	"mi,mdss-dsi-doze-hbm-nolp-command",
 	"mi,mdss-dsi-doze-lbm-command",
@@ -1866,6 +1868,8 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"mi,mdss-dsi-fps-60-gamma-command-state",
 	"mi,mdss-dsi-fps-90-gamma-command-state",
 	"mi,mdss-dsi-fps-120-gamma-command-state",
+	"mi,mdss-dsi-hbm-on-command-state",
+	"mi,mdss-dsi-hbm-off-command-state",
 	"mi,mdss-dsi-doze-hbm-command-state",
 	"mi,mdss-dsi-doze-hbm-nolp-command-state",
 	"mi,mdss-dsi-doze-lbm-command-state",
@@ -4876,6 +4880,12 @@ int dsi_panel_enable(struct dsi_panel *panel)
 	else
 		panel->panel_initialized = true;
 	mutex_unlock(&panel->panel_lock);
+
+#ifdef CONFIG_MACH_XIAOMI
+	if (panel->hbm_mode)
+		dsi_panel_apply_hbm_mode(panel);
+#endif
+
 	return rc;
 }
 
@@ -5045,3 +5055,27 @@ error:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
+
+#ifdef CONFIG_MACH_XIAOMI
+int dsi_panel_apply_hbm_mode(struct dsi_panel *panel)
+{
+	static const enum dsi_cmd_set_type type_map[] = {
+		DSI_CMD_SET_MI_HBM_OFF,
+		DSI_CMD_SET_MI_HBM_ON
+	};
+
+	enum dsi_cmd_set_type type;
+	int rc;
+
+	if (panel->hbm_mode >= 0 && panel->hbm_mode < ARRAY_SIZE(type_map))
+		type = type_map[panel->hbm_mode];
+	else
+		type = DSI_CMD_SET_MI_HBM_OFF;
+
+	mutex_lock(&panel->panel_lock);
+	rc = dsi_panel_tx_cmd_set(panel, type);
+	mutex_unlock(&panel->panel_lock);
+
+	return rc;
+}
+#endif
