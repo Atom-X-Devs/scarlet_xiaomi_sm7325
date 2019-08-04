@@ -10,7 +10,11 @@
 void nf_queue_nf_hook_drop(struct net *net);
 
 /* nf_log.c */
+#ifdef CONFIG_DEBUG_KERNEL
 int __init netfilter_log_init(void);
+#else
+static inline int __init netfilter_log_init(void) { return 0; }
+#endif
 
 /* core.c */
 void nf_hook_entries_delete_raw(struct nf_hook_entries __rcu **pp,
