@@ -66,6 +66,7 @@
 #include <linux/syscalls.h>
 #include <linux/task_work.h>
 #include <linux/android_vendor.h>
+#include <linux/sizes.h>
 
 #include <uapi/linux/sched/types.h>
 #include <uapi/linux/android/binder.h>
@@ -100,9 +101,8 @@ static int proc_show(struct seq_file *m, void *unused);
 DEFINE_SHOW_ATTRIBUTE(proc);
 #endif
 
-/* This is only defined in include/asm-arm/sizes.h */
-#ifndef SZ_1K
-#define SZ_1K                               0x400
+#ifndef SZ_4M
+#define SZ_4M                               0x400000
 #endif
 
 #define FORBIDDEN_MMAP_FLAGS                (VM_WRITE)
