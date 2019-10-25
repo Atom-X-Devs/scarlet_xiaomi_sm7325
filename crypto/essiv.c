@@ -488,7 +488,7 @@ static int essiv_create(struct crypto_template *tmpl, struct rtattr **tb)
 	type = algt->type & algt->mask;
 
 	switch (type) {
-	case CRYPTO_ALG_TYPE_BLKCIPHER:
+	case CRYPTO_ALG_TYPE_SKCIPHER:
 		skcipher_inst = kzalloc(sizeof(*skcipher_inst) +
 					sizeof(*ictx), GFP_KERNEL);
 		if (!skcipher_inst)
@@ -588,7 +588,7 @@ static int essiv_create(struct crypto_template *tmpl, struct rtattr **tb)
 	base->cra_alignmask	= block_base->cra_alignmask;
 	base->cra_priority	= block_base->cra_priority;
 
-	if (type == CRYPTO_ALG_TYPE_BLKCIPHER) {
+	if (type == CRYPTO_ALG_TYPE_SKCIPHER) {
 		skcipher_inst->alg.setkey	= essiv_skcipher_setkey;
 		skcipher_inst->alg.encrypt	= essiv_skcipher_encrypt;
 		skcipher_inst->alg.decrypt	= essiv_skcipher_decrypt;
@@ -630,7 +630,7 @@ static int essiv_create(struct crypto_template *tmpl, struct rtattr **tb)
 out_free_hash:
 	crypto_mod_put(_hash_alg);
 out_drop_skcipher:
-	if (type == CRYPTO_ALG_TYPE_BLKCIPHER)
+	if (type == CRYPTO_ALG_TYPE_SKCIPHER)
 		crypto_drop_skcipher(&ictx->u.skcipher_spawn);
 	else
 		crypto_drop_aead(&ictx->u.aead_spawn);
