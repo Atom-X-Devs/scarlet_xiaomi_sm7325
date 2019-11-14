@@ -271,6 +271,23 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 #include <linux/kcsan-checks.h>
 
 /*
+ * data_race: macro to document that accesses in an expression may conflict with
+ * other concurrent accesses resulting in data races, but the resulting
+ * behaviour is deemed safe regardless.
+ *
+ * This macro *does not* affect normal code generation, but is a hint to tooling
+ * that data races here should be ignored.
+ */
+#define data_race(expr)                                                        \
+	({                                                                     \
+		typeof(({ expr; })) __val;                                     \
+		kcsan_nestable_atomic_begin();                                 \
+		__val = ({ expr; });                                           \
+		kcsan_nestable_atomic_end();                                   \
+		__val;                                                         \
+	})
+
+/*
  * Use __READ_ONCE() instead of READ_ONCE() if you do not require any
  * atomicity or dependency ordering guarantees. Note that this may result
  * in tears!
