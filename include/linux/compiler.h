@@ -271,7 +271,7 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 #include <linux/kcsan-checks.h>
 
 /*
- * data_race: macro to document that accesses in an expression may conflict with
+ * data_race(): macro to document that accesses in an expression may conflict with
  * other concurrent accesses resulting in data races, but the resulting
  * behaviour is deemed safe regardless.
  *
