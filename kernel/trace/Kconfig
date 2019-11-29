@@ -161,6 +161,13 @@ config TRACING
 	select EVENT_TRACING
 	select TRACE_CLOCK
 
+config TRACE_PRINTK
+	bool "Enable trace_printk()"
+	depends on TRACING
+	help
+	  This option enables trace_printk().
+	  If unsure, say N.
+
 config GENERIC_TRACER
 	bool
 	select TRACING
