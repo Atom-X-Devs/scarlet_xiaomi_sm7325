@@ -244,6 +244,25 @@ struct ftrace_likely_data {
 			 __scalar_type_to_expr_cases(long long),	\
 			 default: (x)))
 
+/*
+ *
+ * We build this out of a couple of helper macros in a vain attempt to
+ * help you keep your lunch down while reading it.
+ */
+#define __pick_scalar_type(x, type, otherwise)					\
+	__builtin_choose_expr(__same_type(x, type), (type)0, otherwise)
+
+#define __pick_integer_type(x, type, otherwise)					\
+	__pick_scalar_type(x, unsigned type,					\
+		__pick_scalar_type(x, signed type, otherwise))
+
+#define __unqual_scalar_typeof(x) typeof(					\
+	__pick_integer_type(x, char,						\
+		__pick_integer_type(x, short,					\
+			__pick_integer_type(x, int,				\
+				__pick_integer_type(x, long,			\
+					__pick_integer_type(x, long long, x))))))
+
 /* Is this type a native word size -- useful for atomic operations */
 #define __native_word(t) \
 	(sizeof(t) == sizeof(char) || sizeof(t) == sizeof(short) || \
