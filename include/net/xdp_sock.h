@@ -108,7 +108,7 @@ int xsk_generic_rcv(struct xdp_sock *xs, struct xdp_buff *xdp);
 /* Used from netdev driver */
 bool xsk_umem_has_addrs(struct xdp_umem *umem, u32 cnt);
 bool xsk_umem_peek_addr(struct xdp_umem *umem, u64 *addr);
-void xsk_umem_discard_addr(struct xdp_umem *umem);
+void xsk_umem_release_addr(struct xdp_umem *umem);
 void xsk_umem_complete_tx(struct xdp_umem *umem, u32 nb_entries);
 bool xsk_umem_consume_tx(struct xdp_umem *umem, struct xdp_desc *desc);
 void xsk_umem_consume_tx_done(struct xdp_umem *umem);
@@ -193,12 +193,12 @@ static inline bool xsk_umem_peek_addr_rq(struct xdp_umem *umem, u64 *addr)
 	return addr;
 }
 
-static inline void xsk_umem_discard_addr_rq(struct xdp_umem *umem)
+static inline void xsk_umem_release_addr_rq(struct xdp_umem *umem)
 {
 	struct xdp_umem_fq_reuse *rq = umem->fq_reuse;
 
 	if (!rq->length)
-		xsk_umem_discard_addr(umem);
+		xsk_umem_release_addr(umem);
 	else
 		rq->length--;
 }
@@ -238,7 +238,7 @@ static inline u64 *xsk_umem_peek_addr(struct xdp_umem *umem, u64 *addr)
 	return NULL;
 }
 
-static inline void xsk_umem_discard_addr(struct xdp_umem *umem)
+static inline void xsk_umem_release_addr(struct xdp_umem *umem)
 {
 }
 
@@ -312,7 +312,7 @@ static inline u64 *xsk_umem_peek_addr_rq(struct xdp_umem *umem, u64 *addr)
 	return NULL;
 }
 
-static inline void xsk_umem_discard_addr_rq(struct xdp_umem *umem)
+static inline void xsk_umem_release_addr_rq(struct xdp_umem *umem)
 {
 }
 
