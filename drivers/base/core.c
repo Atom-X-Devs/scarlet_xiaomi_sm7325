@@ -1415,6 +1415,9 @@ static void fw_devlink_link_device(struct device *dev)
 {
 	int fw_ret;
 
+	if (!fw_devlink_flags)
+		return;
+
 	mutex_lock(&defer_fw_devlink_lock);
 	if (!defer_fw_devlink_count)
 		device_link_add_missing_supplier_links();
@@ -2169,9 +2172,11 @@ static int device_add_attrs(struct device *dev)
 			goto err_remove_dev_groups;
 	}
 
-	error = device_create_file(dev, &dev_attr_waiting_for_supplier);
-	if (error)
-		goto err_remove_dev_online;
+	if (fw_devlink_flag) {
+		error = device_create_file(dev, &dev_attr_waiting_for_supplier);
+		if (error)
+			goto err_remove_dev_online;
+	}
 
 	return 0;
 
@@ -2756,6 +2761,31 @@ static int device_private_init(struct device *dev)
 		   klist_children_put);
 	INIT_LIST_HEAD(&dev->p->deferred_probe);
 	return 0;
+}
+
+u32 fw_devlink_flags;
+static int __init fw_devlink_setup(char *arg)
+{
+	if (!arg)
+		return -EINVAL;
+
+	if (strcmp(arg, "off") == 0) {
+		fw_devlink_flags = 0;
+	} else if (strcmp(arg, "permissive") == 0) {
+		fw_devlink_flags = DL_FLAG_SYNC_STATE_ONLY;
+	} else if (strcmp(arg, "on") == 0) {
+		fw_devlink_flags = DL_FLAG_AUTOPROBE_CONSUMER;
+	} else if (strcmp(arg, "rpm") == 0) {
+		fw_devlink_flags = DL_FLAG_AUTOPROBE_CONSUMER |
+				   DL_FLAG_PM_RUNTIME;
+	}
+	return 0;
+}
+early_param("fw_devlink", fw_devlink_setup);
+
+u32 fw_devlink_get_flags(void)
+{
+	return fw_devlink_flags;
 }
 
 /**
