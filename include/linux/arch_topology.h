@@ -59,6 +59,8 @@ void topology_set_thermal_pressure(const struct cpumask *cpus,
 void topology_update_thermal_pressure(const struct cpumask *cpus,
 				      unsigned long capped_freq);
 
+bool arch_freq_counters_available(struct cpumask *cpus);
+
 struct cpu_topology {
 	int thread_id;
 	int core_id;
