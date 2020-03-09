@@ -1149,7 +1149,6 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 	pctrl->irq_chip.irq_mask = msm_gpio_irq_mask;
 	pctrl->irq_chip.irq_unmask = msm_gpio_irq_unmask;
 	pctrl->irq_chip.irq_ack = msm_gpio_irq_ack;
-	pctrl->irq_chip.irq_eoi = irq_chip_eoi_parent;
 	pctrl->irq_chip.irq_set_type = msm_gpio_irq_set_type;
 	pctrl->irq_chip.irq_set_wake = msm_gpio_irq_set_wake;
 	pctrl->irq_chip.irq_set_affinity = msm_gpio_irq_set_affinity;
@@ -1167,6 +1166,7 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 		if (!chip->irq.parent_domain)
 			return -EPROBE_DEFER;
 		chip->irq.child_to_parent_hwirq = msm_gpio_wakeirq;
+		pctrl->irq_chip.irq_eoi = irq_chip_eoi_parent;
 
 		skip = irq_domain_qcom_handle_wakeup(chip->irq.parent_domain);
 		for (i = 0; skip && i < pctrl->soc->nwakeirq_map; i++) {
