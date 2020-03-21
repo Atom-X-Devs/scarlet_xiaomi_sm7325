@@ -57,6 +57,18 @@ do {						\
 	current->softirq_context--;		\
 } while (0)
 
+# define lockdep_hrtimer_enter(__hrtimer)		\
+	  do {						\
+		  if (!__hrtimer->is_hard)		\
+			current->irq_config = 1;	\
+	  } while (0)
+
+# define lockdep_hrtimer_exit(__hrtimer)		\
+	  do {						\
+		  if (!__hrtimer->is_hard)		\
+			current->irq_config = 0;	\
+	  } while (0)
+
 # define lockdep_irq_work_enter(_flags)					\
 	  do {								\
 		  if (!((_flags) & IRQ_WORK_HARD_IRQ))			\
@@ -80,6 +92,8 @@ do {						\
 # define trace_hardirq_exit()		do { } while (0)
 # define lockdep_softirq_enter()	do { } while (0)
 # define lockdep_softirq_exit()		do { } while (0)
+# define lockdep_hrtimer_enter(__hrtimer)	do { } while (0)
+# define lockdep_hrtimer_exit(__hrtimer)	do { } while (0)
 # define lockdep_irq_work_enter(__work)		do { } while (0)
 # define lockdep_irq_work_exit(__work)		do { } while (0)
 #endif
