@@ -73,7 +73,7 @@ struct blk_mq_hw_ctx {
 	struct list_head	hctx_list;
 
 	/* Must be the last member - see also blk_mq_hw_ctx_size(). */
-	struct srcu_struct	srcu[0];
+	struct srcu_struct	srcu[];
 };
 
 struct blk_mq_queue_map {
