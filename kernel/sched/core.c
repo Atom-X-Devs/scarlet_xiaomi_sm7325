@@ -342,6 +342,9 @@ sched_core_dequeue(struct rq *rq, struct task_struct *p, int flags) { }
 
 #endif /* CONFIG_SCHED_CORE */
 
+/* record the min capacity cpus */
+struct cpumask min_cap_cpu_mask;
+
 /*
  * Serialization rules:
  *
@@ -9142,6 +9145,8 @@ void __init sched_init(void)
 	init_uclamp();
 
 	scheduler_running = 1;
+
+	cpumask_clear(&min_cap_cpu_mask);
 }
 
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
