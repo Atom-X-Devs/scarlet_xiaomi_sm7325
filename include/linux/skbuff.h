@@ -4179,7 +4179,7 @@ struct skb_ext {
 	refcount_t refcnt;
 	u8 offset[SKB_EXT_NUM]; /* in chunks of 8 bytes */
 	u8 chunks;		/* same */
-	char data[0] __aligned(8);
+	char data[] __aligned(8);
 };
 
 void *skb_ext_add(struct sk_buff *skb, enum skb_ext_id id);
