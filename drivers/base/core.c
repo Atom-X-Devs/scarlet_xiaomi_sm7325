@@ -52,6 +52,7 @@ static unsigned int defer_sync_state_count = 1;
 static unsigned int defer_fw_devlink_count;
 static LIST_HEAD(deferred_fw_devlink);
 static DEFINE_MUTEX(defer_fw_devlink_lock);
+static bool fw_devlink_is_permissive(void);
 
 #ifdef CONFIG_SRCU
 static DEFINE_MUTEX(device_links_lock);
@@ -763,7 +764,7 @@ static void device_link_add_missing_supplier_links(void)
 		int ret = fwnode_call_int_op(dev->fwnode, add_links, dev);
 		if (!ret)
 			list_del_init(&dev->links.needs_suppliers);
-		else if (ret != -ENODEV)
+		else if (ret != -ENODEV || fw_devlink_is_permissive())
 			dev->links.need_for_probe = false;
 	}
 	mutex_unlock(&wfs_lock);
@@ -1438,6 +1439,8 @@ static void fw_devlink_link_device(struct device *dev)
 	 */
 	if (!defer_fw_devlink_count) {
 		fw_ret = fwnode_call_int_op(dev->fwnode, add_links, dev);
+		if (fw_ret == -ENODEV && fw_devlink_is_permissive())
+			fw_ret = -EAGAIN;
 	} else {
 		fw_ret = -ENODEV;
 		/*
@@ -2172,7 +2175,7 @@ static int device_add_attrs(struct device *dev)
 			goto err_remove_dev_groups;
 	}
 
-	if (fw_devlink_flag) {
+	if (fw_devlink_flag && !fw_devlink_is_permissive()) {
 		error = device_create_file(dev, &dev_attr_waiting_for_supplier);
 		if (error)
 			goto err_remove_dev_online;
@@ -2786,6 +2789,11 @@ early_param("fw_devlink", fw_devlink_setup);
 u32 fw_devlink_get_flags(void)
 {
 	return fw_devlink_flags;
+}
+
+static bool fw_devlink_is_permissive(void)
+{
+	return fw_devlink_flags == DL_FLAG_SYNC_STATE_ONLY;
 }
 
 /**
