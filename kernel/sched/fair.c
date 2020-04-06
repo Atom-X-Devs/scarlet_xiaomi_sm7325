@@ -9564,40 +9564,17 @@ static unsigned long scale_rt_capacity(int cpu, unsigned long max)
 	return scale_irq_capacity(free, irq, max);
 }
 
-void init_max_cpu_capacity(struct max_cpu_capacity *mcc) {
-	raw_spin_lock_init(&mcc->lock);
-	mcc->val = 0;
-	mcc->cpu = -1;
-}
-
 static void update_cpu_capacity(struct sched_domain *sd, int cpu)
 {
 	unsigned long capacity = arch_scale_cpu_capacity(cpu);
 	struct sched_group *sdg = sd->groups;
-	struct max_cpu_capacity *mcc;
 	struct rq *rq = cpu_rq(cpu);
-	unsigned long max_capacity;
-	int max_cap_cpu;
-	unsigned long flags;
 	u64 limit;
 
 	rq->cpu_capacity_orig = capacity;
 
 	capacity *= arch_scale_max_freq_capacity(sd, cpu);
 	capacity >>= SCHED_CAPACITY_SHIFT;
-
-	mcc = &rq->rd->max_cpu_capacity;
-
-	raw_spin_lock_irqsave(&mcc->lock, flags);
-	max_capacity = mcc->val;
-	max_cap_cpu = mcc->cpu;
-
-	if ((max_capacity > capacity && max_cap_cpu == cpu) ||
-	    (max_capacity < capacity)) {
-		mcc->val = capacity;
-		mcc->cpu = cpu;
-	}
-	raw_spin_unlock_irqrestore(&mcc->lock, flags);
 
 	capacity = scale_rt_capacity(cpu, capacity);
 
