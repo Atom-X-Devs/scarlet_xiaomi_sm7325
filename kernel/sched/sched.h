@@ -2553,15 +2553,6 @@ unsigned long arch_scale_freq_capacity(int cpu)
 }
 #endif
 
-#ifndef arch_scale_max_freq_capacity
-struct sched_domain;
-static __always_inline
-unsigned long arch_scale_max_freq_capacity(struct sched_domain *sd, int cpu)
-{
-	return SCHED_CAPACITY_SCALE;
-}
-#endif
-
 /*
  * In double_lock_balance()/double_rq_lock(), we use raw_spin_rq_lock() to
  * acquire rq lock instead of rq_lock(). So at the end of these two functions
