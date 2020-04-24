@@ -13,7 +13,7 @@ extern unsigned long sysctl_hung_task_timeout_secs;
 extern unsigned long sysctl_hung_task_check_interval_secs;
 extern int sysctl_hung_task_warnings;
 extern int proc_dohung_task_timeout_secs(struct ctl_table *table, int write,
-					 void __user *buffer,
+					 void *buffer,
 					 size_t *lenp, loff_t *ppos);
 #else
 /* Avoid need for ifdefs elsewhere in the code */
@@ -41,12 +41,10 @@ extern __read_mostly unsigned int sysctl_sched_migration_cost;
 extern __read_mostly unsigned int sysctl_sched_nr_migrate;
 
 int sched_proc_update_handler(struct ctl_table *table, int write,
-		void __user *buffer, size_t *length,
-		loff_t *ppos);
+		void *buffer, size_t *length, loff_t *ppos);
 #endif
 
-extern int sysctl_numa_balancing(struct ctl_table *table, int write,
-				 void __user *buffer, size_t *lenp,
-				 loff_t *ppos);
+int sysctl_numa_balancing(struct ctl_table *table, int write, void *buffer,
+		size_t *lenp, loff_t *ppos);
 
 #endif /* _LINUX_SCHED_SYSCTL_H */
