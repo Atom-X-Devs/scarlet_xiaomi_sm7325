@@ -136,7 +136,7 @@ abort_conn:
 	fuse_abort_conn(fc);
 }
 
-static void fuse_request_init(struct fuse_conn *fc, struct fuse_req *req)
+static void fuse_request_init(struct fuse_mount *fm, struct fuse_req *req)
 {
 	INIT_LIST_HEAD(&req->list);
 	INIT_LIST_HEAD(&req->intr_entry);
@@ -144,14 +144,14 @@ static void fuse_request_init(struct fuse_conn *fc, struct fuse_req *req)
 	refcount_set(&req->count, 1);
 	__set_bit(FR_PENDING, &req->flags);
 	req->create_time = jiffies;
-	req->fc = fc;
+	req->fm = fm;
 }
 
-static struct fuse_req *fuse_request_alloc(struct fuse_conn *fc, gfp_t flags)
+static struct fuse_req *fuse_request_alloc(struct fuse_mount *fm, gfp_t flags)
 {
 	struct fuse_req *req = kmem_cache_zalloc(fuse_req_cachep, flags);
 	if (req)
-		fuse_request_init(fc, req);
+		fuse_request_init(fm, req);
 
 	return req;
 }
@@ -200,8 +200,9 @@ static void fuse_drop_waiting(struct fuse_conn *fc)
 
 static void fuse_put_request(struct fuse_req *req);
 
-static struct fuse_req *fuse_get_req(struct fuse_conn *fc, bool for_background)
+static struct fuse_req *fuse_get_req(struct fuse_mount *fm, bool for_background)
 {
+	struct fuse_conn *fc = fm->fc;
 	struct fuse_req *req;
 	int err;
 	atomic_inc(&fc->num_waiting);
@@ -224,7 +225,7 @@ static struct fuse_req *fuse_get_req(struct fuse_conn *fc, bool for_background)
 	if (fc->conn_error)
 		goto out;
 
-	req = fuse_request_alloc(fc, GFP_KERNEL);
+	req = fuse_request_alloc(fm, GFP_KERNEL);
 	err = -ENOMEM;
 	if (!req) {
 		if (for_background)
@@ -254,7 +255,7 @@ static struct fuse_req *fuse_get_req(struct fuse_conn *fc, bool for_background)
 
 static void fuse_put_request(struct fuse_req *req)
 {
-	struct fuse_conn *fc = req->fc;
+	struct fuse_conn *fc = req->fm->fc;
 
 	if (refcount_dec_and_test(&req->count)) {
 		if (test_bit(FR_BACKGROUND, &req->flags)) {
@@ -379,7 +380,8 @@ static void flush_bg_queue(struct fuse_conn *fc)
  */
 void fuse_request_end(struct fuse_req *req)
 {
-	struct fuse_conn *fc = req->fc;
+	struct fuse_mount *fm = req->fm;
+	struct fuse_conn *fc = fm->fc;
 	struct fuse_iqueue *fiq = &fc->iq;
 
 	if (test_and_set_bit(FR_FINISHED, &req->flags))
@@ -414,9 +416,9 @@ void fuse_request_end(struct fuse_req *req)
 				wake_up(&fc->blocked_waitq);
 		}
 
-		if (fc->num_background == fc->congestion_threshold && fc->sb) {
-			clear_bdi_congested(fc->sb->s_bdi, BLK_RW_SYNC);
-			clear_bdi_congested(fc->sb->s_bdi, BLK_RW_ASYNC);
+		if (fc->num_background == fc->congestion_threshold && fm->sb) {
+			clear_bdi_congested(fm->sb->s_bdi, BLK_RW_SYNC);
+			clear_bdi_congested(fm->sb->s_bdi, BLK_RW_ASYNC);
 		}
 		fc->num_background--;
 		fc->active_background--;
@@ -428,7 +430,7 @@ void fuse_request_end(struct fuse_req *req)
 	}
 
 	if (test_bit(FR_ASYNC, &req->flags))
-		req->args->end(fc, req->args, req->out.h.error);
+		req->args->end(fm, req->args, req->out.h.error);
 put_request:
 	fuse_put_request(req);
 }
@@ -436,7 +438,7 @@ EXPORT_SYMBOL_GPL(fuse_request_end);
 
 static int queue_interrupt(struct fuse_req *req)
 {
-	struct fuse_iqueue *fiq = &req->fc->iq;
+	struct fuse_iqueue *fiq = &req->fm->fc->iq;
 
 	spin_lock(&fiq->lock);
 	/* Check for we've sent request to interrupt this req */
@@ -466,7 +468,7 @@ static int queue_interrupt(struct fuse_req *req)
 
 static void request_wait_answer(struct fuse_req *req)
 {
-	struct fuse_conn *fc = req->fc;
+	struct fuse_conn *fc = req->fm->fc;
 	struct fuse_iqueue *fiq = &fc->iq;
 	int err;
 
@@ -512,7 +514,7 @@ static void request_wait_answer(struct fuse_req *req)
 
 static void __fuse_request_send(struct fuse_req *req)
 {
-	struct fuse_iqueue *fiq = &req->fc->iq;
+	struct fuse_iqueue *fiq = &req->fm->fc->iq;
 
 	BUG_ON(test_bit(FR_BACKGROUND, &req->flags));
 	spin_lock(&fiq->lock);
@@ -567,7 +569,7 @@ static void fuse_adjust_compat(struct fuse_conn *fc, struct fuse_args *args)
 
 static void fuse_force_creds(struct fuse_req *req)
 {
-	struct fuse_conn *fc = req->fc;
+	struct fuse_conn *fc = req->fm->fc;
 
 	req->in.h.uid = from_kuid_munged(fc->user_ns, current_fsuid());
 	req->in.h.gid = from_kgid_munged(fc->user_ns, current_fsgid());
@@ -583,14 +585,15 @@ static void fuse_args_to_req(struct fuse_req *req, struct fuse_args *args)
 		__set_bit(FR_ASYNC, &req->flags);
 }
 
-ssize_t fuse_simple_request(struct fuse_conn *fc, struct fuse_args *args)
+ssize_t fuse_simple_request(struct fuse_mount *fm, struct fuse_args *args)
 {
+	struct fuse_conn *fc = fm->fc;
 	struct fuse_req *req;
 	ssize_t ret;
 
 	if (args->force) {
 		atomic_inc(&fc->num_waiting);
-		req = fuse_request_alloc(fc, GFP_KERNEL | __GFP_NOFAIL);
+		req = fuse_request_alloc(fm, GFP_KERNEL | __GFP_NOFAIL);
 
 		if (!args->nocreds)
 			fuse_force_creds(req);
@@ -599,7 +602,7 @@ ssize_t fuse_simple_request(struct fuse_conn *fc, struct fuse_args *args)
 		__set_bit(FR_FORCE, &req->flags);
 	} else {
 		WARN_ON(args->nocreds);
-		req = fuse_get_req(fc, false);
+		req = fuse_get_req(fm, false);
 		if (IS_ERR(req))
 			return PTR_ERR(req);
 	}
@@ -623,7 +626,8 @@ ssize_t fuse_simple_request(struct fuse_conn *fc, struct fuse_args *args)
 
 static bool fuse_request_queue_background(struct fuse_req *req)
 {
-	struct fuse_conn *fc = req->fc;
+	struct fuse_mount *fm = req->fm;
+	struct fuse_conn *fc = fm->fc;
 	bool queued = false;
 
 	WARN_ON(!test_bit(FR_BACKGROUND, &req->flags));
@@ -637,9 +641,9 @@ static bool fuse_request_queue_background(struct fuse_req *req)
 		fc->num_background++;
 		if (fc->num_background == fc->max_background)
 			fc->blocked = 1;
-		if (fc->num_background == fc->congestion_threshold && fc->sb) {
-			set_bdi_congested(fc->sb->s_bdi, BLK_RW_SYNC);
-			set_bdi_congested(fc->sb->s_bdi, BLK_RW_ASYNC);
+		if (fc->num_background == fc->congestion_threshold && fm->sb) {
+			set_bdi_congested(fm->sb->s_bdi, BLK_RW_SYNC);
+			set_bdi_congested(fm->sb->s_bdi, BLK_RW_ASYNC);
 		}
 		list_add_tail(&req->list, &fc->bg_queue);
 		flush_bg_queue(fc);
@@ -650,20 +654,20 @@ static bool fuse_request_queue_background(struct fuse_req *req)
 	return queued;
 }
 
-int fuse_simple_background(struct fuse_conn *fc, struct fuse_args *args,
+int fuse_simple_background(struct fuse_mount *fm, struct fuse_args *args,
 			    gfp_t gfp_flags)
 {
 	struct fuse_req *req;
 
 	if (args->force) {
 		WARN_ON(!args->nocreds);
-		req = fuse_request_alloc(fc, gfp_flags);
+		req = fuse_request_alloc(fm, gfp_flags);
 		if (!req)
 			return -ENOMEM;
 		__set_bit(FR_BACKGROUND, &req->flags);
 	} else {
 		WARN_ON(args->nocreds);
-		req = fuse_get_req(fc, true);
+		req = fuse_get_req(fm, true);
 		if (IS_ERR(req))
 			return PTR_ERR(req);
 	}
@@ -679,14 +683,14 @@ int fuse_simple_background(struct fuse_conn *fc, struct fuse_args *args,
 }
 EXPORT_SYMBOL_GPL(fuse_simple_background);
 
-static int fuse_simple_notify_reply(struct fuse_conn *fc,
+static int fuse_simple_notify_reply(struct fuse_mount *fm,
 				    struct fuse_args *args, u64 unique)
 {
 	struct fuse_req *req;
-	struct fuse_iqueue *fiq = &fc->iq;
+	struct fuse_iqueue *fiq = &fm->fc->iq;
 	int err = 0;
 
-	req = fuse_get_req(fc, false);
+	req = fuse_get_req(fm, false);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
@@ -1560,11 +1564,8 @@ static int fuse_notify_inval_inode(struct fuse_conn *fc, unsigned int size,
 	fuse_copy_finish(cs);
 
 	down_read(&fc->killsb);
-	err = -ENOENT;
-	if (fc->sb) {
-		err = fuse_reverse_inval_inode(fc->sb, outarg.ino,
-					       outarg.off, outarg.len);
-	}
+	err = fuse_reverse_inval_inode(fc, outarg.ino,
+				       outarg.off, outarg.len);
 	up_read(&fc->killsb);
 	return err;
 
@@ -1610,9 +1611,7 @@ static int fuse_notify_inval_entry(struct fuse_conn *fc, unsigned int size,
 	buf[outarg.namelen] = 0;
 
 	down_read(&fc->killsb);
-	err = -ENOENT;
-	if (fc->sb)
-		err = fuse_reverse_inval_entry(fc->sb, outarg.parent, 0, &name);
+	err = fuse_reverse_inval_entry(fc, outarg.parent, 0, &name);
 	up_read(&fc->killsb);
 	kfree(buf);
 	return err;
@@ -1660,10 +1659,7 @@ static int fuse_notify_delete(struct fuse_conn *fc, unsigned int size,
 	buf[outarg.namelen] = 0;
 
 	down_read(&fc->killsb);
-	err = -ENOENT;
-	if (fc->sb)
-		err = fuse_reverse_inval_entry(fc->sb, outarg.parent,
-					       outarg.child, &name);
+	err = fuse_reverse_inval_entry(fc, outarg.parent, outarg.child, &name);
 	up_read(&fc->killsb);
 	kfree(buf);
 	return err;
@@ -1705,10 +1701,7 @@ static int fuse_notify_store(struct fuse_conn *fc, unsigned int size,
 	down_read(&fc->killsb);
 
 	err = -ENOENT;
-	if (!fc->sb)
-		goto out_up_killsb;
-
-	inode = ilookup5(fc->sb, nodeid, fuse_inode_eq, &nodeid);
+	inode = fuse_ilookup(fc, nodeid,  NULL);
 	if (!inode)
 		goto out_up_killsb;
 
@@ -1767,7 +1760,7 @@ struct fuse_retrieve_args {
 	struct fuse_notify_retrieve_in inarg;
 };
 
-static void fuse_retrieve_end(struct fuse_conn *fc, struct fuse_args *args,
+static void fuse_retrieve_end(struct fuse_mount *fm, struct fuse_args *args,
 			      int error)
 {
 	struct fuse_retrieve_args *ra =
@@ -1777,7 +1770,7 @@ static void fuse_retrieve_end(struct fuse_conn *fc, struct fuse_args *args,
 	kfree(ra);
 }
 
-static int fuse_retrieve(struct fuse_conn *fc, struct inode *inode,
+static int fuse_retrieve(struct fuse_mount *fm, struct inode *inode,
 			 struct fuse_notify_retrieve_out *outarg)
 {
 	int err;
@@ -1788,6 +1781,7 @@ static int fuse_retrieve(struct fuse_conn *fc, struct inode *inode,
 	unsigned int offset;
 	size_t total_len = 0;
 	unsigned int num_pages;
+	struct fuse_conn *fc = fm->fc;
 	struct fuse_retrieve_args *ra;
 	size_t args_size = sizeof(*ra);
 	struct fuse_args_pages *ap;
@@ -1849,9 +1843,9 @@ static int fuse_retrieve(struct fuse_conn *fc, struct inode *inode,
 	args->in_args[0].value = &ra->inarg;
 	args->in_args[1].size = total_len;
 
-	err = fuse_simple_notify_reply(fc, args, outarg->notify_unique);
+	err = fuse_simple_notify_reply(fm, args, outarg->notify_unique);
 	if (err)
-		fuse_retrieve_end(fc, args, err);
+		fuse_retrieve_end(fm, args, err);
 
 	return err;
 }
@@ -1860,7 +1854,9 @@ static int fuse_notify_retrieve(struct fuse_conn *fc, unsigned int size,
 				struct fuse_copy_state *cs)
 {
 	struct fuse_notify_retrieve_out outarg;
+	struct fuse_mount *fm;
 	struct inode *inode;
+	u64 nodeid;
 	int err;
 
 	err = -EINVAL;
@@ -1875,14 +1871,12 @@ static int fuse_notify_retrieve(struct fuse_conn *fc, unsigned int size,
 
 	down_read(&fc->killsb);
 	err = -ENOENT;
-	if (fc->sb) {
-		u64 nodeid = outarg.nodeid;
+	nodeid = outarg.nodeid;
 
-		inode = ilookup5(fc->sb, nodeid, fuse_inode_eq, &nodeid);
-		if (inode) {
-			err = fuse_retrieve(fc, inode, &outarg);
-			iput(inode);
-		}
+	inode = fuse_ilookup(fc, nodeid, &fm);
+	if (inode) {
+		err = fuse_retrieve(fm, inode, &outarg);
+		iput(inode);
 	}
 	up_read(&fc->killsb);
 
