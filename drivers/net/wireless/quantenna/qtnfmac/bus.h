@@ -55,7 +55,7 @@ struct qtnf_bus {
 	struct mutex bus_lock; /* lock during command/event processing */
 	struct dentry *dbg_dir;
 	/* bus private data */
-	char bus_priv[0] __aligned(sizeof(void *));
+	char bus_priv[] __aligned(sizeof(void *));
 };
 
 static inline bool qtnf_fw_is_up(struct qtnf_bus *bus)
