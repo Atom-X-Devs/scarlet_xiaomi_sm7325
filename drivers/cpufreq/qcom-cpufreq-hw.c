@@ -189,6 +189,14 @@ static void qcom_lmh_dcvs_notify(struct cpufreq_qcom *c)
 				 msecs_to_jiffies(LIMITS_POLLING_DELAY_MS));
 	}
 
+	/*
+	 * Route the LMh-reported throttled frequency through FIE's thermal
+	 * pressure aggregation. FIE combines this with its own measured HW
+	 * throttle detection for a more accurate thermal pressure report.
+	 */
+	fie_cpufreq_pressure(cpu, thermal_pressure >= policy->cpuinfo.max_freq ?
+			     UINT_MAX : thermal_pressure);
+
 	trace_dcvsh_freq(cpu, requested_freq, throttled_freq, thermal_pressure);
 
 	/* Update thermal pressure (boost frequencies are accepted). */
@@ -275,6 +283,7 @@ qcom_cpufreq_hw_target_index(struct cpufreq_policy *policy,
 {
 	struct cpufreq_qcom *c = qcom_freq_domain_map[policy->cpu];
 	unsigned long freq = policy->freq_table[index].frequency;
+	unsigned long flags;
 	int i;
 
 	if (perf_lock_support) {
@@ -285,7 +294,14 @@ qcom_cpufreq_hw_target_index(struct cpufreq_policy *policy,
 	for (i = 0; i < c->sdpm_base_count && freq > policy->cur; i++)
 		writel_relaxed(freq / 1000, c->sdpm_base[i]);
 
+	/*
+	 * Disable IRQs around the frequency set so that the timestamp
+	 * recorded by FIE is as close to the actual MMIO write as possible.
+	 */
+	local_irq_save(flags);
 	writel_relaxed(index, policy->driver_data + offsets[REG_PERF_STATE]);
+	fie_rate_set(policy->cpu, freq);
+	local_irq_restore(flags);
 
 	for (i = 0; i < c->sdpm_base_count && freq < policy->cur; i++)
 		writel_relaxed(freq / 1000, c->sdpm_base[i]);
