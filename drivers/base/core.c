@@ -1412,6 +1412,36 @@ static void device_links_purge(struct device *dev)
 	device_links_write_unlock();
 }
 
+static u32 fw_devlink_flags = DL_FLAG_SYNC_STATE_ONLY;
+static int __init fw_devlink_setup(char *arg)
+{
+	if (!arg)
+		return -EINVAL;
+
+	if (strcmp(arg, "off") == 0) {
+		fw_devlink_flags = 0;
+	} else if (strcmp(arg, "permissive") == 0) {
+		fw_devlink_flags = DL_FLAG_SYNC_STATE_ONLY;
+	} else if (strcmp(arg, "on") == 0) {
+		fw_devlink_flags = DL_FLAG_AUTOPROBE_CONSUMER;
+	} else if (strcmp(arg, "rpm") == 0) {
+		fw_devlink_flags = DL_FLAG_AUTOPROBE_CONSUMER |
+				   DL_FLAG_PM_RUNTIME;
+	}
+	return 0;
+}
+early_param("fw_devlink", fw_devlink_setup);
+
+u32 fw_devlink_get_flags(void)
+{
+	return fw_devlink_flags;
+}
+
+static bool fw_devlink_is_permissive(void)
+{
+	return fw_devlink_flags == DL_FLAG_SYNC_STATE_ONLY;
+}
+
 static void fw_devlink_link_device(struct device *dev)
 {
 	int fw_ret;
@@ -1545,6 +1575,7 @@ out:
 		bus_probe_device(dev);
 	}
 }
+
 /* Device links support end. */
 
 int (*platform_notify)(struct device *dev) = NULL;
@@ -2764,36 +2795,6 @@ static int device_private_init(struct device *dev)
 		   klist_children_put);
 	INIT_LIST_HEAD(&dev->p->deferred_probe);
 	return 0;
-}
-
-static u32 fw_devlink_flags = DL_FLAG_SYNC_STATE_ONLY;
-static int __init fw_devlink_setup(char *arg)
-{
-	if (!arg)
-		return -EINVAL;
-
-	if (strcmp(arg, "off") == 0) {
-		fw_devlink_flags = 0;
-	} else if (strcmp(arg, "permissive") == 0) {
-		fw_devlink_flags = DL_FLAG_SYNC_STATE_ONLY;
-	} else if (strcmp(arg, "on") == 0) {
-		fw_devlink_flags = DL_FLAG_AUTOPROBE_CONSUMER;
-	} else if (strcmp(arg, "rpm") == 0) {
-		fw_devlink_flags = DL_FLAG_AUTOPROBE_CONSUMER |
-				   DL_FLAG_PM_RUNTIME;
-	}
-	return 0;
-}
-early_param("fw_devlink", fw_devlink_setup);
-
-u32 fw_devlink_get_flags(void)
-{
-	return fw_devlink_flags;
-}
-
-static bool fw_devlink_is_permissive(void)
-{
-	return fw_devlink_flags == DL_FLAG_SYNC_STATE_ONLY;
 }
 
 /**
