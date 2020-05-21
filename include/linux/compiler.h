@@ -339,10 +339,10 @@ static __always_inline void __write_once_size(volatile void *p, void *res, int s
  */
 #define data_race(expr)							\
 ({									\
-	({								\
-		__unqual_scalar_typeof(({ expr; })) __v = ({ expr; });	\
-		__v;							\
+	__unqual_scalar_typeof(({ expr; })) __v = ({			\
+		expr;							\
 	});								\
+	__v;								\
 })
 
 #define __READ_ONCE(x, check)						\
