@@ -153,7 +153,7 @@ struct dma_interleaved_template {
 	bool dst_sgl;
 	size_t numf;
 	size_t frame_size;
-	struct data_chunk sgl[0];
+	struct data_chunk sgl[];
 };
 
 /**
@@ -472,7 +472,7 @@ struct dmaengine_unmap_data {
 	struct device *dev;
 	struct kref kref;
 	size_t len;
-	dma_addr_t addr[0];
+	dma_addr_t addr[];
 };
 
 /**
