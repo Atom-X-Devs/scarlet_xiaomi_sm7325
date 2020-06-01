@@ -1359,7 +1359,9 @@ static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 	if (idx == cpu->nlevels - 1)
 		program_rimps_timer(cpu);
 
+	cpuidle_set_idle_cpu(dev->cpu);
 	ret = psci_enter_sleep(cpu, idx, true);
+	cpuidle_clear_idle_cpu(dev->cpu);
 	success = (ret == 0);
 
 	if (idx == cpu->nlevels - 1)
