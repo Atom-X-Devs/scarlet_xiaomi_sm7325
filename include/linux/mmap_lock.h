@@ -1,6 +1,10 @@
 #ifndef _LINUX_MMAP_LOCK_H
 #define _LINUX_MMAP_LOCK_H
 
+#include <linux/mmdebug.h>
+
+#define MMAP_LOCK_INITIALIZER(name) \
+	.mmap_sem = __RWSEM_INITIALIZER((name).mmap_sem),
 static inline void mmap_init_lock(struct mm_struct *mm)
 {
 	init_rwsem(&mm->mmap_sem);
