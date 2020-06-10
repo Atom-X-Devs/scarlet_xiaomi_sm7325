@@ -34,6 +34,12 @@ do
 		exit 0;
 	fi
 
+	# Check for stop request.
+	if test -f "$TORTURE_STOPFILE"
+	then
+		exit 1;
+	fi
+
 	# Set affinity to randomly selected online CPU
 	cpus=`grep 1 /sys/devices/system/cpu/*/online |
 		sed -e 's,/[^/]*$,,' -e 's/^[^0-9]*//'`
