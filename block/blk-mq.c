@@ -616,9 +616,7 @@ static void __blk_mq_complete_request(struct request *rq)
 		shared = cpus_share_cache(cpu, ctx->cpu);
 
 	if (cpu != ctx->cpu && !shared && cpu_online(ctx->cpu)) {
-		rq->csd.func = __blk_mq_complete_request_remote;
-		rq->csd.info = rq;
-		rq->csd.flags = 0;
+		INIT_CSD(&rq->csd, __blk_mq_complete_request_remote, rq);
 		smp_call_function_single_async(ctx->cpu, &rq->csd);
 	} else {
 		q->mq_ops->complete(rq);
