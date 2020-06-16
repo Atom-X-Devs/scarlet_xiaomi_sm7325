@@ -57,6 +57,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/bitfield.h>
 #include <linux/devfreq.h>
+#include <linux/keyslot-manager.h>
 #include "unipro.h"
 
 #include <asm/irq.h>
@@ -214,8 +215,7 @@ struct ufs_pm_lvl_states {
  * @intr_cmd: Interrupt command (doesn't participate in interrupt aggregation)
  * @issue_time_stamp: time stamp for debug purposes
  * @compl_time_stamp: time stamp for statistics
- * @crypto_enable: whether or not the request needs inline crypto operations
- * @crypto_key_slot: the key slot to use for inline crypto
+ * @crypto_key_slot: the key slot to use for inline crypto (-1 if none)
  * @data_unit_num: the data unit number for the first block for inline crypto
  * @req_abort_skip: skip request abort task flag
  */
@@ -241,11 +241,10 @@ struct ufshcd_lrb {
 	bool intr_cmd;
 	ktime_t issue_time_stamp;
 	ktime_t compl_time_stamp;
-#if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO)
-	bool crypto_enable;
-	u8 crypto_key_slot;
+#ifdef CONFIG_SCSI_UFS_CRYPTO
+	int crypto_key_slot;
 	u64 data_unit_num;
-#endif /* CONFIG_SCSI_UFS_CRYPTO */
+#endif
 
 	bool req_abort_skip;
 };
@@ -397,22 +396,20 @@ struct ufs_hba_variant_ops {
 	ANDROID_KABI_RESERVE(4);
 };
 
-struct keyslot_mgmt_ll_ops;
+struct blk_ksm_ll_ops;
 struct ufs_hba_crypto_variant_ops {
 	void (*setup_rq_keyslot_manager)(struct ufs_hba *hba,
 					 struct request_queue *q);
-	void (*destroy_rq_keyslot_manager)(struct ufs_hba *hba,
-					   struct request_queue *q);
+	void (*destroy_keyslot_manager)(struct ufs_hba *hba);
 	int (*hba_init_crypto)(struct ufs_hba *hba,
-			       const struct keyslot_mgmt_ll_ops *ksm_ops);
-	void (*enable)(struct ufs_hba *hba);
-	void (*disable)(struct ufs_hba *hba);
+			       const struct blk_ksm_ll_ops *ksm_ops);
+	bool (*enable)(struct ufs_hba *hba);
 	int (*suspend)(struct ufs_hba *hba, enum ufs_pm_op pm_op);
 	int (*resume)(struct ufs_hba *hba, enum ufs_pm_op pm_op);
 	int (*debug)(struct ufs_hba *hba);
-	int (*prepare_lrbp_crypto)(struct ufs_hba *hba,
-				   struct scsi_cmnd *cmd,
-				   struct ufshcd_lrb *lrbp);
+	void (*prepare_lrbp_crypto)(struct ufs_hba *hba,
+				    struct scsi_cmnd *cmd,
+				    struct ufshcd_lrb *lrbp);
 	int (*map_sg_crypto)(struct ufs_hba *hba, struct ufshcd_lrb *lrbp);
 	int (*complete_lrbp_crypto)(struct ufs_hba *hba,
 				    struct scsi_cmnd *cmd,
@@ -754,13 +751,6 @@ enum ufshcd_quirks {
 	 * This quirk needs to disable manual flush for write booster
 	 */
 	UFSHCI_QUIRK_SKIP_MANUAL_WB_FLUSH_CTRL		= 1 << 12,
-
-	/*
-	 * This quirk needs to be enabled if the host controller supports inline
-	 * encryption, but the CRYPTO_GENERAL_ENABLE bit is not implemented and
-	 * breaks the HCE sequence if used.
-	 */
-	UFSHCD_QUIRK_BROKEN_CRYPTO		= 1 << 21,
 };
 
 enum ufshcd_caps {
@@ -1050,13 +1040,12 @@ struct ufs_hba {
 	struct scsi_device *sdev_ufs_lu[UFS_UPIU_MAX_GENERAL_LUN];
 #endif
 #ifdef CONFIG_SCSI_UFS_CRYPTO
-	/* crypto */
 	union ufs_crypto_capabilities crypto_capabilities;
 	union ufs_crypto_cap_entry *crypto_cap_array;
 	u32 crypto_cfg_register;
-	struct keyslot_manager *ksm;
+	struct blk_keyslot_manager ksm;
 	void *crypto_DO_NOT_USE[8];
-#endif /* CONFIG_SCSI_UFS_CRYPTO */
+#endif
 
 	bool wb_buf_flush_enabled;
 	bool wb_enabled;
