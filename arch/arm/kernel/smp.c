@@ -519,14 +519,6 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	}
 }
 
-static void (*__smp_cross_call)(const struct cpumask *, unsigned int);
-
-void __init set_smp_cross_call(void (*fn)(const struct cpumask *, unsigned int))
-{
-	if (!__smp_cross_call)
-		__smp_cross_call = fn;
-}
-
 static const char *ipi_types[NR_IPI] __tracepoint_string = {
 #define S(x,s)	[x] = s
 	S(IPI_WAKEUP, "CPU wakeup interrupts"),
@@ -538,18 +530,7 @@ static const char *ipi_types[NR_IPI] __tracepoint_string = {
 	S(IPI_COMPLETION, "completion interrupts"),
 };
 
-static void smp_cross_call(const struct cpumask *target, unsigned int ipinr)
-{
-#ifdef CONFIG_QGKI_LPM_IPI_CHECK
-	unsigned int cpu;
-
-	for_each_cpu(cpu, target)
-		per_cpu(pending_ipi, cpu) = true;
-#endif /* CONFIG_QGKI_LPM_IPI_CHECK */
-
-	trace_ipi_raise_rcuidle(target, ipi_types[ipinr]);
-	__smp_cross_call(target, ipinr);
-}
+static void smp_cross_call(const struct cpumask *target, unsigned int ipinr);
 
 void show_ipi_list(struct seq_file *p, int prec)
 {
@@ -732,16 +713,24 @@ static irqreturn_t ipi_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static void ipi_send(const struct cpumask *target, unsigned int ipi)
+static void smp_cross_call(const struct cpumask *target, unsigned int ipinr)
 {
-	__ipi_send_mask(ipi_desc[ipi], target);
+#ifdef CONFIG_QGKI_LPM_IPI_CHECK
+	unsigned int cpu;
+
+	for_each_cpu(cpu, target)
+		per_cpu(pending_ipi, cpu) = true;
+#endif /* CONFIG_QGKI_LPM_IPI_CHECK */
+
+	trace_ipi_raise_rcuidle(target, ipi_types[ipinr]);
+	__ipi_send_mask(ipi_desc[ipinr], target);
 }
 
 static void ipi_setup(int cpu)
 {
 	int i;
 
-	if (!ipi_irq_base)
+	if (WARN_ON_ONCE(!ipi_irq_base))
 		return;
 
 	for (i = 0; i < nr_ipi; i++)
@@ -752,7 +741,7 @@ static void ipi_teardown(int cpu)
 {
 	int i;
 
-	if (!ipi_irq_base)
+	if (WARN_ON_ONCE(!ipi_irq_base))
 		return;
 
 	for (i = 0; i < nr_ipi; i++)
@@ -778,7 +767,6 @@ void __init set_smp_ipi_range(int ipi_base, int n)
 	}
 
 	ipi_irq_base = ipi_base;
-	set_smp_cross_call(ipi_send);
 
 	/* Setup the boot CPU immediately */
 	ipi_setup(smp_processor_id());
@@ -892,7 +880,7 @@ core_initcall(register_cpufreq_notifier);
 
 static void raise_nmi(cpumask_t *mask)
 {
-	__smp_cross_call(mask, IPI_CPU_BACKTRACE);
+	__ipi_send_mask(ipi_desc[IPI_CPU_BACKTRACE], mask);
 }
 
 void arch_trigger_cpumask_backtrace(const cpumask_t *mask, bool exclude_self)
