@@ -65,6 +65,7 @@
 #include <linux/compat.h>
 #include <linux/sysfs.h>
 #include <linux/kprobes.h>
+#include <linux/usermode_driver.h>
 
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
