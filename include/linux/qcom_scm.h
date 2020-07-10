@@ -45,6 +45,13 @@ struct qcom_scm_mem_map_info {
 	__le64 mem_size;
 };
 
+enum qcom_scm_ice_cipher {
+	QCOM_SCM_ICE_CIPHER_AES_128_XTS = 0,
+	QCOM_SCM_ICE_CIPHER_AES_128_CBC = 1,
+	QCOM_SCM_ICE_CIPHER_AES_256_XTS = 3,
+	QCOM_SCM_ICE_CIPHER_AES_256_CBC = 4,
+};
+
 #define QCOM_SCM_VMID_HLOS       0x3
 #define QCOM_SCM_VMID_MSS_MSA    0xF
 #define QCOM_SCM_VMID_WLAN       0x18
@@ -166,7 +173,12 @@ extern int qcom_scm_config_set_ice_key(uint32_t index, phys_addr_t paddr,
 				       size_t size, uint32_t cipher,
 				       unsigned int data_unit,
 				       unsigned int food);
-extern int qcom_scm_clear_ice_key(uint32_t index, unsigned int food);
+extern int qcom_scm_clear_ice_key(uint32_t index, unsigned int ce);
+extern bool qcom_scm_ice_available(void);
+extern int qcom_scm_ice_invalidate_key(u32 index);
+extern int qcom_scm_ice_set_key(u32 index, const u8 *key, u32 key_size,
+				enum qcom_scm_ice_cipher cipher,
+				u32 data_unit_size);
 extern bool qcom_scm_hdcp_available(void);
 extern int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt,
 			     u32 *resp);
@@ -342,8 +354,13 @@ static inline int qcom_scm_dcvs_update_ca_v2(int level, s64 total_time,
 static inline int qcom_scm_config_set_ice_key(uint32_t index, phys_addr_t paddr,
 		size_t size, uint32_t cipher, unsigned int data_unit,
 		unsigned int food) { return -ENODEV; }
-static inline int qcom_scm_clear_ice_key(uint32_t index, unsigned int food)
+static inline int qcom_scm_clear_ice_key(uint32_t index, unsigned int ce)
 		{ return -ENODEV; }
+static inline bool qcom_scm_ice_available(void) { return false; }
+static inline int qcom_scm_ice_invalidate_key(u32 index) { return -ENODEV; }
+static inline int qcom_scm_ice_set_key(u32 index, const u8 *key, u32 key_size,
+				       enum qcom_scm_ice_cipher cipher,
+				       u32 data_unit_size) { return -ENODEV; }
 static inline bool qcom_scm_hdcp_available(void) { return false; }
 static inline int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt,
 				    u32 *resp) { return -ENODEV; }
