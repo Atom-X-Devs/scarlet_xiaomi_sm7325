@@ -43,15 +43,18 @@
  * @dev:            device handle.
  * @pctrl:          pinctrl handle.
  * @chip:           gpiochip handle.
+ * @desc:           pin controller descriptor
  * @restart_nb:     restart notifier block.
+ * @irq_chip:       irq chip information
  * @irq:            parent irq for the TLMM irq_chip.
+ * @intr_target_use_scm: route irq to application cpu using scm calls
  * @lock:           Spinlock to protect register resources as well
  *                  as msm_pinctrl data structures.
  * @enabled_irqs:   Bitmap of currently enabled irqs.
  * @dual_edge_irqs: Bitmap of irqs that need sw emulated dual edge
  *                  detection.
- * @skip_wake_irqs: Skip IRQs that are handled by wakeup interrupt contrroller
- * @soc;            Reference to soc_data of platform specific data.
+ * @skip_wake_irqs: Skip IRQs that are handled by wakeup interrupt controller
+ * @soc:            Reference to soc_data of platform specific data.
  * @regs:           Base addresses for the TLMM tiles.
  */
 struct msm_pinctrl {
