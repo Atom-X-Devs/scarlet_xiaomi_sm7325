@@ -510,8 +510,6 @@ static void ufshcd_print_host_regs(struct ufs_hba *hba)
 	ufshcd_print_err_hist(hba, &hba->ufs_stats.task_abort, "task_abort");
 
 	ufshcd_vops_dbg_register_dump(hba);
-
-	ufshcd_crypto_debug(hba);
 }
 
 static
@@ -2350,7 +2348,7 @@ static int ufshcd_map_sg(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 		lrbp->utr_descriptor_ptr->prd_table_length = 0;
 	}
 
-	return ufshcd_map_sg_crypto(hba, lrbp);
+	return 0;
 }
 
 /**
@@ -5164,7 +5162,6 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 			result = ufshcd_transfer_rsp_status(hba, lrbp);
 			scsi_dma_unmap(cmd);
 			cmd->result = result;
-			ufshcd_complete_lrbp_crypto(hba, cmd, lrbp);
 			/* Mark completed command as NULL in LRB */
 			lrbp->cmd = NULL;
 			lrbp->compl_time_stamp = ktime_get();
@@ -8720,10 +8717,6 @@ static int ufshcd_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		req_link_state = UIC_LINK_OFF_STATE;
 	}
 
-	ret = ufshcd_crypto_suspend(hba, pm_op);
-	if (ret)
-		goto out;
-
 	/*
 	 * If we can't transition into any of the low power modes
 	 * just gate the clocks.
@@ -8859,7 +8852,6 @@ enable_gating:
 	hba->clk_gating.is_suspended = false;
 	hba->dev_info.b_rpm_dev_flush_capable = false;
 	ufshcd_release(hba);
-	ufshcd_crypto_resume(hba, pm_op);
 out:
 	if (hba->dev_info.b_rpm_dev_flush_capable) {
 		schedule_delayed_work(&hba->rpm_dev_flush_recheck_work,
@@ -8887,11 +8879,9 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	int ret;
 	enum uic_link_state old_link_state;
-	enum ufs_dev_pwr_mode old_pwr_mode;
 
 	hba->pm_op_in_progress = 1;
 	old_link_state = hba->uic_link_state;
-	old_pwr_mode = hba->curr_dev_pwr_mode;
 
 	ufshcd_hba_vreg_set_hpm(hba);
 #if defined(CONFIG_SCSI_UFSHCD_QTI)
@@ -8976,10 +8966,6 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 			goto set_old_link_state;
 	}
 
-	ret = ufshcd_crypto_resume(hba, pm_op);
-	if (ret)
-		goto set_old_dev_pwr_mode;
-
 	if (ufshcd_keep_autobkops_enabled_except_suspend(hba))
 		ufshcd_enable_auto_bkops(hba);
 	else
@@ -9011,9 +8997,6 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 
 	goto out;
 
-set_old_dev_pwr_mode:
-	if (old_pwr_mode != hba->curr_dev_pwr_mode)
-		ufshcd_set_dev_pwr_mode(hba, old_pwr_mode);
 set_old_link_state:
 	ufshcd_link_state_transition(hba, old_link_state, 0);
 vendor_suspend:

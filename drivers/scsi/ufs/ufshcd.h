@@ -396,33 +396,6 @@ struct ufs_hba_variant_ops {
 	ANDROID_KABI_RESERVE(4);
 };
 
-struct blk_ksm_ll_ops;
-struct ufs_hba_crypto_variant_ops {
-	void (*setup_rq_keyslot_manager)(struct ufs_hba *hba,
-					 struct request_queue *q);
-	void (*destroy_keyslot_manager)(struct ufs_hba *hba);
-	int (*hba_init_crypto)(struct ufs_hba *hba,
-			       const struct blk_ksm_ll_ops *ksm_ops);
-	bool (*enable)(struct ufs_hba *hba);
-	int (*suspend)(struct ufs_hba *hba, enum ufs_pm_op pm_op);
-	int (*resume)(struct ufs_hba *hba, enum ufs_pm_op pm_op);
-	int (*debug)(struct ufs_hba *hba);
-	void (*prepare_lrbp_crypto)(struct ufs_hba *hba,
-				    struct scsi_cmnd *cmd,
-				    struct ufshcd_lrb *lrbp);
-	int (*map_sg_crypto)(struct ufs_hba *hba, struct ufshcd_lrb *lrbp);
-	int (*complete_lrbp_crypto)(struct ufs_hba *hba,
-				    struct scsi_cmnd *cmd,
-				    struct ufshcd_lrb *lrbp);
-	void *priv;
-	void *crypto_DO_NOT_USE[8];
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
-};
-
 /* clock gating state  */
 enum clk_gating_state {
 	CLKS_OFF,
@@ -926,7 +899,6 @@ struct ufs_hba {
 	const struct ufs_hba_variant_ops *vops;
 	struct ufs_hba_variant_params *vps;
 	void *priv;
-	const struct ufs_hba_crypto_variant_ops *crypto_vops;
 	size_t sg_entry_size;
 	unsigned int irq;
 	bool is_irq_enabled;
