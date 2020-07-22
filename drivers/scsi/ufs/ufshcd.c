@@ -8769,7 +8769,9 @@ static int ufshcd_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		if ((ufshcd_is_runtime_pm(pm_op) && !hba->auto_bkops_enabled) ||
 		    !ufshcd_is_runtime_pm(pm_op)) {
 			/* ensure that bkops is disabled */
-			ufshcd_disable_auto_bkops(hba);
+			ret = ufshcd_disable_auto_bkops(hba);
+			if (ret)
+				goto enable_gating;
 		}
 
 		if (!hba->dev_info.b_rpm_dev_flush_capable) {
