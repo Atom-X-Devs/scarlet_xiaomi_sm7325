@@ -481,6 +481,10 @@ static struct vmap_area *__find_vmap_area(unsigned long addr)
 /*
  * This function returns back addresses of parent node
  * and its left or right link for further processing.
+ *
+ * Otherwise NULL is returned. In that case all further
+ * steps regarding inserting of conflicting overlap range
+ * have to be declined and actually considered as a bug.
  */
 static __always_inline struct rb_node **
 find_va_links(struct vmap_area *va,
@@ -519,8 +523,12 @@ find_va_links(struct vmap_area *va,
 		else if (va->va_end > tmp_va->va_start &&
 				va->va_start >= tmp_va->va_end)
 			link = &(*link)->rb_right;
-		else
-			BUG();
+		else {
+			WARN(1, "vmalloc bug: 0x%lx-0x%lx overlaps with 0x%lx-0x%lx\n",
+				va->va_start, va->va_end, tmp_va->va_start, tmp_va->va_end);
+
+			return NULL;
+		}
 	} while (*link);
 
 	*parent = &tmp_va->rb_node;
@@ -666,7 +674,8 @@ insert_vmap_area(struct vmap_area *va,
 	struct rb_node *parent;
 
 	link = find_va_links(va, root, NULL, &parent);
-	link_va(va, root, parent, link, head);
+	if (link)
+		link_va(va, root, parent, link, head);
 }
 
 static void
@@ -682,8 +691,10 @@ insert_vmap_area_augment(struct vmap_area *va,
 	else
 		link = find_va_links(va, root, NULL, &parent);
 
-	link_va(va, root, parent, link, head);
-	augment_tree_propagate_from(va);
+	if (link) {
+		link_va(va, root, parent, link, head);
+		augment_tree_propagate_from(va);
+	}
 }
 
 /*
@@ -691,6 +702,11 @@ insert_vmap_area_augment(struct vmap_area *va,
  * and next free blocks. If coalesce is not done a new
  * free area is inserted. If VA has been merged, it is
  * freed.
+ *
+ * Please note, it can return NULL in case of overlap
+ * ranges, followed by WARN() report. Despite it is a
+ * buggy behaviour, a system can be alive and keep
+ * ongoing.
  */
 static __always_inline struct vmap_area *
 merge_or_add_vmap_area(struct vmap_area *va,
@@ -707,6 +723,8 @@ merge_or_add_vmap_area(struct vmap_area *va,
 	 * inserted, unless it is merged with its sibling/siblings.
 	 */
 	link = find_va_links(va, root, NULL, &parent);
+	if (!link)
+		return NULL;
 
 	/*
 	 * Get next node of VA to check if merging can be done.
@@ -1329,6 +1347,9 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
 		 */
 		va = merge_or_add_vmap_area(va, &free_vmap_area_root,
 					    &free_vmap_area_list);
+
+		if (!va)
+			continue;
 
 		if (is_vmalloc_or_module_addr((void *)orig_start))
 			kasan_release_vmalloc(orig_start, orig_end,
@@ -3500,8 +3521,9 @@ recovery:
 		orig_end = vas[area]->va_end;
 		va = merge_or_add_vmap_area(vas[area], &free_vmap_area_root,
 					    &free_vmap_area_list);
-		kasan_release_vmalloc(orig_start, orig_end,
-				      va->va_start, va->va_end);
+		if (va)
+			kasan_release_vmalloc(orig_start, orig_end,
+				va->va_start, va->va_end);
 		vas[area] = NULL;
 	}
 
@@ -3549,8 +3571,9 @@ err_free_shadow:
 		orig_end = vas[area]->va_end;
 		va = merge_or_add_vmap_area(vas[area], &free_vmap_area_root,
 					    &free_vmap_area_list);
-		kasan_release_vmalloc(orig_start, orig_end,
-				      va->va_start, va->va_end);
+		if (va)
+			kasan_release_vmalloc(orig_start, orig_end,
+				va->va_start, va->va_end);
 		vas[area] = NULL;
 		kfree(vms[area]);
 	}
