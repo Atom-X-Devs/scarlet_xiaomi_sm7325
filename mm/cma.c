@@ -445,7 +445,7 @@ struct page *cma_alloc(struct cma *cma, unsigned long count,
 	int num_attempts = 0;
 	int max_retries = 5;
 
-	if (!cma || !cma->count)
+	if (!cma || !cma->count || !cma->bitmap)
 		return NULL;
 
 	pr_debug("%s(cma %p, count %lu, align %d)\n", __func__, (void *)cma,
