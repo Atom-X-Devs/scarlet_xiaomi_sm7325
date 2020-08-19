@@ -1196,6 +1196,7 @@ bool fuse_dax_inode_alloc(struct super_block *sb, struct fuse_inode *fi);
 void fuse_dax_inode_init(struct inode *inode);
 void fuse_dax_inode_cleanup(struct inode *inode);
 bool fuse_dax_check_alignment(struct fuse_conn *fc, unsigned int map_alignment);
+void fuse_dax_cancel_work(struct fuse_conn *fc);
 
 #define __fuse_wait_event_killable(wq_head, condition)				\
 	___wait_event(wq_head, condition, TASK_KILLABLE, 0, 0,			\
