@@ -1171,6 +1171,7 @@ ssize_t fuse_passthrough_mmap(struct file *file, struct vm_area_struct *vma);
 /* dax.c */
 int fuse_dax_conn_alloc(struct fuse_conn *fc, struct dax_device *dax_dev);
 void fuse_dax_conn_free(struct fuse_conn *fc);
+bool fuse_dax_check_alignment(struct fuse_conn *fc, unsigned int map_alignment);
 
 #define __fuse_wait_event_killable(wq_head, condition)				\
 	___wait_event(wq_head, condition, TASK_KILLABLE, 0, 0,			\
