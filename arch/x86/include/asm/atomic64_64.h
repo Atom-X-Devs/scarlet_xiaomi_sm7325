@@ -183,7 +183,7 @@ static inline s64 arch_atomic64_cmpxchg(atomic64_t *v, s64 old, s64 new)
 #define arch_atomic64_try_cmpxchg arch_atomic64_try_cmpxchg
 static __always_inline bool arch_atomic64_try_cmpxchg(atomic64_t *v, s64 *old, s64 new)
 {
-	return try_cmpxchg(&v->counter, old, new);
+	return arch_try_cmpxchg(&v->counter, old, new);
 }
 
 static inline s64 arch_atomic64_xchg(atomic64_t *v, s64 new)

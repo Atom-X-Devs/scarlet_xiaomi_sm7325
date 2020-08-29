@@ -197,7 +197,7 @@ static __always_inline int arch_atomic_cmpxchg(atomic_t *v, int old, int new)
 #define arch_atomic_try_cmpxchg arch_atomic_try_cmpxchg
 static __always_inline bool arch_atomic_try_cmpxchg(atomic_t *v, int *old, int new)
 {
-	return try_cmpxchg(&v->counter, old, new);
+	return arch_try_cmpxchg(&v->counter, old, new);
 }
 
 static inline int arch_atomic_xchg(atomic_t *v, int new)

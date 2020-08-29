@@ -103,6 +103,21 @@ gen_xchg()
 	local xchg="$1"; shift
 	local mult="$1"; shift
 
+	if [ "${xchg%${xchg#try_cmpxchg}}" = "try_cmpxchg" ] ; then
+
+cat <<EOF
+#define ${xchg}(ptr, oldp, ...) \\
+({ \\
+	typeof(ptr) __ai_ptr = (ptr); \\
+	typeof(oldp) __ai_oldp = (oldp); \\
+	kasan_check_write(__ai_ptr, ${mult}sizeof(*__ai_ptr)); \\
+	kasan_check_write(__ai_oldp, ${mult}sizeof(*__ai_oldp)); \\
+	arch_${xchg}(__ai_ptr, __ai_oldp, __VA_ARGS__); \\
+})
+EOF
+
+	else
+
 cat <<EOF
 #define ${xchg}(ptr, ...)						\\
 ({									\\
@@ -111,6 +126,8 @@ cat <<EOF
 	arch_${xchg}(__ai_ptr, __VA_ARGS__);				\\
 })
 EOF
+
+	fi
 }
 
 gen_optional_xchg()
@@ -119,7 +136,9 @@ gen_optional_xchg()
 	local sfx="$1"; shift
 	local guard="defined(arch_${name}${sfx})"
 
-	[ -z "${sfx}" ] && guard="!defined(arch_${name}_relaxed) || defined(arch_${name})"
+	if [ -z "${sfx}" ] && [ "${name}" != "try_cmpxchg" ]; then
+		guard="!defined(arch_${name}_relaxed) || defined(arch_${name})"
+	fi
 
 	printf "#if ${guard}\n"
 	gen_xchg "${name}${sfx}" ""
@@ -159,7 +178,7 @@ grep '^[a-z]' "$1" | while read name meta args; do
 	gen_proto "${meta}" "${name}" "atomic64" "s64" ${args}
 done
 
-for xchg in "xchg" "cmpxchg" "cmpxchg64"; do
+for xchg in "xchg" "cmpxchg" "cmpxchg64" "try_cmpxchg"; do
 	for order in "" "_acquire" "_release" "_relaxed"; do
 		gen_optional_xchg "${xchg}" "${order}"
 	done
