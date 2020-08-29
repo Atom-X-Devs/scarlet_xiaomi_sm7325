@@ -110,15 +110,22 @@ gen_proto_order_variants()
 	printf "#endif /* ${basename}_relaxed */\n\n"
 }
 
-gen_xchg_fallbacks()
+#gen_basic_fallbacks(basename)
+gen_basic_fallbacks()
+{
+	local basename="$1"; shift
+cat << EOF
+#define ${basename}_acquire	${basename}
+#define ${basename}_release	${basename}
+#define ${basename}_relaxed	${basename}
+EOF
+}
+
+gen_order_fallbacks()
 {
 	local xchg="$1"; shift
+
 cat <<EOF
-#ifndef ${xchg}_relaxed
-#define ${xchg}_relaxed		${xchg}
-#define ${xchg}_acquire		${xchg}
-#define ${xchg}_release		${xchg}
-#else /* ${xchg}_relaxed */
 
 #ifndef ${xchg}_acquire
 #define ${xchg}_acquire(...) \\
@@ -135,9 +142,60 @@ cat <<EOF
 	__atomic_op_fence(${xchg}, __VA_ARGS__)
 #endif
 
-#endif /* ${xchg}_relaxed */
+EOF
+}
+
+gen_xchg_fallbacks()
+{
+	local xchg="$1"; shift
+	printf "#ifndef ${xchg}_relaxed\n"
+
+	gen_basic_fallbacks ${xchg}
+
+	printf "#else /* ${xchg}_relaxed */\n"
+
+	gen_order_fallbacks ${xchg}
+
+	printf "#endif /* ${xchg}_relaxed */\n\n"
+}
+
+gen_try_cmpxchg_fallback()
+{
+	local order="$1"; shift;
+
+cat <<EOF
+#ifndef try_cmpxchg${order}
+#define try_cmpxchg${order}(_ptr, _oldp, _new) \\
+({ \\
+	typeof(*(_ptr)) *___op = (_oldp), ___o = *___op, ___r; \\
+	___r = cmpxchg${order}((_ptr), ___o, (_new)); \\
+	if (unlikely(___r != ___o)) \\
+		*___op = ___r; \\
+	likely(___r == ___o); \\
+})
+#endif /* try_cmpxchg${order} */
 
 EOF
+}
+
+gen_try_cmpxchg_fallbacks()
+{
+	printf "#ifndef try_cmpxchg_relaxed\n"
+	printf "#ifdef try_cmpxchg\n"
+
+	gen_basic_fallbacks "try_cmpxchg"
+
+	printf "#endif /* try_cmpxchg */\n\n"
+
+	for order in "" "_acquire" "_release" "_relaxed"; do
+		gen_try_cmpxchg_fallback "${order}"
+	done
+
+	printf "#else /* try_cmpxchg_relaxed */\n"
+
+	gen_order_fallbacks "try_cmpxchg"
+
+	printf "#endif /* try_cmpxchg_relaxed */\n\n"
 }
 
 cat << EOF
@@ -154,6 +212,8 @@ EOF
 for xchg in "xchg" "cmpxchg" "cmpxchg64"; do
 	gen_xchg_fallbacks "${xchg}"
 done
+
+gen_try_cmpxchg_fallbacks
 
 grep '^[a-z]' "$1" | while read name meta args; do
 	gen_proto "${meta}" "${name}" "atomic" "int" ${args}
