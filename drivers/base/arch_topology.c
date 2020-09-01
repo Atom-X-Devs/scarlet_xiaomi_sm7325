@@ -22,6 +22,12 @@
 #include <linux/smp.h>
 #include <trace/hooks/topology.h>
 
+bool topology_scale_freq_invariant(void)
+{
+	return cpufreq_supports_freq_invariance() ||
+	       arch_freq_counters_available(cpu_online_mask);
+}
+
 __weak bool arch_freq_counters_available(const struct cpumask *cpus)
 {
 	return false;
