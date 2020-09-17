@@ -187,6 +187,7 @@ int fscrypt_ioctl_get_nonce(struct file *filp, void __user *arg);
 int fscrypt_has_permitted_context(struct inode *parent, struct inode *child);
 int fscrypt_inherit_context(struct inode *parent, struct inode *child,
 			    void *fs_data, bool preload);
+int fscrypt_set_context(struct inode *inode, void *fs_data);
 
 struct fscrypt_dummy_context {
 	const union fscrypt_context *ctx;
@@ -213,6 +214,8 @@ int fscrypt_ioctl_get_key_status(struct file *filp, void __user *arg);
 
 /* keysetup.c */
 int fscrypt_get_encryption_info(struct inode *inode);
+int fscrypt_prepare_new_inode(struct inode *dir, struct inode *inode,
+			      bool *encrypt_ret);
 void fscrypt_put_encryption_info(struct inode *inode);
 void fscrypt_free_inode(struct inode *inode);
 int fscrypt_drop_inode(struct inode *inode);
@@ -382,6 +385,11 @@ static inline int fscrypt_inherit_context(struct inode *parent,
 	return -EOPNOTSUPP;
 }
 
+static inline int fscrypt_set_context(struct inode *inode, void *fs_data)
+{
+	return -EOPNOTSUPP;
+}
+
 struct fscrypt_dummy_context {
 };
 
@@ -427,6 +435,15 @@ static inline int fscrypt_ioctl_get_key_status(struct file *filp,
 static inline int fscrypt_get_encryption_info(struct inode *inode)
 {
 	return -EOPNOTSUPP;
+}
+
+static inline int fscrypt_prepare_new_inode(struct inode *dir,
+					    struct inode *inode,
+					    bool *encrypt_ret)
+{
+	if (IS_ENCRYPTED(dir))
+		return -EOPNOTSUPP;
+	return 0;
 }
 
 static inline void fscrypt_put_encryption_info(struct inode *inode)
