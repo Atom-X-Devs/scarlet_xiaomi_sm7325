@@ -1296,11 +1296,12 @@ static void dwc3_prepare_one_trb_sg(struct dwc3_ep *dep,
 			chain = false;
 
 		if (rem && usb_endpoint_dir_out(dep->endpoint.desc) && !chain) {
-			req->needs_extra_trb = true;
-
 			/* prepare normal TRB */
-			dwc3_prepare_one_trb(dep, req, trb_length,
+			if (req->request.length) {
+				req->needs_extra_trb = true;
+				dwc3_prepare_one_trb(dep, req, trb_length,
 					true, i, false);
+			}
 
 			/* Now prepare one extra TRB to align transfer size */
 			dwc3_prepare_one_trb(dep, req, maxp - rem,
@@ -1315,13 +1316,9 @@ static void dwc3_prepare_one_trb_sg(struct dwc3_ep *dep,
 					true, i, false);
 
 			/* Prepare one extra TRB to handle ZLP */
-			dwc3_prepare_one_trb(dep, req, 0,
-					!req->direction, 1, true);
-
-			/* Prepare one more TRB to handle MPS alignment */
-			if (!req->direction)
-				dwc3_prepare_one_trb(dep, req, maxp,
-						false, 1, true);
+			dwc3_prepare_one_trb(dep, req,
+					req->direction ? 0 : maxp,
+					false, 1, true);
 		} else {
 			dwc3_prepare_one_trb(dep, req, trb_length,
 					chain, i, false);
@@ -1363,10 +1360,11 @@ static void dwc3_prepare_one_trb_linear(struct dwc3_ep *dep,
 	unsigned int rem = length % maxp;
 
 	if ((!length || rem) && usb_endpoint_dir_out(dep->endpoint.desc)) {
-		req->needs_extra_trb = true;
-
 		/* prepare normal TRB */
-		dwc3_prepare_one_trb(dep, req, length, true, 0, false);
+		if (req->request.length) {
+			req->needs_extra_trb = true;
+			dwc3_prepare_one_trb(dep, req, length, true, 0, false);
+		}
 
 		/* Now prepare one extra TRB to align transfer size */
 		dwc3_prepare_one_trb(dep, req, maxp - rem, false, 1, true);
@@ -1379,11 +1377,8 @@ static void dwc3_prepare_one_trb_linear(struct dwc3_ep *dep,
 		dwc3_prepare_one_trb(dep, req, length, true, 0, false);
 
 		/* Prepare one extra TRB to handle ZLP */
-		dwc3_prepare_one_trb(dep, req, 0, !req->direction, 1, true);
-
-		/* Prepare one more TRB to handle MPS alignment for OUT */
-		if (!req->direction)
-			dwc3_prepare_one_trb(dep, req, maxp, false, 1, true);
+		dwc3_prepare_one_trb(dep, req, req->direction ? 0 : maxp,
+				false, 1, true);
 	} else {
 		dwc3_prepare_one_trb(dep, req, length, false, 0, false);
 	}
@@ -3221,12 +3216,12 @@ static int dwc3_gadget_ep_reclaim_completed_trb(struct dwc3_ep *dep,
 	}
 
 	/*
-	 * If we're dealing with unaligned size OUT transfer, we will be left
-	 * with one TRB pending in the ring. We need to manually clear HWO bit
-	 * from that TRB.
+	 * We use bounce buffer for requests that needs extra TRB or OUT ZLP. If
+	 * this TRB points to the bounce buffer address, it's a MPS alignment
+	 * TRB. Don't add it to req->remaining calculation.
 	 */
-
-	if (req->needs_extra_trb && !(trb->ctrl & DWC3_TRB_CTRL_CHN)) {
+	if (trb->bpl == lower_32_bits(dep->dwc->bounce_addr) &&
+	    trb->bph == upper_32_bits(dep->dwc->bounce_addr)) {
 		trb->ctrl &= ~DWC3_TRB_CTRL_HWO;
 		return (((event->status & DEPEVT_STATUS_IOC) &&
 				(trb->ctrl & DWC3_TRB_CTRL_IOC)) ? 1 : 0);
@@ -3330,17 +3325,8 @@ static int dwc3_gadget_ep_cleanup_completed_request(struct dwc3_ep *dep,
 		goto out;
 
 	if (req->needs_extra_trb) {
-		unsigned int maxp = usb_endpoint_maxp(dep->endpoint.desc);
-
 		ret = dwc3_gadget_ep_reclaim_trb_linear(dep, req, event,
 				status);
-
-		/* Reclaim MPS padding TRB for ZLP */
-		if (!req->direction && req->request.zero && req->request.length &&
-		    !usb_endpoint_xfer_isoc(dep->endpoint.desc) &&
-		    (IS_ALIGNED(req->request.length, maxp)))
-			ret = dwc3_gadget_ep_reclaim_trb_linear(dep, req, event, status);
-
 		req->needs_extra_trb = false;
 	}
 
