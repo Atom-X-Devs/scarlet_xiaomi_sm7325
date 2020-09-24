@@ -1258,7 +1258,7 @@ static void dwc3_prepare_one_trb(struct dwc3_ep *dep,
 			stream_id, short_not_ok, no_interrupt);
 }
 
-static void dwc3_prepare_one_trb_sg(struct dwc3_ep *dep,
+static int dwc3_prepare_one_trb_sg(struct dwc3_ep *dep,
 		struct dwc3_request *req)
 {
 	struct scatterlist *sg = req->start_sg;
@@ -1269,6 +1269,7 @@ static void dwc3_prepare_one_trb_sg(struct dwc3_ep *dep,
 	unsigned int rem = length % maxp;
 	unsigned int remaining = req->request.num_mapped_sgs
 		- req->num_queued_sgs;
+	unsigned int num_trbs = req->num_trbs;
 
 	/*
 	 * If we resume preparing the request, then get the remaining length of
@@ -1295,9 +1296,15 @@ static void dwc3_prepare_one_trb_sg(struct dwc3_ep *dep,
 		if ((i == remaining - 1) || !length)
 			chain = false;
 
+		if (!dwc3_calc_trbs_left(dep))
+			break;
+
 		if (rem && usb_endpoint_dir_out(dep->endpoint.desc) && !chain) {
 			/* prepare normal TRB */
 			if (req->request.length) {
+				if (dwc3_calc_trbs_left(dep) < 2)
+					goto out;
+
 				req->needs_extra_trb = true;
 				dwc3_prepare_one_trb(dep, req, trb_length,
 					true, i, false);
@@ -1309,6 +1316,10 @@ static void dwc3_prepare_one_trb_sg(struct dwc3_ep *dep,
 		} else if (req->request.zero && req->request.length &&
 			   !usb_endpoint_xfer_isoc(dep->endpoint.desc) &&
 			   !rem && !chain) {
+
+			if (dwc3_calc_trbs_left(dep) < 2)
+				goto out;
+
 			req->needs_extra_trb = true;
 
 			/* Prepare normal TRB */
@@ -1350,18 +1361,28 @@ static void dwc3_prepare_one_trb_sg(struct dwc3_ep *dep,
 		if (!dwc3_calc_trbs_left(dep))
 			break;
 	}
+
+out:
+	return req->num_trbs - num_trbs;
 }
 
-static void dwc3_prepare_one_trb_linear(struct dwc3_ep *dep,
+static int dwc3_prepare_one_trb_linear(struct dwc3_ep *dep,
 		struct dwc3_request *req)
 {
 	unsigned int length = req->request.length;
 	unsigned int maxp = usb_endpoint_maxp(dep->endpoint.desc);
 	unsigned int rem = length % maxp;
+	unsigned int num_trbs = req->num_trbs;
+
+	if (!dwc3_calc_trbs_left(dep))
+		goto out;
 
 	if ((!length || rem) && usb_endpoint_dir_out(dep->endpoint.desc)) {
 		/* prepare normal TRB */
 		if (req->request.length) {
+			if (dwc3_calc_trbs_left(dep) < 2)
+				goto out;
+
 			req->needs_extra_trb = true;
 			dwc3_prepare_one_trb(dep, req, length, true, 0, false);
 		}
@@ -1371,6 +1392,10 @@ static void dwc3_prepare_one_trb_linear(struct dwc3_ep *dep,
 	} else if (req->request.zero && req->request.length &&
 		   !usb_endpoint_xfer_isoc(dep->endpoint.desc) &&
 		   (IS_ALIGNED(req->request.length, maxp))) {
+
+		if (dwc3_calc_trbs_left(dep) < 2)
+			goto out;
+
 		req->needs_extra_trb = true;
 
 		/* prepare normal TRB */
@@ -1380,8 +1405,14 @@ static void dwc3_prepare_one_trb_linear(struct dwc3_ep *dep,
 		dwc3_prepare_one_trb(dep, req, req->direction ? 0 : maxp,
 				false, 1, true);
 	} else {
+		if (!dwc3_calc_trbs_left(dep))
+			goto out;
+
 		dwc3_prepare_one_trb(dep, req, length, false, 0, false);
 	}
+
+out:
+	return req->num_trbs - num_trbs;
 }
 
 /*
