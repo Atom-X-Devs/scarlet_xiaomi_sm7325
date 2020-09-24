@@ -1093,6 +1093,9 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 		if (!req->direction)
 			trb_length = dep->endpoint.maxpacket;
 
+		if (!req->direction)
+			trb_length = dep->endpoint.maxpacket;
+
 		/* Now prepare one extra TRB to align transfer size */
 		dwc3_ep0_prepare_one_trb(dep, dwc->bounce_addr,
 					 trb_length, DWC3_TRBCTL_CONTROL_DATA,
