@@ -331,10 +331,12 @@ int swap_readpage(struct page *page, bool synchronous)
 		goto out;
 	}
 
-	ret = bdev_read_page(sis->bdev, swap_page_sector(page), page);
-	if (!ret) {
-		count_vm_event(PSWPIN);
-		goto out;
+	if (sis->flags & SWP_SYNCHRONOUS_IO) {
+		ret = bdev_read_page(sis->bdev, swap_page_sector(page), page);
+		if (!ret) {
+			count_vm_event(PSWPIN);
+			goto out;
+		}
 	}
 
 	ret = 0;
