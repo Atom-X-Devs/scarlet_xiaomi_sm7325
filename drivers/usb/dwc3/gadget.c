@@ -3088,7 +3088,7 @@ static int dwc3_gadget_init_in_out_endpoint(struct dwc3_ep *dep)
 	struct dwc3 *dwc = dep->dwc;
 
 	usb_ep_set_maxpacket_limit(&dep->endpoint, 1024);
-	dep->endpoint.max_streams = 15;
+	dep->endpoint.max_streams = 16;
 	dep->endpoint.ops = &dwc3_gadget_ep_ops;
 	list_add_tail(&dep->endpoint.ep_list,
 			&dwc->gadget.ep_list);
