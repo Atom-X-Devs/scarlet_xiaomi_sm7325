@@ -127,8 +127,6 @@ static u32 a615_pwrup_reglist[] = {
 	A6XX_UCHE_GBIF_GX_CONFIG,
 };
 
-static int a6xx_get_cp_init_cmds(struct adreno_device *adreno_dev);
-
 static int a6xx_gmu_wrapper_init(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
@@ -216,7 +214,7 @@ int a6xx_init(struct adreno_device *adreno_dev)
 
 	find_ddr_qos_device(adreno_dev);
 
-	return a6xx_get_cp_init_cmds(adreno_dev);
+	return 0;
 }
 
 static int a6xx_holi_init(struct adreno_device *adreno_dev)
@@ -243,7 +241,7 @@ static int a6xx_holi_init(struct adreno_device *adreno_dev)
 
 	find_ddr_qos_device(adreno_dev);
 
-	return a6xx_get_cp_init_cmds(adreno_dev);
+	return 0;
 }
 
 
@@ -990,20 +988,9 @@ void a6xx_unhalt_sqe(struct adreno_device *adreno_dev)
 		CP_INIT_OPERATION_MODE_MASK | \
 		CP_INIT_REGISTER_INIT_LIST_WITH_SPINLOCK)
 
-static int a6xx_get_cp_init_cmds(struct adreno_device *adreno_dev)
+void a6xx_cp_init_cmds(struct adreno_device *adreno_dev, u32 *cmds)
 {
-	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-	u32 *cmds, i = 0;
-
-	if (adreno_dev->cp_init_cmds)
-		return 0;
-
-	adreno_dev->cp_init_cmds = devm_kzalloc(&device->pdev->dev,
-			A6XX_CP_INIT_DWORDS << 2, GFP_KERNEL);
-	if (!adreno_dev->cp_init_cmds)
-		return -ENOMEM;
-
-	cmds = (u32 *)adreno_dev->cp_init_cmds;
+	int i = 0;
 
 	cmds[i++] = cp_type7_packet(CP_ME_INIT, A6XX_CP_INIT_DWORDS - 1);
 
@@ -1036,8 +1023,6 @@ static int a6xx_get_cp_init_cmds(struct adreno_device *adreno_dev)
 		cmds[i++] = upper_32_bits(gpuaddr);
 		cmds[i++] =  0;
 	}
-
-	return 0;
 }
 
 void a6xx_spin_idle_debug(struct adreno_device *adreno_dev,
@@ -1080,11 +1065,11 @@ static int a6xx_send_cp_init(struct adreno_device *adreno_dev,
 	unsigned int *cmds;
 	int ret;
 
-	cmds = adreno_ringbuffer_allocspace(rb, 12);
+	cmds = adreno_ringbuffer_allocspace(rb, A6XX_CP_INIT_DWORDS);
 	if (IS_ERR(cmds))
 		return PTR_ERR(cmds);
 
-	memcpy(cmds, adreno_dev->cp_init_cmds, 12 << 2);
+	a6xx_cp_init_cmds(adreno_dev, cmds);
 
 	ret = adreno_ringbuffer_submit_spin(rb, NULL, 2000);
 	if (ret) {

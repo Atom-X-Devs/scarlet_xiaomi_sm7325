@@ -443,4 +443,7 @@ void a6xx_rdpm_mx_freq_update(struct a6xx_gmu_device *gmu, u32 freq);
  * This function communicates GPU cx frequency(in Mhz) changes to rdpm.
  */
 void a6xx_rdpm_cx_freq_update(struct a6xx_gmu_device *gmu, u32 freq);
+
+void a6xx_cp_init_cmds(struct adreno_device *adreno_dev, u32 *cmds);
+
 #endif
