@@ -5550,7 +5550,7 @@ struct mlx5_ifc_alloc_modify_header_context_in_bits {
 	u8         reserved_at_68[0x10];
 	u8         num_of_actions[0x8];
 
-	union mlx5_ifc_set_action_in_add_action_in_auto_bits actions[0];
+	union mlx5_ifc_set_action_in_add_action_in_auto_bits actions[];
 };
 
 struct mlx5_ifc_dealloc_modify_header_context_out_bits {
@@ -9447,7 +9447,7 @@ struct mlx5_ifc_mcda_reg_bits {
 
 	u8         reserved_at_60[0x20];
 
-	u8         data[0][0x20];
+	u8         data[][0x20];
 };
 
 union mlx5_ifc_ports_control_registers_document_bits {
