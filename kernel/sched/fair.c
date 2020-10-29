@@ -8273,6 +8273,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_entity *se = &p->se;
 	struct cfs_rq *cfs_rq = &rq->cfs;
 	unsigned long weight;
+	int should_iowait_boost;
 	bool curr;
 
 	if (task_is_throttled(p) && enqueue_throttled_task(p))
@@ -8289,6 +8290,9 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 	update_curr_eevdf(cfs_rq);
 
+	should_iowait_boost = p->in_iowait;
+	trace_android_rvh_set_iowait(p, rq, &should_iowait_boost);
+
 	if (flags & ENQUEUE_DELAYED) {
 		requeue_delayed_entity(cfs_rq, se);
 		return;
@@ -8299,7 +8303,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 * utilization updates, so do it here explicitly with the IOWAIT flag
 	 * passed.
 	 */
-	if (p->in_iowait)
+	if (should_iowait_boost)
 		cpufreq_update_util(rq, SCHED_CPUFREQ_IOWAIT);
 
 	/*
