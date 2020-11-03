@@ -388,28 +388,6 @@ repeat:
 	return last_map_addr;
 }
 
-pte_t *kmap_pte;
-
-static inline pte_t *kmap_get_fixmap_pte(unsigned long vaddr)
-{
-	pgd_t *pgd = pgd_offset_k(vaddr);
-	p4d_t *p4d = p4d_offset(pgd, vaddr);
-	pud_t *pud = pud_offset(p4d, vaddr);
-	pmd_t *pmd = pmd_offset(pud, vaddr);
-	return pte_offset_kernel(pmd, vaddr);
-}
-
-static void __init kmap_init(void)
-{
-	unsigned long kmap_vstart;
-
-	/*
-	 * Cache the first kmap pte:
-	 */
-	kmap_vstart = __fix_to_virt(FIX_KMAP_BEGIN);
-	kmap_pte = kmap_get_fixmap_pte(kmap_vstart);
-}
-
 #ifdef CONFIG_HIGHMEM
 static void __init permanent_kmaps_init(pgd_t *pgd_base)
 {
@@ -726,8 +704,6 @@ void __init paging_init(void)
 	pagetable_init();
 
 	__flush_tlb_all();
-
-	kmap_init();
 
 	/*
 	 * NOTE: at this point the bootmem allocator is fully available.
