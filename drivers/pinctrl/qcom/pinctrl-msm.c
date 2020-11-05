@@ -823,24 +823,11 @@ static void msm_gpio_irq_enable(struct irq_data *d)
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
 
-	/*
-	 * Clear the interrupt that may be pending before we enable
-	 * the line.
-	 * This is especially a problem with the GPIOs routed to the
-	 * PDC. These GPIOs are direct-connect interrupts to the GIC.
-	 * Disabling the interrupt line at the PDC does not prevent
-	 * the interrupt from being latched at the GIC. The state at
-	 * GIC needs to be cleared before enabling.
-	 */
-	if (d->parent_data) {
-		irq_chip_set_parent_state(d, IRQCHIP_STATE_PENDING, 0);
+	if (d->parent_data)
 		irq_chip_enable_parent(d);
-	}
 
-	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
-		return;
-
-	msm_gpio_irq_clear_unmask(d, true);
+	if (!test_bit(d->hwirq, pctrl->skip_wake_irqs))
+		msm_gpio_irq_clear_unmask(d, true);
 }
 
 static void msm_gpio_irq_disable(struct irq_data *d)
@@ -1117,6 +1104,18 @@ static int msm_gpio_irq_reqres(struct irq_data *d)
 		ret = -EINVAL;
 		goto out;
 	}
+
+	/*
+	 * Clear the interrupt that may be pending before we enable
+	 * the line.
+	 * This is especially a problem with the GPIOs routed to the
+	 * PDC. These GPIOs are direct-connect interrupts to the GIC.
+	 * Disabling the interrupt line at the PDC does not prevent
+	 * the interrupt from being latched at the GIC. The state at
+	 * GIC needs to be cleared before enabling.
+	 */
+	if (d->parent_data && test_bit(d->hwirq, pctrl->skip_wake_irqs))
+		irq_chip_set_parent_state(d, IRQCHIP_STATE_PENDING, 0);
 
 	return 0;
 out:
