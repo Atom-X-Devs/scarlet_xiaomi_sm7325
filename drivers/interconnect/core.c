@@ -1068,7 +1068,6 @@ static int of_count_icc_providers(struct device_node *np)
 			count++;
 		count += of_count_icc_providers(child);
 	}
-	of_node_put(np);
 
 	return count;
 }
