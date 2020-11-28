@@ -331,6 +331,7 @@
 	/* IRQF_ONESHOT | IRQF_TRIGGER_HIGH */
 	mi,esd-err-irq-gpio = <&tlmm 3 0x2004>;
 
+	qcom,panel-allow-phy-poweroff;
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
 			mi,mdss-dsc-panel-id = <0x004B3944 0x00420D00>;
