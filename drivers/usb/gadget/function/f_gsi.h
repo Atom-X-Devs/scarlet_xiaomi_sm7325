@@ -23,6 +23,8 @@
 
 #include "configfs.h"
 
+#define USB_CDC_RESET_FUNCTION	0x05
+
 #define GSI_RMNET_CTRL_NAME "rmnet_ctrl"
 #define GSI_MBIM_CTRL_NAME "android_mbim"
 #define GSI_DPL_CTRL_NAME "dpl_ctrl"
