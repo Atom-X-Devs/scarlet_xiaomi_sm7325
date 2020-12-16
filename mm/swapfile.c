@@ -1016,9 +1016,13 @@ int get_swap_pages(int n_goal, swp_entry_t swp_entries[], int entry_size)
 	/* Only single cluster request supported */
 	WARN_ON_ONCE(n_goal > 1 && size == SWAPFILE_CLUSTER);
 
+	spin_lock(&swap_avail_lock);
+
 	avail_pgs = atomic_long_read(&nr_swap_pages) / size;
-	if (avail_pgs <= 0)
+	if (avail_pgs <= 0) {
+		spin_unlock(&swap_avail_lock);
 		goto noswap;
+	}
 
 	if (n_goal > SWAP_BATCH)
 		n_goal = SWAP_BATCH;
@@ -1027,8 +1031,6 @@ int get_swap_pages(int n_goal, swp_entry_t swp_entries[], int entry_size)
 		n_goal = avail_pgs;
 
 	atomic_long_sub(n_goal * size, &nr_swap_pages);
-
-	spin_lock(&swap_avail_lock);
 
 start_over:
 	node = numa_node_id();
@@ -1104,14 +1106,13 @@ swp_entry_t get_swap_page_of_type(int type)
 
 	spin_lock(&si->lock);
 	if (si->flags & SWP_WRITEOK) {
-		atomic_long_dec(&nr_swap_pages);
 		/* This is called for allocating swap entry, not cache */
 		offset = scan_swap_map(si, 1);
 		if (offset) {
+			atomic_long_dec(&nr_swap_pages);
 			spin_unlock(&si->lock);
 			return swp_entry(type, offset);
 		}
-		atomic_long_inc(&nr_swap_pages);
 	}
 	spin_unlock(&si->lock);
 fail:
