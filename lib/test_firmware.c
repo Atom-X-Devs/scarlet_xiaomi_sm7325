@@ -352,17 +352,14 @@ static ssize_t test_dev_config_show_int(char *buf, int cfg)
 
 static inline int __test_dev_config_update_u8(const char *buf, size_t size, u8 *cfg)
 {
+	u8 val;
 	int ret;
-	long new;
 
-	ret = kstrtol(buf, 10, &new);
+	ret = kstrtou8(buf, 10, &val);
 	if (ret)
 		return ret;
 
-	if (new > U8_MAX)
-		return -EINVAL;
-
-	*(u8 *)cfg = new;
+	*(u8 *)cfg = val;
 
 	/* Always return full write size even if we didn't consume all */
 	return size;
