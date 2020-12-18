@@ -442,3 +442,4 @@
 435	i386	clone3			sys_clone3			__ia32_sys_clone3
 436	i386	close_range		sys_close_range
 440	i386	process_madvise		sys_process_madvise     __ia32_sys_process_madvise
+441	i386	epoll_pwait2		sys_epoll_pwait2		compat_sys_epoll_pwait2

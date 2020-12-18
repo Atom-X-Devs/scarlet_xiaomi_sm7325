@@ -359,6 +359,7 @@
 435	common	clone3			__x64_sys_clone3/ptregs
 436	common	close_range		sys_close_range
 440	common	process_madvise		__x64_sys_process_madvise
+441	common	epoll_pwait2		sys_epoll_pwait2
 
 #
 # x32-specific system call numbers start at 512 to avoid cache impact
