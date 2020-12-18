@@ -352,3 +352,4 @@
 435	n64	clone3				__sys_clone3
 436	n64	close_range			sys_close_range
 440	common	process_madvise		sys_process_madvise
+441	n64	epoll_pwait2			sys_epoll_pwait2
