@@ -376,4 +376,4 @@
 435	n32	clone3				__sys_clone3
 436	n32	close_range			sys_close_range
 440	common	process_madvise		sys_process_madvise
-441	n32	epoll_pwait2			sys_epoll_pwait2
+441	n32	epoll_pwait2			compat_sys_epoll_pwait2
