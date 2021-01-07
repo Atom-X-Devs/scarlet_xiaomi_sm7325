@@ -6663,6 +6663,8 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu, int sy
 	struct sched_domain *sd;
 	struct perf_domain *pd;
 
+	sync_entity_load_avg(&p->se);
+
 	rcu_read_lock();
 	pd = rcu_dereference(rd->pd);
 	if (!pd || READ_ONCE(rd->overutilized))
@@ -6686,7 +6688,6 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu, int sy
 	if (!sd)
 		goto fail;
 
-	sync_entity_load_avg(&p->se);
 	if (!task_util_est(p))
 		goto unlock;
 
