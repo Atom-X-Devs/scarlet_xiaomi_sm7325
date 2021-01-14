@@ -206,7 +206,7 @@ static int print_mem_entry(void *data, void *ptr)
 			 * Show zero for the useraddr - we can't reliably track
 			 * that value for multiple vmas anyway
 			 */
-			0, m->size, entry->id, flags,
+			NULL, m->size, entry->id, flags,
 			memtype_str(usermem_type),
 			usage, (m->sgt ? m->sgt->nents : 0), map_count,
 			egl_surface_count, egl_image_count, inode_number);
