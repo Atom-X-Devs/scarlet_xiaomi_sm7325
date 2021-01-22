@@ -39,6 +39,7 @@
 #include <linux/security.h>
 #include <linux/smp.h>
 #include <linux/profile.h>
+#include <linux/kfence.h>
 #include <linux/rcupdate.h>
 #include <linux/srcu.h>
 #include <linux/moduleparam.h>
@@ -559,6 +560,7 @@ static void __init mm_init(void)
 	 */
 	page_ext_init_flatmem();
 	init_debug_pagealloc();
+	kfence_alloc_pool();
 	report_meminit();
 	mem_init();
 	/* page_owner must be initialized after buddy is ready */
@@ -685,6 +687,7 @@ asmlinkage __visible void __init start_kernel(void)
 	hrtimers_init();
 	softirq_init();
 	timekeeping_init();
+	kfence_init();
 	time_init();
 
 	/*
