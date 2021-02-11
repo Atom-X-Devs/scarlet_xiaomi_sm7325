@@ -322,4 +322,7 @@ then
 	echo Unknown PID, cannot kill qemu command
 fi
 
+# Tell the script that this run is done.
+rm -f $resdir/build.run
+
 parse-console.sh $resdir/console.log $title
