@@ -30,6 +30,8 @@ TORTURE_BOOT_IMAGE=""
 TORTURE_BUILDONLY=
 TORTURE_INITRD="$KVM/initrd"; export TORTURE_INITRD
 TORTURE_KCONFIG_ARG=""
+TORTURE_JITTER_START=""
+TORTURE_JITTER_STOP=""
 TORTURE_KMAKE_ARG=""
 TORTURE_QEMU_MEM=512
 TORTURE_SHUTDOWN_GRACE=180
@@ -386,6 +388,16 @@ function dump(first, pastlast, batchnum)
 	print "echo ----Start batch " batchnum ": `date` | tee -a " rd "log";
 	print "needqemurun="
 	jn=1
+	njitter = 0;
+	split(jitter, ja);
+	if (ja[1] == -1 && ncpus == 0)
+		njitter = 1;
+	else if (ja[1] == -1)
+		njitter = ncpus;
+	else
+		njitter = ja[1];
+	print "TORTURE_JITTER_START=\". jitterstart.sh " njitter " " rd " " dur " " ja[2] " " ja[3] "\"; export TORTURE_JITTER_START";
+	print "TORTURE_JITTER_STOP=\". jitterstop.sh " rd " \"; export TORTURE_JITTER_STOP"
 	for (j = first; j < pastlast; j++) {
 		cpusr[jn] = cpus[j];
 		if (cfrep[cf[j]] == "") {
@@ -427,14 +439,6 @@ function dump(first, pastlast, batchnum)
 		print "\tneedqemurun=1"
 		print "fi"
 	}
-	njitter = 0;
-	split(jitter, ja);
-	if (ja[1] == -1 && ncpus == 0)
-		njitter = 1;
-	else if (ja[1] == -1)
-		njitter = ncpus;
-	else
-		njitter = ja[1];
 	if (TORTURE_BUILDONLY && njitter != 0) {
 		njitter = 0;
 		print "echo Build-only run, so suppressing jitter | tee -a " rd "log"
@@ -445,12 +449,12 @@ function dump(first, pastlast, batchnum)
 	print "if test -n \"$needqemurun\""
 	print "then"
 	print "\techo ---- Starting kernels. `date` | tee -a " rd "log";
-	print "\t. jitterstart.sh " njitter " " rd " " dur " " ja[2] " " ja[3]
+	print "\t$TORTURE_JITTER_START";
 	print "\twhile ls $runfiles > /dev/null 2>&1"
 	print "\tdo"
 	print "\t\t:"
 	print "\tdone"
-	print "\t. jitterstop.sh " rd
+	print "\t$TORTURE_JITTER_STOP";
 	print "\techo ---- All kernel runs complete. `date` | tee -a " rd "log";
 	print "else"
 	print "\twait"
