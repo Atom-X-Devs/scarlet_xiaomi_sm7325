@@ -337,7 +337,7 @@ static int cpufreq_set_cur_state(struct thermal_cooling_device *cdev,
 
 	ret = freq_qos_update_request(&cpufreq_cdev->qos_req,
 				      frequency);
-	if (ret > 0) {
+	if (ret >= 0) {
 		cpufreq_cdev->cpufreq_state = state;
 		cpus = cpufreq_cdev->policy->cpus;
 		max_capacity = arch_scale_cpu_capacity(cpumask_first(cpus));
