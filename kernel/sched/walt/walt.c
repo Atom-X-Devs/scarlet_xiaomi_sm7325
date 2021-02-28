@@ -3902,6 +3902,8 @@ int walt_proc_user_hint_handler(struct ctl_table *table,
 	unsigned int old_value;
 	static DEFINE_MUTEX(mutex);
 
+	return 0;
+
 	mutex_lock(&mutex);
 
 	old_value = sysctl_sched_user_hint;
