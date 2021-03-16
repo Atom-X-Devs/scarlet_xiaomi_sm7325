@@ -6015,6 +6015,15 @@ static inline void util_est_update(struct sched_entity *se)
 {
 	unsigned int ewma, dequeued, last_ewma_diff;
 
+	if (entity_is_task(se)) {
+		struct cfs_rq *cfs_rq = &rq_of(cfs_rq_of(se))->cfs;
+		int ret = 0;
+
+		trace_android_rvh_util_est_update(cfs_rq, task_of(se), true, &ret);
+		if (ret)
+			return;
+	}
+
 	if (!sched_feat(UTIL_EST))
 		return;
 
@@ -8441,6 +8450,12 @@ static bool __dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 	}
 
 	dequeue_hierarchy(p, flags);
+
+	if (!task_sleep) {
+		int ret = 0;
+
+		trace_android_rvh_util_est_update(cfs_rq, p, false, &ret);
+	}
 
 	if (sched_feat(PLACE_REL_DEADLINE) && !task_sleep) {
 		se->deadline -= se->vruntime;
