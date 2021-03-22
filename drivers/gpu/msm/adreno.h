@@ -11,6 +11,7 @@
 #include "adreno_coresight.h"
 #include "adreno_dispatch.h"
 #include "adreno_drawctxt.h"
+#include "adreno_hwsched.h"
 #include "adreno_perfcounter.h"
 #include "adreno_profile.h"
 #include "adreno_ringbuffer.h"
@@ -583,6 +584,8 @@ struct adreno_device {
 	 * controls perfcounter ioctl read
 	 */
 	bool perfcounter;
+	/** @hwsched: Container for the hardware dispatcher */
+	struct adreno_hwsched hwsched;
 };
 
 /**
