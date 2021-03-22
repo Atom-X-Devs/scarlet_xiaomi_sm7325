@@ -36,24 +36,6 @@ static struct kmem_cache *jobs_cache;
 /* Use a kmem cache to speed up allocations for inflight command objects */
 static struct kmem_cache *obj_cache;
 
-static struct adreno_hwsched *to_hwsched(struct adreno_device *adreno_dev)
-{
-	struct a6xx_device *a6xx_dev = container_of(adreno_dev,
-					struct a6xx_device, adreno_dev);
-	struct a6xx_hwsched_device *a6xx_hwsched = container_of(a6xx_dev,
-					struct a6xx_hwsched_device, a6xx_dev);
-
-	return &a6xx_hwsched->hwsched;
-}
-
-static struct adreno_device *hwsched_to_adreno(struct adreno_hwsched *hwsched)
-{
-	struct a6xx_hwsched_device *a6xx_hwsched = container_of(hwsched,
-					struct a6xx_hwsched_device, hwsched);
-
-	return &a6xx_hwsched->a6xx_dev.adreno_dev;
-}
-
 static bool _check_context_queue(struct adreno_context *drawctxt, u32 count)
 {
 	bool ret;
@@ -260,7 +242,7 @@ static inline int hwsched_dispatcher_requeue_cmdobj(
 static int hwsched_queue_context(struct adreno_device *adreno_dev,
 		struct adreno_context *drawctxt)
 {
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 	struct adreno_dispatch_job *job;
 
 	/* Refuse to queue a detached context */
@@ -286,7 +268,7 @@ static int hwsched_queue_context(struct adreno_device *adreno_dev,
 
 void adreno_hwsched_set_fault(struct adreno_device *adreno_dev)
 {
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 
 	atomic_set(&hwsched->fault, ADRENO_HWSCHED_FAULT_RESTART);
 
@@ -314,7 +296,7 @@ static int hwsched_sendcmd(struct adreno_device *adreno_dev,
 	struct kgsl_drawobj_cmd *cmdobj)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 	struct kgsl_drawobj *drawobj = DRAWOBJ(cmdobj);
 	struct kgsl_context *context = drawobj->context;
 	struct adreno_context *drawctxt = ADRENO_CONTEXT(drawobj->context);
@@ -482,7 +464,7 @@ static bool adreno_drawctxt_bad(struct adreno_context *drawctxt)
 static void hwsched_handle_jobs_list(struct adreno_device *adreno_dev,
 	int id, unsigned long *map, struct llist_node *list)
 {
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 	struct adreno_dispatch_job *job, *next;
 
 	if (!list)
@@ -541,7 +523,7 @@ static void hwsched_handle_jobs_list(struct adreno_device *adreno_dev,
 
 static void hwsched_handle_jobs(struct adreno_device *adreno_dev, int id)
 {
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 	unsigned long map[BITS_TO_LONGS(KGSL_MEMSTORE_MAX)];
 	struct llist_node *requeue, *jobs;
 
@@ -563,7 +545,7 @@ static void hwsched_handle_jobs(struct adreno_device *adreno_dev, int id)
  */
 static void hwsched_issuecmds(struct adreno_device *adreno_dev)
 {
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(hwsched->jobs); i++)
@@ -572,7 +554,7 @@ static void hwsched_issuecmds(struct adreno_device *adreno_dev)
 
 void adreno_hwsched_trigger(struct adreno_device *adreno_dev)
 {
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 
 	kthread_queue_work(&kgsl_driver.worker, &hwsched->work);
 }
@@ -585,7 +567,7 @@ void adreno_hwsched_trigger(struct adreno_device *adreno_dev)
  */
 static void adreno_hwsched_issuecmds(struct adreno_device *adreno_dev)
 {
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 
 	/* If the dispatcher is busy then schedule the work for later */
 	if (!mutex_trylock(&hwsched->mutex)) {
@@ -843,7 +825,7 @@ int adreno_hwsched_queue_cmds(struct kgsl_device_private *dev_priv,
 	struct kgsl_device *device = dev_priv->device;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_context *drawctxt = ADRENO_CONTEXT(context);
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 	struct adreno_dispatch_job *job;
 	int ret;
 	unsigned int i, user_ts;
@@ -996,7 +978,7 @@ static void retire_cmdobj(struct kgsl_drawobj_cmd *cmdobj)
 
 static int retire_cmd_list(struct adreno_device *adreno_dev)
 {
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	int count = 0;
 	struct cmd_list_obj *obj, *tmp;
@@ -1027,7 +1009,7 @@ static int retire_cmd_list(struct adreno_device *adreno_dev)
 static void hwsched_power_down(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 
 	mutex_lock(&device->mutex);
 
@@ -1196,7 +1178,7 @@ static void force_retire_timestamp(struct kgsl_device *device,
 
 static void adreno_hwsched_complete_replay(struct adreno_device *adreno_dev)
 {
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct cmd_list_obj *obj, *tmp;
 	u32 retired = 0;
@@ -1278,7 +1260,7 @@ static void do_fault_header(struct adreno_device *adreno_dev,
 
 static struct cmd_list_obj *get_fault_cmdobj(struct adreno_device *adreno_dev)
 {
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 	struct cmd_list_obj *obj, *tmp;
 
 	list_for_each_entry_safe(obj, tmp, &hwsched->cmd_list, node) {
@@ -1296,7 +1278,7 @@ static void reset_and_snapshot(struct adreno_device *adreno_dev)
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct kgsl_context *context = NULL;
 	struct cmd_list_obj *obj = get_fault_cmdobj(adreno_dev);
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 
 	if (device->state != KGSL_STATE_ACTIVE)
 		return;
@@ -1333,7 +1315,7 @@ done:
 static void adreno_hwsched_recovery(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 
 	mutex_lock(&device->mutex);
 
@@ -1350,7 +1332,8 @@ static void adreno_hwsched_work(struct kthread_work *work)
 {
 	struct adreno_hwsched *hwsched = container_of(work,
 			struct adreno_hwsched, work);
-	struct adreno_device *adreno_dev = hwsched_to_adreno(hwsched);
+	struct adreno_device *adreno_dev = container_of(hwsched,
+			struct adreno_device, hwsched);
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	int count = 0;
 
@@ -1389,7 +1372,7 @@ static void adreno_hwsched_work(struct kthread_work *work)
 void adreno_hwsched_init(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 	int i;
 
 	memset(hwsched, 0, sizeof(*hwsched));
@@ -1414,7 +1397,7 @@ void adreno_hwsched_init(struct adreno_device *adreno_dev)
 void adreno_hwsched_mark_drawobj(struct adreno_device *adreno_dev,
 	u32 ctxt_id, u32 ts)
 {
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
+	struct adreno_hwsched *hwsched = &adreno_dev->hwsched;
 	struct cmd_list_obj *obj, *tmp;
 	struct kgsl_drawobj *drawobj = NULL;
 
