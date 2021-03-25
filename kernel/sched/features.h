@@ -90,6 +90,9 @@ SCHED_FEAT(WA_BIAS, true)
  */
 SCHED_FEAT(UTIL_EST, true)
 
+SCHED_FEAT(ALT_PERIOD, true)
+SCHED_FEAT(BASE_SLICE, true)
+
 /*
  * Request max frequency from schedutil whenever a RT task is running.
  */
