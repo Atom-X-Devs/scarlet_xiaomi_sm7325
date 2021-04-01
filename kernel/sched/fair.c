@@ -1433,6 +1433,9 @@ void post_init_entity_util_avg(struct task_struct *p)
 	}
 
 	sa->runnable_avg = sa->util_avg;
+
+	/* Hook before this se's util is attached to cfs_rq's util */
+	trace_android_rvh_post_init_entity_util_avg(se);
 }
 
 static inline void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec);

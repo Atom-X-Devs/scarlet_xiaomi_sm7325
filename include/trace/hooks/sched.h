@@ -361,6 +361,10 @@ DECLARE_RESTRICTED_HOOK(android_rvh_set_iowait,
 	TP_PROTO(struct task_struct *p, struct rq *rq, int *should_iowait_boost),
 	TP_ARGS(p, rq, should_iowait_boost), 1);
 
+DECLARE_RESTRICTED_HOOK(android_rvh_post_init_entity_util_avg,
+	TP_PROTO(struct sched_entity *se),
+	TP_ARGS(se), 1);
+
 /* macro versions of hooks are no longer required */
 
 #endif /* _TRACE_HOOK_SCHED_H */
