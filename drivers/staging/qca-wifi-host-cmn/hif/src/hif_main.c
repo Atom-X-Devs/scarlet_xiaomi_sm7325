@@ -2045,7 +2045,7 @@ irqreturn_t hif_wake_interrupt_handler(int irq, void *context)
 	struct hif_softc *scn = context;
 	struct hif_opaque_softc *hif_ctx = GET_HIF_OPAQUE_HDL(scn);
 
-	hif_info("wake interrupt received on irq %d", irq);
+	hif_debug("wake interrupt received on irq %d", irq);
 
 	hif_pm_runtime_set_monitor_wake_intr(hif_ctx, 0);
 	hif_pm_runtime_request_resume(hif_ctx);
