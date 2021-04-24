@@ -2102,7 +2102,7 @@ static void wma_log_pkt_ipv4(uint8_t *data, uint32_t length)
 		      ip_addr[2], ip_addr[3]);
 	src_port = *(uint16_t *)(data + IPV4_SRC_PORT_OFFSET);
 	dst_port = *(uint16_t *)(data + IPV4_DST_PORT_OFFSET);
-	wma_info("Pkt_len: %u, src_port: %u, dst_port: %u",
+	wma_debug("Pkt_len: %u, src_port: %u, dst_port: %u",
 		qdf_cpu_to_be16(pkt_len),
 		qdf_cpu_to_be16(src_port),
 		qdf_cpu_to_be16(dst_port));
@@ -2133,7 +2133,7 @@ static void wma_log_pkt_ipv6(uint8_t *data, uint32_t length)
 		 ip_addr[15]);
 	src_port = *(uint16_t *)(data + IPV6_SRC_PORT_OFFSET);
 	dst_port = *(uint16_t *)(data + IPV6_DST_PORT_OFFSET);
-	wma_info("Pkt_len: %u, src_port: %u, dst_port: %u",
+	wma_debug("Pkt_len: %u, src_port: %u, dst_port: %u",
 		 qdf_cpu_to_be16(pkt_len),
 		 qdf_cpu_to_be16(src_port),
 		 qdf_cpu_to_be16(dst_port));
