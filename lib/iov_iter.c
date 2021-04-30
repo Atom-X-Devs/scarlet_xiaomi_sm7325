@@ -569,9 +569,9 @@ static size_t csum_and_copy_to_pipe_iter(const void *addr, size_t bytes,
 		return 0;
 	for ( ; n; idx = next_idx(idx, pipe), r = 0) {
 		size_t chunk = min_t(size_t, n, PAGE_SIZE - r);
-		char *p = kmap_atomic(pipe->bufs[idx].page);
+		char *p = kmap_local_page(pipe->bufs[idx].page);
 		sum = csum_and_memcpy(p + r, addr, chunk, sum, off);
-		kunmap_atomic(p);
+		kunmap_local(p);
 		i->idx = idx;
 		i->iov_offset = r + chunk;
 		n -= chunk;
