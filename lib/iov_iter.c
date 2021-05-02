@@ -618,9 +618,9 @@ static unsigned long memcpy_mcsafe_to_page(struct page *page, size_t offset,
 	unsigned long ret;
 	char *to;
 
-	to = kmap_atomic(page);
+	to = kmap_local_page(page);
 	ret = memcpy_mcsafe(to + offset, from, len);
-	kunmap_atomic(to);
+	kunmap_local(to);
 
 	return ret;
 }
