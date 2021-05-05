@@ -643,7 +643,7 @@ static inline bool gfp_compaction_allowed(gfp_t gfp_mask)
 extern int alloc_contig_range(unsigned long start, unsigned long end,
 			      unsigned migratetype, gfp_t gfp_mask);
 #endif
-void free_contig_range(unsigned long pfn, unsigned int nr_pages);
+void free_contig_range(unsigned long pfn, unsigned long nr_pages);
 
 #ifdef CONFIG_CMA
 /* CMA stuff */
