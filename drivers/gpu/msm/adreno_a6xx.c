@@ -926,25 +926,6 @@ void a6xx_rdpm_cx_freq_update(struct a6xx_gmu_device *gmu,
 	}
 }
 
-void a6xx_unhalt_sqe(struct adreno_device *adreno_dev)
-{
-	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-	struct adreno_firmware *fw = ADRENO_FW(adreno_dev, ADRENO_FW_SQE);
-	uint64_t gpuaddr;
-
-	gpuaddr = fw->memdesc->gpuaddr;
-
-	/* Program the ucode base for CP */
-	kgsl_regwrite(device, A6XX_CP_SQE_INSTR_BASE_LO,
-				lower_32_bits(gpuaddr));
-	kgsl_regwrite(device, A6XX_CP_SQE_INSTR_BASE_HI,
-				upper_32_bits(gpuaddr));
-
-	/* Clear the SQE_HALT to start the CP engine */
-	kgsl_regwrite(device, A6XX_CP_SQE_CNTL, 1);
-}
-
-
 /*
  * CP_INIT_MAX_CONTEXT bit tells if the multiple hardware contexts can
  * be used at once of if they should be serialized
@@ -1157,6 +1138,7 @@ int a6xx_rb_start(struct adreno_device *adreno_dev)
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	u32 cp_rb_cntl = A6XX_CP_RB_CNTL_DEFAULT |
 		(ADRENO_FEATURE(adreno_dev, ADRENO_APRIV) ? 0 : (1 << 27));
+	struct adreno_firmware *fw = ADRENO_FW(adreno_dev, ADRENO_FW_SQE);
 	struct adreno_ringbuffer *rb;
 	uint64_t addr;
 	int ret, i;
@@ -1194,7 +1176,14 @@ int a6xx_rb_start(struct adreno_device *adreno_dev)
 	kgsl_regwrite(device, A6XX_CP_RB_BASE_HI,
 		upper_32_bits(rb->buffer_desc->gpuaddr));
 
-	a6xx_unhalt_sqe(adreno_dev);
+	/* Program the ucode base for CP */
+	kgsl_regwrite(device, A6XX_CP_SQE_INSTR_BASE_LO,
+		lower_32_bits(fw->memdesc->gpuaddr));
+	kgsl_regwrite(device, A6XX_CP_SQE_INSTR_BASE_HI,
+		upper_32_bits(fw->memdesc->gpuaddr));
+
+	/* Clear the SQE_HALT to start the CP engine */
+	kgsl_regwrite(device, A6XX_CP_SQE_CNTL, 1);
 
 	ret = a6xx_send_cp_init(adreno_dev, rb);
 	if (ret)
