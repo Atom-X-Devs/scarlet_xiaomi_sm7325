@@ -2556,6 +2556,8 @@ static inline int task_on_rq_migrating(struct task_struct *p)
 #define WF_RQ_SELECTED		0x80 /* ->select_task_rq() was called */
 #define WF_TTWU_RQ		0x100 /* Wakeup completed through ttwu_runnable() */
 
+#define WF_ANDROID_VENDOR	0x1000 /* Vendor specific for Android */
+
 static_assert(WF_EXEC == SD_BALANCE_EXEC);
 static_assert(WF_FORK == SD_BALANCE_FORK);
 static_assert(WF_TTWU == SD_BALANCE_WAKE);
