@@ -81,7 +81,7 @@ int a6xx_hfi_queue_read(struct a6xx_gmu_device *gmu, uint32_t queue_idx,
 	if (GMU_VER_MAJOR(gmu->ver.hfi) >= 2)
 		read = ALIGN(read, SZ_4) % hdr->queue_size;
 
-	hdr->read_index = read;
+	hfi_update_read_idx(hdr, read);
 
 done:
 	return result;
@@ -128,7 +128,7 @@ int a6xx_hfi_queue_write(struct adreno_device *adreno_dev, uint32_t queue_idx,
 		}
 	}
 
-	hdr->write_index = write;
+	hfi_update_write_idx(hdr, write);
 
 	return 0;
 }

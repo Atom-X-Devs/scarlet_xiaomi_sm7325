@@ -1185,12 +1185,6 @@ skipib:
 		return ret;
 
 	/*
-	 * Memory barrier to make sure packet and write index are written before
-	 * an interrupt is raised
-	 */
-	wmb();
-
-	/*
 	 * Put the profiling information in the user profiling buffer.
 	 * The gmu_core_regwrite below has a wmb() before the actual
 	 * register write to ensure any pending writes are complete
