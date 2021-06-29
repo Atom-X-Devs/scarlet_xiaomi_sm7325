@@ -1014,6 +1014,7 @@ void adreno_active_count_put(struct adreno_device *adreno_dev);
 #define adreno_is_a640v2(x) false
 
 #define adreno_is_a6xx(x) true
+#define adreno_is_a660v2(x) true
 #define adreno_is_a642l(x) true
 #define adreno_is_a650_family(x) true
 #define adreno_is_a660(x) true
