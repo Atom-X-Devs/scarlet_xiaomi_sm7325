@@ -236,7 +236,7 @@ config MSM_QMP
 	  Framework. QMP uses a mailbox located in shared memory.
 
 config QCOM_IPCC
-	bool "Qualcomm Technologies, Inc. IPCC driver"
+	tristate "Qualcomm Technologies, Inc. IPCC driver"
 	depends on ARCH_QCOM || COMPILE_TEST
 	help
 	  Qualcomm Technologies, Inc. Inter-Processor Communication Controller
