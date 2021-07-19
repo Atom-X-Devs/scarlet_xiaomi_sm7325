@@ -7,7 +7,8 @@ performance expectations by drivers, subsystems and user space applications on
 one of the parameters.
 
 Two different PM QoS frameworks are available:
-1. PM QoS classes for cpu_dma_latency
+1. PM QoS classes for cpu_dma_latency, network_latency, network_throughput,
+memory_bandwidth.
 2. the per-device PM QoS framework provides the API to manage the per-device latency
 constraints and PM QoS flags.
 
@@ -78,7 +79,7 @@ cleanup of a process, the interface requires the process to register its
 parameter requests in the following way:
 
 To register the default pm_qos target for the specific parameter, the process
-must open /dev/cpu_dma_latency
+must open one of /dev/[cpu_dma_latency, network_latency, network_throughput]
 
 As long as the device node is held open that process has a registered
 request on the parameter.
