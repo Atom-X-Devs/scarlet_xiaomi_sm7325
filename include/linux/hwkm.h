@@ -7,8 +7,6 @@
 #define __HWKM_H_
 
 #include <linux/types.h>
-#include <stdbool.h>
-#include <stddef.h>
 
 #include <linux/crypto-qti-common.h>
 
