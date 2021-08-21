@@ -70,7 +70,7 @@ VDSO_CFLAGS += -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
                -Wno-format-security \
                -Wdeclaration-after-statement \
                -std=gnu11
-VDSO_CFLAGS  += -O2
+VDSO_CFLAGS  += -O3
 # Some useful compiler-dependent flags from top-level Makefile
 VDSO_CFLAGS += $(call cc32-option,-Wdeclaration-after-statement,)
 VDSO_CFLAGS += $(call cc32-option,-Wno-pointer-sign)
