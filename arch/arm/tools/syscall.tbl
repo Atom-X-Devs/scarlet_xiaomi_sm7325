@@ -450,3 +450,5 @@
 434	common	pidfd_open			sys_pidfd_open
 435	common	clone3				sys_clone3
 440	common	process_madvise		sys_process_madvise
+# 447 reserved for memfd_secret
+448	common	process_mrelease		sys_process_mrelease
