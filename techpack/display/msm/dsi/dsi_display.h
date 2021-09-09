@@ -204,6 +204,10 @@ struct dsi_display {
 	struct drm_device *drm_dev;
 	struct drm_connector *drm_conn;
 	struct drm_connector *ext_conn;
+#ifdef CONFIG_MACH_XIAOMI
+	struct class *class;
+	struct device *dev;
+#endif
 
 	const char *name;
 	const char *display_type;
