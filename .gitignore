@@ -151,3 +151,13 @@ arch/*/configs/vendor/*_defconfig
 
 # vendor device tree directories
 arch/arm/boot/dts/vendor
+
+# build scripts
+/build-scripts
+
+# build directories
+/out
+/work
+
+# build log
+log.txt
