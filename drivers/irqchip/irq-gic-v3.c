@@ -18,8 +18,6 @@
 #include <linux/percpu.h>
 #include <linux/refcount.h>
 #include <linux/slab.h>
-#include <linux/msm_rtb.h>
-
 #include <linux/irqchip.h>
 #include <linux/irqchip/arm-gic-common.h>
 #include <linux/irqchip/arm-gic-v3.h>
@@ -648,7 +646,6 @@ static asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs
 	if (likely(irqnr > 15)) {
 		int err;
 
-		uncached_logk(LOGK_IRQ, (void *)(uintptr_t)irqnr);
 		if (static_branch_likely(&supports_deactivate_key))
 			gic_write_eoir(irqnr);
 		else
@@ -662,7 +659,6 @@ static asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs
 		return;
 	}
 	if (irqnr < 16) {
-		uncached_logk(LOGK_IRQ, (void *)(uintptr_t)irqnr);
 		gic_write_eoir(irqnr);
 		if (static_branch_likely(&supports_deactivate_key))
 			gic_write_dir(irqnr);
