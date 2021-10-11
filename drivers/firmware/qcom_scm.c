@@ -241,7 +241,7 @@ static bool __qcom_scm_is_call_available(struct device *dev, u32 svc_id, u32 cmd
 		break;
 	default:
 		pr_err("Unknown SMC convention being used\n");
-		return -EINVAL;
+		return false;
 	}
 
 	ret = qcom_scm_call(dev, &desc);
