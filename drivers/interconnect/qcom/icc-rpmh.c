@@ -437,8 +437,10 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 		return ret;
 
 	qp->num_clks = devm_clk_bulk_get_all(qp->dev, &qp->clks);
-	if (qp->num_clks < 0)
+	if (qp->num_clks < 0) {
+		icc_provider_del(provider);
 		return qp->num_clks;
+	}
 
 	for (i = 0; i < qp->num_bcms; i++)
 		qcom_icc_bcm_init(qp, qp->bcms[i], dev);
