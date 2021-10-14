@@ -92,7 +92,6 @@ void __update_stats_enqueue_sleeper(struct rq *rq, struct task_struct *p,
 			}
 
 			trace_sched_stat_blocked(p, delta);
-			trace_sched_blocked_reason(p);
 
 			/*
 			 * Blocking time is in units of nanosecs, so shift by
