@@ -1761,7 +1761,7 @@ static bool __journal_read_write(struct dm_integrity_io *dio, struct bio *bio,
 		n_sectors -= bv.bv_len >> SECTOR_SHIFT;
 		bio_advance_iter(bio, &bio->bi_iter, bv.bv_len);
 retry_kmap:
-		mem = kmap_atomic(bv.bv_page);
+		mem = bvec_kmap_local(&bv);
 		if (likely(dio->write))
 			flush_dcache_page(bv.bv_page);
 
@@ -1775,7 +1775,7 @@ retry_kmap:
 
 				if (unlikely(journal_entry_is_inprogress(je))) {
 					flush_dcache_page(bv.bv_page);
-					kunmap_atomic(mem);
+					kunmap_local(mem);
 
 					__io_wait_event(ic->copy_to_journal_wait, !journal_entry_is_inprogress(je));
 					goto retry_kmap;
@@ -1866,7 +1866,7 @@ retry_kmap:
 
 		if (unlikely(!dio->write))
 			flush_dcache_page(bv.bv_page);
-		kunmap_atomic(mem);
+		kunmap_local(mem);
 	} while (n_sectors);
 
 	if (likely(dio->write)) {
