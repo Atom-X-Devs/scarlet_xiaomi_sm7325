@@ -473,7 +473,6 @@ static int cpufreq_set_cur_state(struct thermal_cooling_device *cdev,
 {
 	struct cpufreq_cooling_device *cpufreq_cdev = cdev->devdata;
 	struct cpumask *cpus;
-	unsigned long max_capacity, capacity;
 	unsigned int frequency;
 	int ret;
 
@@ -492,10 +491,7 @@ static int cpufreq_set_cur_state(struct thermal_cooling_device *cdev,
 	if (ret >= 0) {
 		cpufreq_cdev->cpufreq_state = state;
 		cpus = cpufreq_cdev->policy->related_cpus;
-		max_capacity = arch_scale_cpu_capacity(cpumask_first(cpus));
-		capacity = frequency * max_capacity;
-		capacity /= cpufreq_cdev->policy->cpuinfo.max_freq;
-		arch_set_thermal_pressure(cpus, max_capacity - capacity);
+		arch_update_thermal_pressure(cpus, frequency);
 		ret = 0;
 	}
 
