@@ -1105,7 +1105,16 @@ static bool _preemption_show(struct adreno_device *adreno_dev)
 
 static unsigned int _preempt_count_show(struct adreno_device *adreno_dev)
 {
-	return a6xx_hwsched_preempt_count_get(adreno_dev);
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	u32 count;
+
+	mutex_lock(&device->mutex);
+
+	count = a6xx_hwsched_preempt_count_get(adreno_dev);
+
+	mutex_unlock(&device->mutex);
+
+	return count;
 }
 
 static int _gmu_log_stream_enable_store(struct adreno_device *adreno_dev,
