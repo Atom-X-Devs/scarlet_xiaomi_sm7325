@@ -5,6 +5,7 @@ KCOV_INSTRUMENT := n
 CFLAGS_REMOVE_core.o = $(CC_FLAGS_FTRACE)
 
 CFLAGS_core.o := $(call cc-option,-fno-conserve-stack,) \
+	$(call cc-option,-mno-outline-atomics) \
 	$(call cc-option,-fno-stack-protector,)
 
 obj-y := core.o debugfs.o report.o
