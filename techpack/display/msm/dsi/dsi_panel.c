@@ -2572,6 +2572,17 @@ static int dsi_panel_parse_dsc_params(struct dsi_display_mode *mode,
 		return 0;
 	}
 
+#ifdef CONFIG_MACH_XIAOMI
+	rc = utils->read_u64(utils->data, "mi,mdss-dsc-panel-id",
+			     &priv_info->dsc.config.dsc_panel_id);
+	if (rc) {
+		priv_info->dsc.config.dsc_panel_id = 0;
+		DSI_DEBUG("mi,mdss-dsc-panel-id is not specified\n");
+	} else
+		DSI_DEBUG("mi,mdss-dsc-panel-id is 0x%llx\n",
+			  priv_info->dsc.config.dsc_panel_id);
+#endif
+
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsc-version", &data);
 	if (rc) {
 		priv_info->dsc.config.dsc_version_major = 0x1;
