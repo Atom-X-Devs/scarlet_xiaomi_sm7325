@@ -53,11 +53,18 @@ static int goodix_spi_read_bra(struct device *dev, unsigned int addr,
 	int ret = 0;
 
 	rx_buf = kzalloc(SPI_READ_PREFIX_LEN + len, GFP_KERNEL);
-	tx_buf = kzalloc(SPI_READ_PREFIX_LEN + len, GFP_KERNEL);
-	if (!rx_buf || !tx_buf) {
-		ts_err("alloc tx/rx_buf failed, size:%d",
+	if (!rx_buf) {
+		ts_err("alloc rx_buf failed, size:%d",
 			SPI_READ_PREFIX_LEN + len);
 		return -ENOMEM;
+	}
+
+	tx_buf = kzalloc(SPI_READ_PREFIX_LEN + len, GFP_KERNEL);
+	if (!tx_buf) {
+		ts_err("alloc tx_buf failed, size:%d",
+			SPI_READ_PREFIX_LEN + len);
+		ret = -ENOMEM;
+		goto err_alloc_rx_buf;
 	}
 
 	spi_message_init(&spi_msg);
@@ -82,12 +89,13 @@ static int goodix_spi_read_bra(struct device *dev, unsigned int addr,
 	ret = spi_sync(spi, &spi_msg);
 	if (ret < 0) {
 		ts_err("spi transfer error:%d", ret);
-		goto exit;
+		goto err_spi_transfer;
 	}
 	memcpy(data, &rx_buf[SPI_READ_PREFIX_LEN], len);
 
-exit:
+err_spi_transfer:
 	kfree(rx_buf);
+err_alloc_rx_buf:
 	kfree(tx_buf);
 	return ret;
 }
@@ -103,11 +111,18 @@ static int goodix_spi_read(struct device *dev, unsigned int addr,
 	int ret = 0;
 
 	rx_buf = kzalloc(SPI_READ_PREFIX_LEN - 1 + len, GFP_KERNEL);
-	tx_buf = kzalloc(SPI_READ_PREFIX_LEN - 1 + len, GFP_KERNEL);
-	if (!rx_buf || !tx_buf) {
-		ts_err("alloc tx/rx_buf failed, size:%d",
-			SPI_READ_PREFIX_LEN - 1 + len);
+	if (!rx_buf) {
+		ts_err("alloc rx_buf failed, size:%d",
+			SPI_READ_PREFIX_LEN + len);
 		return -ENOMEM;
+	}
+
+	tx_buf = kzalloc(SPI_READ_PREFIX_LEN - 1 + len, GFP_KERNEL);
+	if (!tx_buf) {
+		ts_err("alloc tx_buf failed, size:%d",
+			SPI_READ_PREFIX_LEN + len);
+		ret = -ENOMEM;
+		goto err_alloc_rx_buf;
 	}
 
 	spi_message_init(&spi_msg);
@@ -131,12 +146,13 @@ static int goodix_spi_read(struct device *dev, unsigned int addr,
 	ret = spi_sync(spi, &spi_msg);
 	if (ret < 0) {
 		ts_err("spi transfer error:%d", ret);
-		goto exit;
+		goto err_spi_transfer;
 	}
 	memcpy(data, &rx_buf[SPI_READ_PREFIX_LEN - 1], len);
 
-exit:
+err_spi_transfer:
 	kfree(rx_buf);
+err_alloc_rx_buf:
 	kfree(tx_buf);
 	return ret;
 }
