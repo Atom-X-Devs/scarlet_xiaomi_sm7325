@@ -27,6 +27,8 @@
 #define SPI_READ_PREFIX_LEN  \
 		(SPI_TRANS_PREFIX_LEN + REGISTER_WIDTH + SPI_READ_DUMMY_LEN)
 #define SPI_WRITE_PREFIX_LEN (SPI_TRANS_PREFIX_LEN + REGISTER_WIDTH)
+#define SPI_PREALLOC_RX_BUF_SIZE 4096 + SPI_READ_PREFIX_LEN
+#define SPI_PREALLOC_TX_BUF_SIZE 4096 + SPI_WRITE_PREFIX_LEN
 
 #define SPI_WRITE_FLAG  0xF0
 #define SPI_READ_FLAG   0xF1
@@ -51,20 +53,26 @@ static int goodix_spi_read_bra(struct device *dev, unsigned int addr,
 	struct spi_transfer xfers;
 	struct spi_message spi_msg;
 	int ret = 0;
+	int buf_len = SPI_READ_PREFIX_LEN + len;
 
-	rx_buf = kzalloc(SPI_READ_PREFIX_LEN + len, GFP_KERNEL);
-	if (!rx_buf) {
-		ts_err("alloc rx_buf failed, size:%d",
-			SPI_READ_PREFIX_LEN + len);
-		return -ENOMEM;
-	}
+	if (buf_len <= SPI_PREALLOC_RX_BUF_SIZE &&
+		buf_len <= SPI_PREALLOC_TX_BUF_SIZE) {
+		rx_buf = goodix_spi_bus.rx_buf;
+		tx_buf = goodix_spi_bus.tx_buf;
+		memset(tx_buf, 0, buf_len);
+	} else {
+		rx_buf = kzalloc(buf_len, GFP_KERNEL);
+		if (!rx_buf) {
+			ts_err("alloc rx_buf failed, size:%d", buf_len);
+			return -ENOMEM;
+		}
 
-	tx_buf = kzalloc(SPI_READ_PREFIX_LEN + len, GFP_KERNEL);
-	if (!tx_buf) {
-		ts_err("alloc tx_buf failed, size:%d",
-			SPI_READ_PREFIX_LEN + len);
-		ret = -ENOMEM;
-		goto err_alloc_rx_buf;
+		tx_buf = kzalloc(buf_len, GFP_KERNEL);
+		if (!tx_buf) {
+			ts_err("alloc tx_buf failed, size:%d", buf_len);
+			ret = -ENOMEM;
+			goto err_alloc_rx_buf;
+		}
 	}
 
 	spi_message_init(&spi_msg);
@@ -83,7 +91,7 @@ static int goodix_spi_read_bra(struct device *dev, unsigned int addr,
 
 	xfers.tx_buf = tx_buf;
 	xfers.rx_buf = rx_buf;
-	xfers.len = SPI_READ_PREFIX_LEN + len;
+	xfers.len = buf_len;
 	xfers.cs_change = 0;
 	spi_message_add_tail(&xfers, &spi_msg);
 	ret = spi_sync(spi, &spi_msg);
@@ -94,9 +102,11 @@ static int goodix_spi_read_bra(struct device *dev, unsigned int addr,
 	memcpy(data, &rx_buf[SPI_READ_PREFIX_LEN], len);
 
 err_spi_transfer:
-	kfree(rx_buf);
+	if (rx_buf != goodix_spi_bus.rx_buf)
+		kfree(rx_buf);
 err_alloc_rx_buf:
-	kfree(tx_buf);
+	if (tx_buf != goodix_spi_bus.tx_buf)
+		kfree(tx_buf);
 	return ret;
 }
 
@@ -109,20 +119,26 @@ static int goodix_spi_read(struct device *dev, unsigned int addr,
 	struct spi_transfer xfers;
 	struct spi_message spi_msg;
 	int ret = 0;
+	int buf_len = SPI_READ_PREFIX_LEN - 1 + len;
 
-	rx_buf = kzalloc(SPI_READ_PREFIX_LEN - 1 + len, GFP_KERNEL);
-	if (!rx_buf) {
-		ts_err("alloc rx_buf failed, size:%d",
-			SPI_READ_PREFIX_LEN + len);
-		return -ENOMEM;
-	}
+	if (buf_len <= SPI_PREALLOC_RX_BUF_SIZE &&
+		buf_len <= SPI_PREALLOC_TX_BUF_SIZE) {
+		rx_buf = goodix_spi_bus.rx_buf;
+		tx_buf = goodix_spi_bus.tx_buf;
+		memset(tx_buf, 0, buf_len);
+	} else {
+		rx_buf = kzalloc(buf_len, GFP_KERNEL);
+		if (!rx_buf) {
+			ts_err("alloc rx_buf failed, size:%d", buf_len);
+			return -ENOMEM;
+		}
 
-	tx_buf = kzalloc(SPI_READ_PREFIX_LEN - 1 + len, GFP_KERNEL);
-	if (!tx_buf) {
-		ts_err("alloc tx_buf failed, size:%d",
-			SPI_READ_PREFIX_LEN + len);
-		ret = -ENOMEM;
-		goto err_alloc_rx_buf;
+		tx_buf = kzalloc(buf_len, GFP_KERNEL);
+		if (!tx_buf) {
+			ts_err("alloc tx_buf failed, size:%d", buf_len);
+			ret = -ENOMEM;
+			goto err_alloc_rx_buf;
+		}
 	}
 
 	spi_message_init(&spi_msg);
@@ -140,7 +156,7 @@ static int goodix_spi_read(struct device *dev, unsigned int addr,
 
 	xfers.tx_buf = tx_buf;
 	xfers.rx_buf = rx_buf;
-	xfers.len = SPI_READ_PREFIX_LEN - 1 + len;
+	xfers.len = buf_len;
 	xfers.cs_change = 0;
 	spi_message_add_tail(&xfers, &spi_msg);
 	ret = spi_sync(spi, &spi_msg);
@@ -151,9 +167,11 @@ static int goodix_spi_read(struct device *dev, unsigned int addr,
 	memcpy(data, &rx_buf[SPI_READ_PREFIX_LEN - 1], len);
 
 err_spi_transfer:
-	kfree(rx_buf);
+	if (rx_buf != goodix_spi_bus.rx_buf)
+		kfree(rx_buf);
 err_alloc_rx_buf:
-	kfree(tx_buf);
+	if (tx_buf != goodix_spi_bus.tx_buf)
+		kfree(tx_buf);
 	return ret;
 }
 
@@ -173,10 +191,17 @@ static int goodix_spi_write(struct device *dev, unsigned int addr,
 	struct spi_transfer xfers;
 	struct spi_message spi_msg;
 	int ret = 0;
+	int buf_len = SPI_WRITE_PREFIX_LEN + len;
 
-	tx_buf = kzalloc(SPI_WRITE_PREFIX_LEN + len, GFP_KERNEL);
-	if (!tx_buf)
-		return -ENOMEM;
+	if (buf_len <= SPI_PREALLOC_TX_BUF_SIZE) {
+		tx_buf = goodix_spi_bus.tx_buf;
+	} else {
+		tx_buf = kzalloc(buf_len, GFP_KERNEL);
+		if (!tx_buf) {
+			ts_err("alloc tx_buf failed, size:%d", buf_len);
+			return -ENOMEM;
+		}
+	}
 
 	spi_message_init(&spi_msg);
 	memset(&xfers, 0, sizeof(xfers));
@@ -188,14 +213,15 @@ static int goodix_spi_write(struct device *dev, unsigned int addr,
 	tx_buf[4] = addr & 0xFF;
 	memcpy(&tx_buf[SPI_WRITE_PREFIX_LEN], data, len);
 	xfers.tx_buf = tx_buf;
-	xfers.len = SPI_WRITE_PREFIX_LEN + len;
+	xfers.len = buf_len;
 	xfers.cs_change = 0;
 	spi_message_add_tail(&xfers, &spi_msg);
 	ret = spi_sync(spi, &spi_msg);
 	if (ret < 0)
 		ts_err("spi transfer error:%d", ret);
 
-	kfree(tx_buf);
+	if (tx_buf != goodix_spi_bus.tx_buf)
+		kfree(tx_buf);
 	return ret;
 }
 
@@ -235,10 +261,24 @@ static int goodix_spi_probe(struct spi_device *spi)
 	else
 		goodix_spi_bus.read = goodix_spi_read;
 	goodix_spi_bus.write = goodix_spi_write;
+
+	goodix_spi_bus.rx_buf = kzalloc(SPI_PREALLOC_RX_BUF_SIZE, GFP_KERNEL);
+	if (!goodix_spi_bus.rx_buf) {
+		return -ENOMEM;
+	}
+
+	goodix_spi_bus.tx_buf = kzalloc(SPI_PREALLOC_TX_BUF_SIZE, GFP_KERNEL);
+	if (!goodix_spi_bus.tx_buf) {
+		ret = -ENOMEM;
+		goto err_alloc_tx_buf;
+	}
+
 	/* ts core device */
 	goodix_pdev = kzalloc(sizeof(struct platform_device), GFP_KERNEL);
-	if (!goodix_pdev)
-		return -ENOMEM;
+	if (!goodix_pdev) {
+		ret = -ENOMEM;
+		goto err_alloc_pdev;
+	}
 
 	goodix_pdev->name = GOODIX_CORE_DRIVER_NAME;
 	goodix_pdev->id = 0;
@@ -257,14 +297,18 @@ static int goodix_spi_probe(struct spi_device *spi)
 	ret = platform_device_register(goodix_pdev);
 	if (ret) {
 		ts_err("failed register goodix platform device, %d", ret);
-		goto err_pdev;
+		goto err_register_platform_device;
 	}
 	ts_info("spi probe out");
 	return 0;
 
-err_pdev:
+err_register_platform_device:
 	kfree(goodix_pdev);
-	goodix_pdev = NULL;
+err_alloc_pdev:
+	kfree(goodix_spi_bus.tx_buf);
+err_alloc_tx_buf:
+	kfree(goodix_spi_bus.rx_buf);
+
 	ts_info("spi probe out, %d", ret);
 	return ret;
 }
