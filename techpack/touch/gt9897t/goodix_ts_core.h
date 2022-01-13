@@ -393,6 +393,8 @@ enum goodix_ic_bus_type {
 struct goodix_bus_interface {
 	int bus_type;
 	struct device *dev;
+	u8 *rx_buf;
+	u8 *tx_buf;
 	int (*read)(struct device *dev, unsigned int addr, unsigned char *data,
 		    unsigned int len);
 	int (*write)(struct device *dev, unsigned int addr, unsigned char *data,
