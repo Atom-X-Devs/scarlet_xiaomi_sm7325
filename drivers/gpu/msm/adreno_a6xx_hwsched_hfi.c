@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/iommu.h>
@@ -1114,6 +1115,16 @@ int a6xx_hwsched_submit_cmdobj(struct adreno_device *adreno_dev,
 	struct hfi_issue_ib *issue_ib;
 	struct hfi_submit_cmd *cmd;
 	struct adreno_submit_time time = {0};
+	static void *cmdbuf;
+
+	if (cmdbuf == NULL) {
+		struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+
+		cmdbuf = devm_kzalloc(&device->pdev->dev, HFI_MAX_MSG_SIZE,
+			GFP_KERNEL);
+		if (!cmdbuf)
+			return -ENOMEM;
+	}
 
 	ret = hfi_context_register(adreno_dev, drawobj->context);
 	if (ret)
@@ -1133,9 +1144,7 @@ int a6xx_hwsched_submit_cmdobj(struct adreno_device *adreno_dev,
 	if (WARN_ON(cmd_sizebytes > HFI_MAX_MSG_SIZE))
 		return -EMSGSIZE;
 
-	cmd = kmalloc(cmd_sizebytes, GFP_KERNEL);
-	if (cmd == NULL)
-		return -ENOMEM;
+	cmd = cmdbuf;
 
 	cmd->hdr = CREATE_MSG_HDR(H2F_MSG_ISSUE_CMD, cmd_sizebytes,
 			HFI_MSG_CMD);
@@ -1177,7 +1186,7 @@ skipib:
 		HFI_DSP_ID_0 + drawobj->context->gmu_dispatch_queue,
 		(u32 *)cmd);
 	if (ret)
-		goto free;
+		return ret;
 
 	/*
 	 * Memory barrier to make sure packet and write index are written before
@@ -1191,9 +1200,6 @@ skipib:
 
 	/* Put the profiling information in the user profiling buffer */
 	adreno_profile_submit_time(&time);
-
-free:
-	kfree(cmd);
 
 	return ret;
 }
