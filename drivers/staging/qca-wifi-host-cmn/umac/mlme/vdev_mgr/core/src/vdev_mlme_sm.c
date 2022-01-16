@@ -1911,7 +1911,7 @@ void mlme_vdev_sm_history_print(struct vdev_mlme_obj *vdev_mlme)
 QDF_STATUS mlme_vdev_sm_create(struct vdev_mlme_obj *vdev_mlme)
 {
 	struct wlan_sm *sm;
-	uint8_t name[WLAN_SM_ENGINE_MAX_NAME];
+	uint8_t name[WLAN_SM_ENGINE_MAX_NAME] = { 0 };
 	struct wlan_objmgr_vdev *vdev = vdev_mlme->vdev;
 
 	qdf_scnprintf(name, sizeof(name), "VDEV%d-MLME",
