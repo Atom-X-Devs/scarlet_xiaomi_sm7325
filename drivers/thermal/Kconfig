@@ -447,4 +447,11 @@ config SPRD_THERMAL
 	help
 	  Support for the Spreadtrum thermal sensor driver in the Linux thermal
 	  framework.
+
+config MI_THERMAL_INTERFACE
+	tristate "Xiaomi thermal control interface"
+	depends on THERMAL && QGKI && MACH_XIAOMI
+	help
+	  Support for Xiaomi thermal control interface.
+
 endif
