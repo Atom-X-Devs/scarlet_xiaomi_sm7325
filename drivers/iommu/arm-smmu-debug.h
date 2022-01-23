@@ -76,7 +76,7 @@ enum testbus_ops {
 	TESTBUS_OUTPUT,
 };
 
-#if IS_ENABLED(CONFIG_ARM_SMMU)
+#if defined(CONFIG_ARM_SMMU) && defined(CONFIG_DEBUG_KERNEL)
 
 u32 arm_smmu_debug_tbu_testbus_select(void __iomem *tbu_base,
 					bool write, u32 val);
@@ -108,10 +108,11 @@ static inline u32 arm_smmu_debug_tbu_testbus_output(void __iomem *tbu_base)
 {
 	return 0;
 }
-u32 arm_smmu_debug_tcu_testbus_select(phys_addr_t phys_addr,
+static inline u32 arm_smmu_debug_tcu_testbus_select(phys_addr_t phys_addr,
 		void __iomem *tcu_base,	enum tcu_testbus testbus,
 		bool write, u32 val)
 {
+	return 0;
 }
 static inline u32 arm_smmu_debug_tcu_testbus_output(phys_addr_t phys_addr)
 {
@@ -134,7 +135,6 @@ static inline u64 arm_smmu_debug_get_tnx_tcr_cntl(void __iomem *tbu_base)
 {
 	return 0;
 }
-
 static inline void arm_smmu_debug_set_mask_and_match(void __iomem *tbu_base, u64
 						     sel, u64 mask, u64 match)
 {
@@ -152,4 +152,3 @@ static inline void arm_smmu_debug_clear_intr_and_validbits(void __iomem
 {
 }
 #endif
-
