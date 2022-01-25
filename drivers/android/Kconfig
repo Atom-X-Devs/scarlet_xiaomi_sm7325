@@ -63,6 +63,16 @@ config ANDROID_VENDOR_HOOKS
 	  Allow vendor modules to attach to tracepoint "hooks" defined via
 	  DECLARE_HOOK or DECLARE_RESTRICTED_HOOK.
 
+config ANDROID_BINDER_LOGS
+	bool "Android Binder Logging"
+	depends on ANDROID_BINDERFS
+	help
+	  Enables binder_logs directory in binderfs and debug_mask for dmesg
+	  logging. Needed for DEBUG_FS.
+	  This option impacts performance.
+
+	  Say N on production builds.
+
 endif # if ANDROID
 
 endmenu
