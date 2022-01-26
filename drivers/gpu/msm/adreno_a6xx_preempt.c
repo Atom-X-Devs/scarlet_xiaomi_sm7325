@@ -347,7 +347,7 @@ void a6xx_preemption_trigger(struct adreno_device *adreno_dev, bool atomic)
 	 * preemption. This is require to make sure CP doesn't
 	 * interrupt GMU during wake-up from IFPC.
 	 */
-	if (gmu_core_dev_wait_for_active_transition(device))
+	if (!atomic && gmu_core_dev_wait_for_active_transition(device))
 		goto err;
 
 	if (adreno_gmu_fenced_write(adreno_dev,
