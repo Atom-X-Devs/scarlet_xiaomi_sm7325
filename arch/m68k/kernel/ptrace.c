@@ -275,7 +275,7 @@ out_eio:
 asmlinkage void syscall_trace(void)
 {
 	ptrace_notify(SIGTRAP | ((current->ptrace & PT_TRACESYSGOOD)
-				 ? 0x80 : 0));
+				 ? 0x80 : 0), 0);
 	/*
 	 * this isn't the same as continuing with a signal, but it will do
 	 * for normal use.  strace only continues with a signal if the
