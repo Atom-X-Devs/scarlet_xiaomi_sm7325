@@ -629,7 +629,7 @@ struct hfi_msg_session_fill_buffer_done_compressed_packet {
 	u32 picture_type;
 	u32 packet_buffer;
 	u32 extra_data_buffer;
-	u32 rgData[0];
+	u32 rgData[];
 };
 
 struct hfi_msg_session_fbd_uncompressed_plane0_packet {
@@ -658,7 +658,7 @@ struct hfi_msg_session_fbd_uncompressed_plane0_packet {
 	u32 picture_type;
 	u32 packet_buffer;
 	u32 extra_data_buffer;
-	u32 rgData[0];
+	u32 rgData[];
 };
 
 struct hfi_msg_session_fill_buffer_done_uncompressed_plane1_packet {
@@ -667,7 +667,7 @@ struct hfi_msg_session_fill_buffer_done_uncompressed_plane1_packet {
 	u32 filled_len;
 	u32 offset;
 	u32 packet_buffer2;
-	u32 rgData[0];
+	u32 rgData[];
 };
 
 struct hfi_msg_session_fill_buffer_done_uncompressed_plane2_packet {
@@ -676,7 +676,7 @@ struct hfi_msg_session_fill_buffer_done_uncompressed_plane2_packet {
 	u32 filled_len;
 	u32 offset;
 	u32 packet_buffer3;
-	u32 rgData[0];
+	u32 rgData[];
 };
 
 struct hfi_msg_session_property_info_packet {

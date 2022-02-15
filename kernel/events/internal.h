@@ -54,7 +54,7 @@ struct ring_buffer {
 	void				*aux_priv;
 
 	struct perf_event_mmap_page	*user_page;
-	void				*data_pages[0];
+	void				*data_pages[];
 };
 
 extern void rb_free(struct ring_buffer *rb);

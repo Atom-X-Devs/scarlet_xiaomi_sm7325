@@ -16,7 +16,7 @@ struct ceph_none_authorizer {
 	struct ceph_authorizer base;
 	char buf[128];
 	int buf_len;
-	char reply_buf[0];
+	char reply_buf[];
 };
 
 struct ceph_auth_none_info {

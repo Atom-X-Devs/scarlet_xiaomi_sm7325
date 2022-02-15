@@ -72,7 +72,7 @@ struct sysinfo_1_2_2 {
 
 struct sysinfo_1_2_2_extension {
 	unsigned int alt_capability;
-	unsigned short alt_adjustment[0];
+	unsigned short alt_adjustment[];
 };
 
 struct sysinfo_2_2_1 {
@@ -181,7 +181,7 @@ struct sysinfo_15_1_x {
 	unsigned char reserved1;
 	unsigned char mnest;
 	unsigned char reserved2[4];
-	union topology_entry tle[0];
+	union topology_entry tle[];
 };
 
 int stsi(void *sysinfo, int fc, int sel1, int sel2);

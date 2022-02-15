@@ -2416,7 +2416,7 @@ struct afe_port_cmd_event_cfg {
 	 * Each event has the structure of
 	 * afe_port_cmd_mod_evt_cfg_payload.
 	 */
-	uint8_t payload[0];
+	uint8_t payload[];
 };
 
 /** Event registration for a module. */

@@ -39,7 +39,7 @@ struct branch_entry {
 
 struct branch_stack {
 	u64			nr;
-	struct branch_entry	entries[0];
+	struct branch_entry	entries[];
 };
 
 struct branch_type_stat {

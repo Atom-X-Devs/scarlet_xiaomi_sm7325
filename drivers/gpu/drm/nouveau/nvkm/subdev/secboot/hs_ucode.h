@@ -72,7 +72,7 @@ struct hsf_load_header {
 	 * - app1_code_size
 	 * - ...
 	 */
-	u32 apps[0];
+	u32 apps[];
 };
 
 void *hs_ucode_load_blob(struct nvkm_subdev *, const struct nvkm_falcon *,

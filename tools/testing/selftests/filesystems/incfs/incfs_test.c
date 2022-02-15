@@ -66,7 +66,7 @@ struct linux_dirent64 {
 	int64_t        d_off;
 	unsigned short d_reclen;
 	unsigned char  d_type;
-	char	       d_name[0];
+	char	       d_name[];
 } __packed;
 
 struct test_files_set get_test_files_set(void)
