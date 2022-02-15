@@ -127,7 +127,7 @@ struct dso_cache {
 	struct rb_node	rb_node;
 	u64 offset;
 	u64 size;
-	char data[0];
+	char data[];
 };
 
 struct auxtrace_cache;
@@ -198,7 +198,7 @@ struct dso {
 	};
 	struct nsinfo	*nsinfo;
 	refcount_t	 refcnt;
-	char		 name[0];
+	char		 name[];
 };
 
 /* dso__for_each_symbol - iterate over the symbols of given type

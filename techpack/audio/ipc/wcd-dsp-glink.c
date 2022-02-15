@@ -65,7 +65,7 @@ struct wdsp_tx_buf {
 	struct wdsp_ch *ch;
 
 	/* Tx buffer to send to glink */
-	u8 buf[0];
+	u8 buf[];
 };
 
 struct wdsp_glink_priv {

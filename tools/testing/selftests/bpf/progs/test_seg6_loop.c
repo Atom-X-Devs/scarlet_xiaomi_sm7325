@@ -41,13 +41,13 @@ struct ip6_srh_t {
 	unsigned char flags;
 	unsigned short tag;
 
-	struct ip6_addr_t segments[0];
+	struct ip6_addr_t segments[];
 } BPF_PACKET_HEADER;
 
 struct sr6_tlv_t {
 	unsigned char type;
 	unsigned char len;
-	unsigned char value[0];
+	unsigned char value[];
 } BPF_PACKET_HEADER;
 
 static __always_inline struct ip6_srh_t *get_srh(struct __sk_buff *skb)

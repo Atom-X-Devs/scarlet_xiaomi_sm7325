@@ -72,7 +72,7 @@
 
 struct listeners {
 	struct rcu_head		rcu;
-	unsigned long		masks[0];
+	unsigned long		masks[];
 };
 
 /* state bits */

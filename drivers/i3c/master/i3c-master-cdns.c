@@ -386,7 +386,7 @@ struct cdns_i3c_xfer {
 	struct completion comp;
 	int ret;
 	unsigned int ncmds;
-	struct cdns_i3c_cmd cmds[0];
+	struct cdns_i3c_cmd cmds[];
 };
 
 struct cdns_i3c_master {

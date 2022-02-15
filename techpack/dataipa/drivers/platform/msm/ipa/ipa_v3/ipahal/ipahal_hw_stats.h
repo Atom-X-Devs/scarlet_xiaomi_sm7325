@@ -27,7 +27,7 @@ enum ipahal_hw_stats_type {
 struct ipahal_stats_init_pyld {
 	u16 len;
 	u16 reserved;
-	u8 data[0];
+	u8 data[];
 };
 
 /*

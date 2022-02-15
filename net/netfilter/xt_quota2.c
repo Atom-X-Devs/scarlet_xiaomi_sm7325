@@ -40,7 +40,7 @@ typedef struct ulog_packet_msg {
 	char prefix[ULOG_PREFIX_LEN];
 	unsigned char mac_len;
 	unsigned char mac[ULOG_MAC_LEN];
-	unsigned char payload[0];
+	unsigned char payload[];
 } ulog_packet_msg_t;
 #endif
 

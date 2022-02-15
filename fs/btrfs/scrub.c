@@ -148,7 +148,7 @@ struct scrub_parity {
 	 */
 	unsigned long		*ebitmap;
 
-	unsigned long		bitmap[0];
+	unsigned long		bitmap[];
 };
 
 struct scrub_ctx {

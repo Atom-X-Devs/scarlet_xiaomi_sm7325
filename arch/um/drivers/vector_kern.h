@@ -123,7 +123,7 @@ struct vector_private {
 	struct vector_estats estats;
 	void *bpf;
 
-	char user[0];
+	char user[];
 };
 
 extern int build_transport_data(struct vector_private *vp);

@@ -214,7 +214,7 @@ struct msm_gem_submit {
 		uint32_t flags;
 		struct msm_gem_object *obj;
 		uint64_t iova;
-	} bos[0];
+	} bos[];
 };
 
 #endif /* __MSM_GEM_H__ */
