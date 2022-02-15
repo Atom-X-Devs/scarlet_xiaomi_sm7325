@@ -43,7 +43,7 @@ struct lsm_sound_model {
 struct snd_lsm_event_status_v2 {
 	uint16_t status;
 	uint16_t payload_size;
-	uint8_t  confidence_value[0];
+	uint8_t  confidence_value[];
 };
 
 struct lsm_lab_buffer {
