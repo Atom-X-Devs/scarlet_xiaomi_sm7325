@@ -1144,6 +1144,8 @@ int a6xx_hwsched_submit_cmdobj(struct adreno_device *adreno_dev,
 	if (WARN_ON(cmd_sizebytes > HFI_MAX_MSG_SIZE))
 		return -EMSGSIZE;
 
+	memset(cmdbuf, 0x0, cmd_sizebytes);
+
 	cmd = cmdbuf;
 
 	cmd->hdr = CREATE_MSG_HDR(H2F_MSG_ISSUE_CMD, cmd_sizebytes,
