@@ -947,9 +947,9 @@ set_rcvbuf:
 					ret = -EINVAL;
 					break;
 				}
-				sk->sk_tskey = tcp_sk(sk)->snd_una;
+				atomic_set(&sk->sk_tskey, tcp_sk(sk)->snd_una);
 			} else {
-				sk->sk_tskey = 0;
+				atomic_set(&sk->sk_tskey, 0);
 			}
 		}
 
