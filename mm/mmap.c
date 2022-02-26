@@ -3211,6 +3211,7 @@ void exit_mmap(struct mm_struct *mm)
 		vma = remove_vma(vma);
 		cond_resched();
 	}
+	mm->mmap = NULL;
 	up_write(&mm->mmap_sem);
 	vm_unacct_memory(nr_accounted);
 }
