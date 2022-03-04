@@ -4381,6 +4381,13 @@ static int sanity_check_curseg(struct f2fs_sb_info *sbi)
 			i != CURSEG_HOT_DATA && i != CURSEG_HOT_NODE)
 			continue;
 
+		if (curseg->alloc_type != LFS && curseg->alloc_type != SSR) {
+			f2fs_err(sbi,
+				 "Current segment has invalid alloc_type:%d",
+				 curseg->alloc_type);
+			return -EFSCORRUPTED;
+		}
+
 		if (f2fs_test_bit(blkofs, se->cur_valid_map))
 			goto out;
 
