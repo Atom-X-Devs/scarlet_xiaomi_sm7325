@@ -2993,11 +2993,6 @@ static inline bool uclamp_rq_is_capped(struct rq *rq)
 	return max_util != SCHED_CAPACITY_SCALE && rq_util >= max_util;
 }
 
-static inline bool uclamp_boosted(struct task_struct *p)
-{
-	return uclamp_eff_value(p, UCLAMP_MIN) > 0;
-}
-
 /*
  * When uclamp is compiled in, the aggregation at rq level is 'turned off'
  * by default in the fast path and only gets turned on once userspace performs
@@ -3020,35 +3015,11 @@ unsigned long uclamp_rq_util_with(struct rq *rq, unsigned long util,
 
 static inline bool uclamp_rq_is_capped(struct rq *rq) { return false; }
 
-static inline bool uclamp_boosted(struct task_struct *p)
-{
-	return false;
-}
-
 static inline bool uclamp_is_used(void)
 {
 	return false;
 }
 #endif /* CONFIG_UCLAMP_TASK */
-
-#ifdef CONFIG_UCLAMP_TASK_GROUP
-static inline bool uclamp_latency_sensitive(struct task_struct *p)
-{
-	struct cgroup_subsys_state *css = task_css(p, cpu_cgrp_id);
-	struct task_group *tg;
-
-	if (!css)
-		return false;
-	tg = container_of(css, struct task_group, css);
-
-	return tg->latency_sensitive;
-}
-#else
-static inline bool uclamp_latency_sensitive(struct task_struct *p)
-{
-	return false;
-}
-#endif /* CONFIG_UCLAMP_TASK_GROUP */
 
 #ifdef CONFIG_HAVE_SCHED_AVG_IRQ
 static inline unsigned long cpu_util_irq(struct rq *rq)
