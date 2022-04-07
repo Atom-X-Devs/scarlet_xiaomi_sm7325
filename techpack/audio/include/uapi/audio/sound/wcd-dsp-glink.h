@@ -19,7 +19,7 @@ enum {
  */
 struct wdsp_reg_pkt {
 	__u8 no_of_channels;
-	__u8 payload[0];
+	__u8 payload[];
 };
 
 /*
@@ -31,7 +31,7 @@ struct wdsp_reg_pkt {
 struct wdsp_cmd_pkt {
 	char ch_name[WDSP_CH_NAME_MAX_LEN];
 	__u32 payload_size;
-	__u8 payload[0];
+	__u8 payload[];
 };
 
 /*
@@ -41,7 +41,7 @@ struct wdsp_cmd_pkt {
  */
 struct wdsp_write_pkt {
 	__u8 pkt_type;
-	__u8 payload[0];
+	__u8 payload[];
 };
 
 /*
@@ -55,6 +55,6 @@ struct wdsp_glink_ch_cfg {
 	char name[WDSP_CH_NAME_MAX_LEN];
 	__u32 latency_in_us;
 	__u32 no_of_intents;
-	__u32 intents_size[0];
+	__u32 intents_size[];
 };
 #endif /* _WCD_DSP_GLINK_H */

@@ -469,7 +469,7 @@ struct msm_hwacc_effects_config {
 struct msm_adsp_event_data {
 	__u32 event_type;
 	__u32 payload_len;
-	__u8 payload[0];
+	__u8 payload[];
 };
 
 #endif
