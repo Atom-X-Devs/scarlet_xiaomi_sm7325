@@ -541,9 +541,8 @@ static void binder_wakeup_poll_threads_ilocked(struct binder_proc *proc,
 		if (thread->looper & BINDER_LOOPER_STATE_POLL &&
 		    binder_available_for_proc_work_ilocked(thread)) {
 #ifdef CONFIG_SCHED_WALT
-			if (thread->task && current->signal &&
-				(current->signal->oom_score_adj == 0) &&
-				(current->prio < DEFAULT_PRIO))
+			if (sync && thread->task && thread->task->signal &&
+				(thread->task->signal->oom_score_adj <= 0))
 				thread->task->wts.low_latency = true;
 #endif
 			if (sync)
@@ -606,9 +605,8 @@ static void binder_wakeup_thread_ilocked(struct binder_proc *proc,
 
 	if (thread) {
 #ifdef CONFIG_SCHED_WALT
-		if (thread->task && current->signal &&
-			(current->signal->oom_score_adj == 0) &&
-			(current->prio < DEFAULT_PRIO))
+		if (sync && thread->task && thread->task->signal &&
+			(thread->task->signal->oom_score_adj <= 0))
 			thread->task->wts.low_latency = true;
 #endif
 		if (sync)
