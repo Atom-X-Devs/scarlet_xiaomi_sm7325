@@ -1023,8 +1023,7 @@ bool try_online_one_block(int nid)
 {
 	bool onlined_block = false;
 
-	if (!trylock_device_hotplug())
-		return false;
+	lock_device_hotplug();
 
 	for_each_memory_block(&onlined_block, online_memory_one_block);
 	unlock_device_hotplug();

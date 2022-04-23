@@ -1569,11 +1569,6 @@ int lock_device_hotplug_sysfs(void)
 	return restart_syscall();
 }
 
-int trylock_device_hotplug(void)
-{
-	return mutex_trylock(&device_hotplug_lock);
-}
-
 #ifdef CONFIG_BLOCK
 static inline int device_is_not_partition(struct device *dev)
 {
