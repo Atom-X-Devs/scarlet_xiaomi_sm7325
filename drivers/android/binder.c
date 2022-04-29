@@ -173,6 +173,13 @@ static inline void binder_user_error(const char *fmt, ...)
 }
 #endif
 
+#define binder_set_extended_error(ee, _id, _command, _param) \
+	do { \
+		(ee)->id = _id; \
+		(ee)->command = _command; \
+		(ee)->param = _param; \
+	} while (0)
+
 #define to_flat_binder_object(hdr) \
 	container_of(hdr, struct flat_binder_object, hdr)
 
@@ -3180,6 +3187,24 @@ static struct binder_node *binder_get_node_refs_for_txn(
 	return target_node;
 }
 
+static void binder_set_txn_from_error(struct binder_transaction *t, int id,
+				      uint32_t command, int32_t param)
+{
+	struct binder_thread *from = binder_get_txn_from_and_acq_inner(t);
+
+	if (!from) {
+		/* annotation for sparse */
+		__release(&from->proc->inner_lock);
+		return;
+	}
+
+	/* don't override existing errors */
+	if (from->ee.command == BR_OK)
+		binder_set_extended_error(&from->ee, id, command, param);
+	binder_inner_proc_unlock(from->proc);
+	binder_thread_dec_tmpref(from);
+}
+
 static void binder_transaction(struct binder_proc *proc,
 			       struct binder_thread *thread,
 			       struct binder_transaction_data *tr, int reply,
@@ -3229,6 +3254,10 @@ static void binder_transaction(struct binder_proc *proc,
 	e->offsets_size = tr->offsets_size;
 	strscpy(e->context_name, proc->context->name, BINDERFS_MAX_NAME);
 #endif
+
+	binder_inner_proc_lock(proc);
+	binder_set_extended_error(&thread->ee, t_debug_id, BR_OK, 0);
+	binder_inner_proc_unlock(proc);
 
 	if (reply) {
 		binder_inner_proc_lock(proc);
@@ -4019,10 +4048,16 @@ err_invalid_target_handle:
 	if (in_reply_to) {
 		trace_android_vh_binder_restore_priority(in_reply_to, current);
 		binder_restore_priority(thread, &in_reply_to->saved_priority);
+		binder_set_txn_from_error(in_reply_to, t_debug_id,
+				return_error, return_error_param);
 		thread->return_error.cmd = BR_TRANSACTION_COMPLETE;
 		binder_enqueue_thread_work(thread, &thread->return_error.work);
 		binder_send_failed_reply(in_reply_to, return_error);
 	} else {
+		binder_inner_proc_lock(proc);
+		binder_set_extended_error(&thread->ee, t_debug_id,
+				return_error, return_error_param);
+		binder_inner_proc_unlock(proc);
 		thread->return_error.cmd = return_error;
 		binder_enqueue_thread_work(thread, &thread->return_error.work);
 	}
@@ -5386,6 +5421,7 @@ static struct binder_thread *binder_get_thread_ilocked(
 	thread->reply_error.cmd = BR_OK;
 	spin_lock_init(&thread->prio_lock);
 	thread->prio_state = BINDER_PRIO_SET;
+	thread->ee.command = BR_OK;
 	INIT_LIST_HEAD(&new_thread->waiting_thread_node);
 	return thread;
 }
@@ -5877,6 +5913,25 @@ static int binder_ioctl_get_freezer_info(
 	return 0;
 }
 
+static int binder_ioctl_get_extended_error(struct binder_thread *thread,
+					   void __user *ubuf)
+{
+	struct binder_extended_error *ee = &thread->ee;
+
+	binder_inner_proc_lock(thread->proc);
+	if (copy_to_user(ubuf, ee, sizeof(*ee))) {
+		binder_inner_proc_unlock(thread->proc);
+		return -EFAULT;
+	}
+
+	ee->id = 0;
+	ee->command = BR_OK;
+	ee->param = 0;
+	binder_inner_proc_unlock(thread->proc);
+
+	return 0;
+}
+
 static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int ret;
@@ -6080,6 +6135,11 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		binder_inner_proc_unlock(proc);
 		break;
 	}
+	case BINDER_GET_EXTENDED_ERROR:
+		ret = binder_ioctl_get_extended_error(thread, ubuf);
+		if (ret < 0)
+			goto err;
+		break;
 	default:
 		ret = -EINVAL;
 		goto err;
