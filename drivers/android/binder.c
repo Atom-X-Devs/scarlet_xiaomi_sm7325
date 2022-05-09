@@ -4846,7 +4846,7 @@ static int binder_thread_write(struct binder_proc *proc,
 		} break;
 
 		default:
-			pr_err("%d:%d unknown command %d\n",
+			pr_err("%d:%d unknown command %u\n",
 			       proc->pid, thread->pid, cmd);
 			return -EINVAL;
 		}
