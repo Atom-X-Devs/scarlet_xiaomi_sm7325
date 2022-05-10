@@ -46,6 +46,13 @@ config COMPAT_NETLINK_MESSAGES
 	  Newly written code should NEVER need this option but do
 	  compat-independent messages instead!
 
+config DEBUG_NET
+	bool "Add generic networking debug"
+	depends on DEBUG_KERNEL
+	help
+	  Enable extra sanity checks in networking.
+	  This is mostly used by fuzzers, but is safe to select.
+
 config NET_INGRESS
 	bool
 
