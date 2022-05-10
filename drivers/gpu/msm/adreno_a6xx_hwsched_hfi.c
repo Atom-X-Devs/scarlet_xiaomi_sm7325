@@ -929,7 +929,8 @@ static int hfi_f2h_main(void *arg)
 		wait_event_interruptible(hfi->f2h_wq,
 			((!llist_empty(&hfi->f2h_msglist) ||
 			  !llist_empty(&hfi->f2h_secondary_list))
-			 && !kthread_should_stop()));
+			 && !kthread_should_stop()
+			 && (hfi->irq_mask & HFI_IRQ_MSGQ_MASK)));
 
 		if (kthread_should_stop())
 			break;
