@@ -37,6 +37,7 @@ void __init autogroup_init(struct task_struct *init_task)
 	kref_init(&autogroup_default.kref);
 	init_rwsem(&autogroup_default.lock);
 	init_task->signal->autogroup = &autogroup_default;
+	sched_autogroup_sysctl_init();
 }
 
 void autogroup_free(struct task_group *tg)
@@ -220,7 +221,6 @@ void sched_autogroup_exit(struct signal_struct *sig)
 static int __init setup_autogroup(char *str)
 {
 	sysctl_sched_autogroup_enabled = 0;
-	sched_autogroup_sysctl_init();
 
 	return 1;
 }
