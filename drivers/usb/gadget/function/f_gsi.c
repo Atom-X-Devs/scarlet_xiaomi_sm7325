@@ -3932,7 +3932,7 @@ static void gsi_free_inst(struct usb_function_instance *f)
 	}
 
 	ipc_log_context_destroy(opts->gsi->ipc_log_ctxt);
-	if (opts && opts->interf_group)
+	if (opts->interf_group)
 		kfree(opts->interf_group);
 	/* Clear instance status */
 	gsi_inst_clean(opts);
