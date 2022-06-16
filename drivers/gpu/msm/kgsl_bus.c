@@ -82,7 +82,6 @@ int kgsl_bus_update(struct kgsl_device *device,
 	/* FIXME: this might be wrong? */
 	int cur = pwr->pwrlevels[pwr->active_pwrlevel].bus_freq;
 	int ret, buslevel = 0;
-	int cur_max = pwr->pwrlevels[pwr->active_pwrlevel].bus_max;
 	u32 ab;
 
 	/* the bus should be ON to update the active frequency */
@@ -97,27 +96,17 @@ int kgsl_bus_update(struct kgsl_device *device,
 		buslevel = min_t(int, pwr->pwrlevels[0].bus_max,
 				cur + pwr->bus_mod);
 		buslevel = max_t(int, buslevel, 1);
-
-		/*
-		 * larger % of stalls we consider increasing the bus vote by
-		 * more than 1 level.
-		 */
-		if ((pwr->active_pwrlevel == pwr->min_pwrlevel) &&
-				pwr->ddr_stall_percent >= 95)
-			buslevel = min_t(int, buslevel + 1, cur_max);
 	} else if (vote_state == KGSL_BUS_VOTE_MINIMUM) {
 		/* Request bus level 1, minimum non-zero value */
 		buslevel = 1;
 		pwr->bus_mod = 0;
 		pwr->bus_percent_ab = 0;
 		pwr->bus_ab_mbytes = 0;
-		pwr->ddr_stall_percent = 0;
 	} else if (vote_state == KGSL_BUS_VOTE_OFF) {
 		/* If the bus is being turned off, reset to default level */
 		pwr->bus_mod = 0;
 		pwr->bus_percent_ab = 0;
 		pwr->bus_ab_mbytes = 0;
-		pwr->ddr_stall_percent = 0;
 	}
 
 	/* buslevel is the IB vote, update the AB */
