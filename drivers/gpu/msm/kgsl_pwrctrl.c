@@ -1513,8 +1513,6 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	pwr->cooling_thermal_pwrlevel = 0;
 	pwr->thermal_pwrlevel_floor = pwr->min_pwrlevel;
 
-	pwr->wakeup_maxpwrlevel = 0;
-
 	for (i = 0; i < pwr->num_pwrlevels; i++) {
 		freq = pwr->pwrlevels[i].gpu_freq;
 
@@ -1691,12 +1689,7 @@ static int kgsl_pwrctrl_enable(struct kgsl_device *device)
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int level, status;
 
-	if (pwr->wakeup_maxpwrlevel) {
-		level = pwr->max_pwrlevel;
-		pwr->wakeup_maxpwrlevel = 0;
-	} else {
-		level = pwr->default_pwrlevel;
-	}
+	level = pwr->default_pwrlevel;
 
 	kgsl_pwrctrl_pwrlevel_change(device, level);
 
