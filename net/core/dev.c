@@ -251,16 +251,18 @@ static void list_netdevice(struct net_device *dev)
 /* Device list removal
  * caller must respect a RCU grace period before freeing/reusing dev
  */
-static void unlist_netdevice(struct net_device *dev)
+static void unlist_netdevice(struct net_device *dev, bool lock)
 {
 	ASSERT_RTNL();
 
 	/* Unlink dev from the device chain */
-	write_lock_bh(&dev_base_lock);
+	if (lock)
+		write_lock_bh(&dev_base_lock);
 	list_del_rcu(&dev->dev_list);
 	hlist_del_rcu(&dev->name_hlist);
 	hlist_del_rcu(&dev->index_hlist);
-	write_unlock_bh(&dev_base_lock);
+	if (lock)
+		write_unlock_bh(&dev_base_lock);
 
 	dev_base_seq_inc(dev_net(dev));
 }
@@ -9396,7 +9398,7 @@ static void rollback_registered_many(struct list_head *head)
 
 	list_for_each_entry(dev, head, unreg_list) {
 		/* And unlink it from device chain. */
-		unlist_netdevice(dev);
+		unlist_netdevice(dev, true);
 
 		dev->reg_state = NETREG_UNREGISTERING;
 	}
@@ -9975,11 +9977,11 @@ int register_netdevice(struct net_device *dev)
 		goto err_uninit;
 
 	ret = netdev_register_kobject(dev);
-	if (ret) {
-		dev->reg_state = NETREG_UNREGISTERED;
+	write_lock_bh(&dev_base_lock);
+	dev->reg_state = ret ? NETREG_UNREGISTERED : NETREG_REGISTERED;
+	write_unlock_bh(&dev_base_lock);
+	if (ret)
 		goto err_uninit;
-	}
-	dev->reg_state = NETREG_REGISTERED;
 
 	__netdev_update_features(dev);
 
@@ -10239,7 +10241,9 @@ void netdev_run_todo(void)
 			continue;
 		}
 
+		write_lock_bh(&dev_base_lock);
 		dev->reg_state = NETREG_UNREGISTERED;
+		write_unlock_bh(&dev_base_lock);
 
 		netdev_wait_allrefs(dev);
 
@@ -10656,7 +10660,7 @@ int dev_change_net_namespace(struct net_device *dev, struct net *net, const char
 	dev_close(dev);
 
 	/* And unlink it from device chain */
-	unlist_netdevice(dev);
+	unlist_netdevice(dev, true);
 
 	synchronize_net();
 
