@@ -4277,10 +4277,6 @@ static int kgsl_mmap(struct file *file, struct vm_area_struct *vma)
 
 	vma->vm_file = file;
 
-	atomic64_add(entry->memdesc.size, &entry->priv->gpumem_mapped);
-
-	atomic_inc(&entry->map_count);
-
 	/*
 	 * kgsl gets the entry id or the gpu address through vm_pgoff.
 	 * It is used during mmap and never needed again. But this vm_pgoff
@@ -4289,6 +4285,9 @@ static int kgsl_mmap(struct file *file, struct vm_area_struct *vma)
 	 * from this vma.
 	 */
 	vma->vm_pgoff = 0;
+
+	if (atomic_inc_return(&entry->map_count) == 1)
+		atomic64_add(entry->memdesc.size, &entry->priv->gpumem_mapped);
 
 	trace_kgsl_mem_mmap(entry, vma->vm_start);
 	return 0;
