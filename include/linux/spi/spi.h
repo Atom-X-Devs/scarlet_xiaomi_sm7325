@@ -346,6 +346,12 @@ static inline void spi_unregister_driver(struct spi_driver *sdrv)
  * @queue: message queue
  * @cur_msg: the currently in-flight message
  * @cur_msg_completion: a completion for the current in-flight message
+ * @cur_msg_incomplete: Flag used internally to opportunistically skip
+ *	the @cur_msg_completion. This flag is used to check if the driver has
+ *	already called spi_finalize_current_message().
+ * @cur_msg_need_completion: Flag used internally to opportunistically skip
+ *	the @cur_msg_completion. This flag is used to signal the context that
+ *	is running spi_finalize_current_message() that it needs to complete()
  * @cur_msg_mapped: message has been mapped for DMA
  * @xfer_completion: used by core transfer_one_message()
  * @busy: message pump is busy
@@ -555,6 +561,8 @@ struct spi_controller {
 	struct list_head		queue;
 	struct spi_message		*cur_msg;
 	struct completion               cur_msg_completion;
+	bool				cur_msg_incomplete;
+	bool				cur_msg_need_completion;
 	bool				busy;
 	bool				running;
 	bool				rt;
