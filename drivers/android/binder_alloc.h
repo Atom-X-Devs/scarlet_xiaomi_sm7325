@@ -99,7 +99,7 @@ struct binder_lru_page {
  */
 struct binder_alloc {
 	spinlock_t lock;
-	struct vm_area_struct *vma;
+	unsigned long vma_addr;
 	struct mm_struct *vma_vm_mm;
 	unsigned long buffer;
 	struct list_head buffers;
