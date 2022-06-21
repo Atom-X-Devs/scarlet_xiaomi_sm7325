@@ -1331,11 +1331,14 @@ static int __spi_pump_transfer_message(struct spi_controller *ctlr,
 		return ret;
 	}
 
+	reinit_completion(&ctlr->cur_msg_completion);
 	ret = ctlr->transfer_one_message(ctlr, msg);
 	if (ret) {
 		dev_err(&ctlr->dev,
 			"failed to transfer one message from queue\n");
 		return ret;
+	} else {
+		wait_for_completion(&ctlr->cur_msg_completion);
 	}
 
 	return 0;
@@ -1422,6 +1425,11 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 	spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 
 	ret = __spi_pump_transfer_message(ctlr, msg, was_busy);
+
+	if (!ret)
+		kthread_queue_work(&ctlr->kworker, &ctlr->pump_messages);
+	ctlr->cur_msg = NULL;
+
 	mutex_unlock(&ctlr->io_mutex);
 
 	/* Prod the scheduler in case transfer_one() was busy waiting */
@@ -1533,12 +1541,9 @@ EXPORT_SYMBOL_GPL(spi_get_next_queued_message);
 void spi_finalize_current_message(struct spi_controller *ctlr)
 {
 	struct spi_message *mesg;
-	unsigned long flags;
 	int ret;
 
-	spin_lock_irqsave(&ctlr->queue_lock, flags);
 	mesg = ctlr->cur_msg;
-	spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 
 	spi_unmap_msg(ctlr, mesg);
 
@@ -1559,19 +1564,7 @@ void spi_finalize_current_message(struct spi_controller *ctlr)
 
 	mesg->prepared = false;
 
-	if (!mesg->sync) {
-		/*
-		 * This message was sent via the async message queue. Handle
-		 * the queue and kick the worker thread to do the
-		 * idling/shutdown or send the next message if needed.
-		 */
-		spin_lock_irqsave(&ctlr->queue_lock, flags);
-		WARN(ctlr->cur_msg != mesg,
-			"Finalizing queued message that is not the current head of queue!");
-		ctlr->cur_msg = NULL;
-		kthread_queue_work(&ctlr->kworker, &ctlr->pump_messages);
-		spin_unlock_irqrestore(&ctlr->queue_lock, flags);
-	}
+	complete(&ctlr->cur_msg_completion);
 
 	trace_spi_message_done(mesg);
 
@@ -1753,6 +1746,8 @@ static void __spi_transfer_message_noqueue(struct spi_controller *ctlr, struct s
 	ret = __spi_pump_transfer_message(ctlr, msg, was_busy);
 	if (ret)
 		goto out;
+
+	ctlr->cur_msg = NULL;
 
 	if (!was_busy) {
 		kfree(ctlr->dummy_rx);
@@ -2562,6 +2557,7 @@ int spi_register_controller(struct spi_controller *ctlr)
 	mutex_init(&ctlr->io_mutex);
 	ctlr->bus_lock_flag = 0;
 	init_completion(&ctlr->xfer_completion);
+	init_completion(&ctlr->cur_msg_completion);
 	if (!ctlr->max_dma_len)
 		ctlr->max_dma_len = INT_MAX;
 
@@ -3594,7 +3590,6 @@ static int __spi_sync(struct spi_device *spi, struct spi_message *message)
 	 * will catch those cases.
 	 */
 	if (READ_ONCE(ctlr->queue_empty)) {
-		message->sync = true;
 		message->actual_length = 0;
 		message->status = -EINPROGRESS;
 
