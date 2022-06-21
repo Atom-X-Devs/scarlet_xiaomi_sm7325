@@ -1361,27 +1361,30 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 	unsigned long flags;
 	int ret;
 
+	/* Take the IO mutex */
+	mutex_lock(&ctlr->io_mutex);
+
 	/* Lock queue */
 	spin_lock_irqsave(&ctlr->queue_lock, flags);
 
 	/* Make sure we are not already running a message */
 	if (ctlr->cur_msg) {
 		spin_unlock_irqrestore(&ctlr->queue_lock, flags);
-		return;
+		goto out_unlock;
 	}
 
 	/* If another context is idling the device then defer */
 	if (ctlr->idling) {
 		kthread_queue_work(&ctlr->kworker, &ctlr->pump_messages);
 		spin_unlock_irqrestore(&ctlr->queue_lock, flags);
-		return;
+		goto out_unlock;
 	}
 
 	/* Check if the queue is idle */
 	if (list_empty(&ctlr->queue) || !ctlr->running) {
 		if (!ctlr->busy) {
 			spin_unlock_irqrestore(&ctlr->queue_lock, flags);
-			return;
+			goto out_unlock;
 		}
 
 		/* Defer any non-atomic teardown to the thread */
@@ -1397,7 +1400,7 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 						   &ctlr->pump_messages);
 			}
 			spin_unlock_irqrestore(&ctlr->queue_lock, flags);
-			return;
+			goto out_unlock;
 		}
 
 		ctlr->busy = false;
@@ -1419,7 +1422,7 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 		ctlr->idling = false;
 		ctlr->queue_empty = true;
 		spin_unlock_irqrestore(&ctlr->queue_lock, flags);
-		return;
+		goto out_unlock;
 	}
 
 	/* Extract head of queue */
@@ -1433,13 +1436,16 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 		ctlr->busy = true;
 	spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 
-	mutex_lock(&ctlr->io_mutex);
 	ret = __spi_pump_transfer_message(ctlr, msg, was_busy);
 	mutex_unlock(&ctlr->io_mutex);
 
 	/* Prod the scheduler in case transfer_one() was busy waiting */
 	if (!ret)
 		cond_resched();
+	return;
+
+out_unlock:
+	mutex_unlock(&ctlr->io_mutex);
 }
 
 /**
