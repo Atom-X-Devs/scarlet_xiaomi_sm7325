@@ -1368,10 +1368,8 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 	spin_lock_irqsave(&ctlr->queue_lock, flags);
 
 	/* Make sure we are not already running a message */
-	if (ctlr->cur_msg) {
-		spin_unlock_irqrestore(&ctlr->queue_lock, flags);
+	if (ctlr->cur_msg)
 		goto out_unlock;
-	}
 
 	/* If another context is idling the device then defer */
 	if (ctlr->idling) {
@@ -1382,10 +1380,8 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 
 	/* Check if the queue is idle */
 	if (list_empty(&ctlr->queue) || !ctlr->running) {
-		if (!ctlr->busy) {
-			spin_unlock_irqrestore(&ctlr->queue_lock, flags);
+		if (!ctlr->busy)
 			goto out_unlock;
-		}
 
 		/* Defer any non-atomic teardown to the thread */
 		if (!in_kthread) {
@@ -1399,7 +1395,6 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 				kthread_queue_work(&ctlr->kworker,
 						   &ctlr->pump_messages);
 			}
-			spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 			goto out_unlock;
 		}
 
@@ -1421,7 +1416,6 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 		spin_lock_irqsave(&ctlr->queue_lock, flags);
 		ctlr->idling = false;
 		ctlr->queue_empty = true;
-		spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 		goto out_unlock;
 	}
 
@@ -1445,6 +1439,7 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 	return;
 
 out_unlock:
+	spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 	mutex_unlock(&ctlr->io_mutex);
 }
 
