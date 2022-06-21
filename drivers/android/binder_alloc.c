@@ -211,6 +211,9 @@ binder_get_installed_page(struct binder_lru_page *lru_page)
 	return smp_load_acquire(&lru_page->page_ptr);
 }
 
+static inline struct vm_area_struct *binder_alloc_get_vma(
+		struct binder_alloc *alloc);
+
 static void binder_lru_freelist_add(struct binder_alloc *alloc,
 				    unsigned long start, unsigned long end)
 {
@@ -242,6 +245,7 @@ static int binder_install_single_page(struct binder_alloc *alloc,
 				      struct binder_lru_page *lru_page,
 				      unsigned long addr)
 {
+	struct vm_area_struct *vma;
 	struct page *page;
 	int ret = 0;
 
@@ -256,7 +260,8 @@ static int binder_install_single_page(struct binder_alloc *alloc,
 	if (binder_get_installed_page(lru_page))
 		goto out;
 
-	if (!alloc->vma) {
+	vma = binder_alloc_get_vma(alloc);
+	if (!vma) {
 		pr_err("%d: %s failed, no vma\n", alloc->pid, __func__);
 		ret = -ESRCH;
 		goto out;
@@ -269,7 +274,7 @@ static int binder_install_single_page(struct binder_alloc *alloc,
 		goto out;
 	}
 
-	ret = vm_insert_page(alloc->vma, addr, page);
+	ret = vm_insert_page(vma, addr, page);
 	if (ret) {
 		pr_err("%d: %s failed to insert page at offset %lx with %d\n",
 		       alloc->pid, __func__, addr - alloc->buffer, ret);
@@ -354,16 +359,15 @@ static void binder_lru_freelist_del(struct binder_alloc *alloc,
 static inline void binder_alloc_set_vma(struct binder_alloc *alloc,
 		struct vm_area_struct *vma)
 {
-	if (vma)
+	unsigned long vm_start = 0;
+
+	if (vma) {
+		vm_start = vma->vm_start;
 		alloc->vma_vm_mm = vma->vm_mm;
-	/*
-	 * If we see alloc->vma is not NULL, buffer data structures set up
-	 * completely. Look at smp_rmb side binder_alloc_get_vma.
-	 * We also want to guarantee new alloc->vma_vm_mm is always visible
-	 * if alloc->vma is set.
-	 */
-	smp_wmb();
-	alloc->vma = vma;
+	}
+
+	mmap_assert_write_locked(alloc->vma_vm_mm);
+	alloc->vma_addr = vm_start;
 }
 
 static inline struct vm_area_struct *binder_alloc_get_vma(
@@ -371,11 +375,9 @@ static inline struct vm_area_struct *binder_alloc_get_vma(
 {
 	struct vm_area_struct *vma = NULL;
 
-	if (alloc->vma) {
-		/* Look at description in binder_alloc_set_vma */
-		smp_rmb();
-		vma = alloc->vma;
-	}
+	if (alloc->vma_addr)
+		vma = vma_lookup(alloc->vma_vm_mm, alloc->vma_addr);
+
 	return vma;
 }
 
@@ -924,7 +926,8 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 
 	buffers = 0;
 	spin_lock(&alloc->lock);
-	BUG_ON(alloc->vma);
+	BUG_ON(alloc->vma_addr &&
+	       vma_lookup(alloc->vma_vm_mm, alloc->vma_addr));
 
 	while ((n = rb_first(&alloc->allocated_buffers))) {
 		buffer = rb_entry(n, struct binder_buffer, rb_node);
