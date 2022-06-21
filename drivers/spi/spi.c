@@ -1392,7 +1392,6 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 		}
 
 		ctlr->busy = false;
-		ctlr->idling = true;
 		spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 
 		kfree(ctlr->dummy_rx);
@@ -1407,7 +1406,6 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 		trace_spi_controller_idle(ctlr);
 
 		spin_lock_irqsave(&ctlr->queue_lock, flags);
-		ctlr->idling = false;
 		ctlr->queue_empty = true;
 		goto out_unlock;
 	}
