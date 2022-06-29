@@ -1445,9 +1445,9 @@ static void __spi_pump_messages(struct spi_controller *ctlr, bool in_kthread)
 	spin_unlock_irqrestore(&ctlr->queue_lock, flags);
 
 	ret = __spi_pump_transfer_message(ctlr, msg, was_busy);
-
 	if (!ret)
 		kthread_queue_work(&ctlr->kworker, &ctlr->pump_messages);
+
 	ctlr->cur_msg = NULL;
 
 	mutex_unlock(&ctlr->io_mutex);
