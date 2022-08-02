@@ -28,7 +28,9 @@ thermal_sys-$(CONFIG_CLOCK_THERMAL)	+= clock_cooling.o
 thermal_sys-$(CONFIG_DEVFREQ_THERMAL) += devfreq_cooling.o
 
 # debugfs support
+ifeq ($(CONFIG_DEBUG_FS),y)
 thermal_sys-$(CONFIG_QTI_THERMAL) += thermal_debugfs.o
+endif
 
 # platform thermal drivers
 obj-y				+= broadcom/
