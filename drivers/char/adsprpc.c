@@ -273,8 +273,10 @@ enum fastrpc_msg_type {
 static int fastrpc_pdr_notifier_cb(struct notifier_block *nb,
 					unsigned long code,
 					void *data);
+#ifdef CONFIG_DEBUG_FS
 static struct dentry *debugfs_root;
 static struct dentry *debugfs_global_file;
+#endif
 
 static inline uint64_t buf_page_start(uint64_t buf)
 {
@@ -5456,13 +5458,16 @@ static int fastrpc_device_release(struct inode *inode, struct file *file)
 	if (!fl)
 		return 0;
 
+#ifdef CONFIG_DEBUG_FS
 	debugfs_remove(fl->debugfs_file);
+#endif
 	fastrpc_file_free(fl);
 	file->private_data = NULL;
 
 	return 0;
 }
 
+#ifdef CONFIG_DEBUG_FS
 static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 					 size_t count, loff_t *position)
 {
@@ -5694,6 +5699,7 @@ static const struct file_operations debugfs_fops = {
 	.open = simple_open,
 	.read = fastrpc_debugfs_read,
 };
+#endif
 
 static int fastrpc_channel_open(struct fastrpc_file *fl)
 {
@@ -5846,6 +5852,7 @@ bail:
 	return err;
 }
 
+#ifdef CONFIG_DEBUG_FS
 static int fastrpc_set_process_info(struct fastrpc_file *fl)
 {
 	int err = 0, buf_size = 0;
@@ -5895,6 +5902,22 @@ static int fastrpc_set_process_info(struct fastrpc_file *fl)
 	}
 	return err;
 }
+#else
+static int fastrpc_set_process_info(struct fastrpc_file *fl)
+{
+	fl->tgid = current->tgid;
+
+	/*
+	 * Third-party apps don't have permission to open the fastrpc device, so
+	 * it is opened on their behalf by DSP HAL. This is detected by
+	 * comparing current PID with the one stored during device open.
+	 */
+	if (current->tgid != fl->tgid_open)
+		fl->untrusted_process = true;
+
+	return 0;
+}
+#endif
 
 static int fastrpc_get_info(struct fastrpc_file *fl, uint32_t *info)
 {
@@ -6675,6 +6698,7 @@ static int fastrpc_cb_probe(struct device *dev)
 	}
 
 	chan->sesscount++;
+#ifdef CONFIG_DEBUG_FS
 	if (debugfs_root && !debugfs_global_file) {
 		debugfs_global_file = debugfs_create_file("global", 0644,
 			debugfs_root, NULL, &debugfs_fops);
@@ -6684,6 +6708,7 @@ static int fastrpc_cb_probe(struct device *dev)
 			debugfs_global_file = NULL;
 		}
 	}
+#endif
 bail:
 	return err;
 }
@@ -6989,6 +7014,7 @@ static int __init fastrpc_device_init(void)
 	struct fastrpc_apps *me = &gfa;
 	int err = 0, i;
 
+#ifdef CONFIG_DEBUG_FS
 	debugfs_root = debugfs_create_dir("adsprpc", NULL);
 	if (IS_ERR_OR_NULL(debugfs_root)) {
 		pr_warn("Error: %s: %s: failed to create debugfs root dir\n",
@@ -6996,6 +7022,7 @@ static int __init fastrpc_device_init(void)
 		debugfs_remove_recursive(debugfs_root);
 		debugfs_root = NULL;
 	}
+#endif
 	memset(me, 0, sizeof(*me));
 	fastrpc_init(me);
 	fastrpc_get_dsp_status(me);
@@ -7131,7 +7158,9 @@ static void __exit fastrpc_device_exit(void)
 	if (me->rpmsg_register == 1)
 		unregister_rpmsg_driver(&fastrpc_rpmsg_client);
 	kfree(me->gidlist.gids);
+#ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(debugfs_root);
+#endif
 }
 
 module_init(fastrpc_device_init);
