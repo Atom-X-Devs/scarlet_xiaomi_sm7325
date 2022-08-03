@@ -347,8 +347,6 @@ static inline void spi_unregister_driver(struct spi_driver *sdrv)
  * @queue: message queue
  * @idling: the device is entering idle state
  * @cur_msg: the currently in-flight message
- * @cur_msg_prepared: spi_prepare_message was called for the currently
- *                    in-flight message
  * @cur_msg_mapped: message has been mapped for DMA
  * @xfer_completion: used by core transfer_one_message()
  * @busy: message pump is busy
@@ -560,7 +558,6 @@ struct spi_controller {
 	bool				running;
 	bool				rt;
 	bool				auto_runtime_pm;
-	bool                            cur_msg_prepared;
 	bool				cur_msg_mapped;
 	struct completion               xfer_completion;
 	size_t				max_dma_len;
@@ -880,6 +877,7 @@ struct spi_transfer {
  * @queue: for use by whichever driver currently owns the message
  * @state: for use by whichever driver currently owns the message
  * @resources: for resource management when the spi message is processed
+ * @prepared: spi_prepare_message was called for the this message
  *
  * A @spi_message is used to execute an atomic sequence of data transfers,
  * each represented by a struct spi_transfer.  The sequence is "atomic"
@@ -929,6 +927,9 @@ struct spi_message {
 
 	/* list of spi_res reources when the spi message is processed */
 	struct list_head        resources;
+
+	/* spi_prepare_message was called for this message */
+	bool                    prepared;
 };
 
 static inline void spi_message_init_no_memset(struct spi_message *m)
