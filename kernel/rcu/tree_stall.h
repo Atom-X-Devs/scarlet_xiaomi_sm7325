@@ -253,8 +253,7 @@ static void rcu_dump_cpu_stacks(void)
 		raw_spin_lock_irqsave_rcu_node(rnp, flags);
 		for_each_leaf_node_possible_cpu(rnp, cpu)
 			if (rnp->qsmask & leaf_node_cpu_bit(rnp, cpu))
-				if (!trigger_single_cpu_backtrace(cpu))
-					dump_cpu_task(cpu);
+				dump_cpu_task(cpu);
 		raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 	}
 }
