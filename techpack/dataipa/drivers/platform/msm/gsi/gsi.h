@@ -1260,12 +1260,6 @@ struct gsi_coal_chan_info {
 	uint8_t evchid;
 };
 
-struct gsi_log_ts {
-	u64 timestamp;
-	u64 qtimer;
-	u32 interrupt_type;
-};
-
 struct gsi_ctx {
 	void __iomem *base;
 	struct device *dev;
@@ -1297,7 +1291,6 @@ struct gsi_ctx {
 	u32 intcntrlr_mem_size;
 	irq_handler_t intcntrlr_gsi_isr;
 	irq_handler_t intcntrlr_client_isr;
-	struct gsi_log_ts gsi_isr_cache[GSI_ISR_CACHE_MAX];
 	int gsi_isr_cache_index;
 
 	atomic_t num_unclock_irq;
