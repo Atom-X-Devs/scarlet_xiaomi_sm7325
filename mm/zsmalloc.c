@@ -1434,7 +1434,7 @@ void zs_free(struct zs_pool *pool, unsigned long handle)
 	struct size_class *class;
 	int fullness;
 
-	if (unlikely(!handle))
+	if (IS_ERR_OR_NULL((void *)handle))
 		return;
 
 	/*
