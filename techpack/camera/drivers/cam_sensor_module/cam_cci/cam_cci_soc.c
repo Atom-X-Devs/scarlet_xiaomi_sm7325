@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "cam_cci_dev.h"
@@ -224,7 +225,7 @@ static void cam_cci_init_cci_params(struct cci_device *new_cci_dev)
 		new_cci_dev->cci_master_info[i].is_initilized = false;
 		mutex_init(&new_cci_dev->cci_master_info[i].mutex);
 		sema_init(&new_cci_dev->cci_master_info[i].master_sem, 1);
-		spin_lock_init(&new_cci_dev->cci_master_info[i].freq_cnt_lock);
+		mutex_init(&new_cci_dev->cci_master_info[i].freq_cnt_lock);
 		init_completion(
 			&new_cci_dev->cci_master_info[i].reset_complete);
 		init_completion(
