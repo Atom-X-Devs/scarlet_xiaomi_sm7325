@@ -2099,34 +2099,7 @@ static int battery_chg_probe(struct platform_device *pdev)
 	init_completion(&bcdev->fw_update_ack);
 	INIT_WORK(&bcdev->subsys_up_work, battery_chg_subsys_up_work);
 	INIT_WORK(&bcdev->usb_type_work, battery_chg_update_usb_type_work);
-	atomic_set(&bcdev->state, PMIC_GLINK_STATE_UP);
 	bcdev->dev = dev;
-
-	client_data.id = MSG_OWNER_BC;
-	client_data.name = "battery_charger";
-	client_data.msg_cb = battery_chg_callback;
-	client_data.priv = bcdev;
-	client_data.state_cb = battery_chg_state_cb;
-
-	bcdev->client = pmic_glink_register_client(dev, &client_data);
-	if (IS_ERR(bcdev->client)) {
-		rc = PTR_ERR(bcdev->client);
-		if (rc != -EPROBE_DEFER)
-			dev_err(dev, "Error in registering with pmic_glink %d\n",
-				rc);
-		return rc;
-	}
-
-	bcdev->initialized = true;
-	bcdev->reboot_notifier.notifier_call = battery_chg_ship_mode;
-	bcdev->reboot_notifier.priority = 255;
-	register_reboot_notifier(&bcdev->reboot_notifier);
-
-	rc = battery_chg_parse_dt(bcdev);
-	if (rc < 0) {
-		dev_err(dev, "Failed to parse dt rc=%d\n", rc);
-		goto error;
-	}
 
 #ifdef CONFIG_DRM_PANEL
 	rc = drm_check_dt(bcdev->dev->of_node);
@@ -2146,6 +2119,33 @@ static int battery_chg_probe(struct platform_device *pdev)
 		}
 	}
 #endif
+
+	client_data.id = MSG_OWNER_BC;
+	client_data.name = "battery_charger";
+	client_data.msg_cb = battery_chg_callback;
+	client_data.priv = bcdev;
+	client_data.state_cb = battery_chg_state_cb;
+
+	bcdev->client = pmic_glink_register_client(dev, &client_data);
+	if (IS_ERR(bcdev->client)) {
+		rc = PTR_ERR(bcdev->client);
+		if (rc != -EPROBE_DEFER)
+			dev_err(dev, "Error in registering with pmic_glink %d\n",
+				rc);
+		return rc;
+	}
+
+	atomic_set(&bcdev->state, PMIC_GLINK_STATE_UP);
+	bcdev->initialized = true;
+	bcdev->reboot_notifier.notifier_call = battery_chg_ship_mode;
+	bcdev->reboot_notifier.priority = 255;
+	register_reboot_notifier(&bcdev->reboot_notifier);
+
+	rc = battery_chg_parse_dt(bcdev);
+	if (rc < 0) {
+		dev_err(dev, "Failed to parse dt rc=%d\n", rc);
+		goto error;
+	}
 
 	bcdev->restrict_fcc_ua = DEFAULT_RESTRICT_FCC_UA;
 	platform_set_drvdata(pdev, bcdev);
@@ -2183,6 +2183,7 @@ static int battery_chg_probe(struct platform_device *pdev)
 
 	return 0;
 error:
+	cancel_work_sync(&bcdev->subsys_up_work);
 	bcdev->initialized = false;
 	complete(&bcdev->ack);
 	pmic_glink_unregister_client(bcdev->client);
@@ -2201,6 +2202,7 @@ static int battery_chg_remove(struct platform_device *pdev)
 
 	device_init_wakeup(bcdev->dev, false);
 	debugfs_remove_recursive(bcdev->debugfs_dir);
+	cancel_work_sync(&bcdev->subsys_up_work);
 	class_unregister(&bcdev->battery_class);
 	unregister_reboot_notifier(&bcdev->reboot_notifier);
 	qti_typec_class_deinit(bcdev->typec_class);
