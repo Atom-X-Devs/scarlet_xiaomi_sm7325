@@ -926,11 +926,10 @@ static int hfi_f2h_main(void *arg)
 	struct f2h_packet *pkt, *tmp;
 
 	while (!kthread_should_stop()) {
-		wait_event_interruptible(hfi->f2h_wq,
+		wait_event_interruptible(hfi->f2h_wq, kthread_should_stop() ||
 			((!llist_empty(&hfi->f2h_msglist) ||
-			  !llist_empty(&hfi->f2h_secondary_list))
-			 && !kthread_should_stop()
-			 && (hfi->irq_mask & HFI_IRQ_MSGQ_MASK)));
+			  !llist_empty(&hfi->f2h_secondary_list)) &&
+			 (hfi->irq_mask & HFI_IRQ_MSGQ_MASK)));
 
 		if (kthread_should_stop())
 			break;
