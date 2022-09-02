@@ -21,7 +21,8 @@ void __write_overflow_field(size_t avail, size_t wanted) __compiletime_warning("
 	unsigned char *__p = (unsigned char *)(p);      \
 	size_t ret = (size_t)-1;			\
 	size_t p_size = __builtin_object_size(p, 1);	\
-	if (p_size != (size_t)-1) {			\
+	if (p_size != (size_t)-1 &&			\
+	    __builtin_constant_p(*__p)) {		\
 		size_t p_len = p_size - 1;		\
 		if (__builtin_constant_p(__p[p_len]) &&	\
 		    __p[p_len] == '\0')			\
