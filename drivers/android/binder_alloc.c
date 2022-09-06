@@ -249,14 +249,14 @@ static int binder_install_single_page(struct binder_alloc *alloc,
 	struct page *page;
 	int ret = 0;
 
-	if (!mmget_not_zero(alloc->vma_vm_mm))
+	if (!mmget_not_zero(alloc->mm))
 		return -ESRCH;
 
 	/*
 	 * Protected with mmap_sem in write mode as multiple tasks
 	 * might race to install the same page.
 	 */
-	mmap_write_lock(alloc->vma_vm_mm);
+	mmap_write_lock(alloc->mm);
 	if (binder_get_installed_page(lru_page))
 		goto out;
 
@@ -286,8 +286,8 @@ static int binder_install_single_page(struct binder_alloc *alloc,
 	/* Mark page installation complete and safe to use */
 	binder_set_installed_page(lru_page, page);
 out:
-	mmap_write_unlock(alloc->vma_vm_mm);
-	mmput_async(alloc->vma_vm_mm);
+	mmap_write_unlock(alloc->mm);
+	mmput_async(alloc->mm);
 	return ret;
 }
 
@@ -368,9 +368,9 @@ static inline void binder_alloc_set_vma(struct binder_alloc *alloc,
 	 */
 	if (vma) {
 		vm_start = vma->vm_start;
-		mmap_assert_write_locked(alloc->vma_vm_mm);
+		mmap_assert_write_locked(alloc->mm);
 	} else {
-		mmap_assert_locked(alloc->vma_vm_mm);
+		mmap_assert_locked(alloc->mm);
 	}
 
 	alloc->vma_addr = vm_start;
@@ -382,7 +382,7 @@ static inline struct vm_area_struct *binder_alloc_get_vma(
 	struct vm_area_struct *vma = NULL;
 
 	if (alloc->vma_addr)
-		vma = vma_lookup(alloc->vma_vm_mm, alloc->vma_addr);
+		vma = vma_lookup(alloc->mm, alloc->vma_addr);
 
 	return vma;
 }
@@ -621,15 +621,15 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 	int ret;
 
 	/* Check binder_alloc is fully initialized */
-	mmap_read_lock(alloc->vma_vm_mm);
+	mmap_read_lock(alloc->mm);
 	if (!binder_alloc_get_vma(alloc)) {
-		mmap_read_unlock(alloc->vma_vm_mm);
+		mmap_read_unlock(alloc->mm);
 		binder_alloc_debug(BINDER_DEBUG_USER_ERROR,
 				   "%d: binder_alloc_buf, no vma\n",
 				   alloc->pid);
 		return ERR_PTR(-ESRCH);
 	}
-	mmap_read_unlock(alloc->vma_vm_mm);
+	mmap_read_unlock(alloc->mm);
 
 	size = sanitized_size(data_size, offsets_size, extra_buffers_size);
 	if (unlikely(!size)) {
@@ -935,7 +935,7 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 	buffers = 0;
 	spin_lock(&alloc->lock);
 	BUG_ON(alloc->vma_addr &&
-	       vma_lookup(alloc->vma_vm_mm, alloc->vma_addr));
+	       vma_lookup(alloc->mm, alloc->vma_addr));
 
 	while ((n = rb_first(&alloc->allocated_buffers))) {
 		buffer = rb_entry(n, struct binder_buffer, rb_node);
@@ -983,8 +983,8 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 	}
 	spin_unlock(&alloc->lock);
 	kvfree(alloc->pages);
-	if (alloc->vma_vm_mm)
-		mmdrop(alloc->vma_vm_mm);
+	if (alloc->mm)
+		mmdrop(alloc->mm);
 
 	binder_alloc_debug(BINDER_DEBUG_OPEN_CLOSE,
 		     "%s: %d buffers %d, pages %d\n",
@@ -1037,13 +1037,13 @@ void binder_alloc_print_pages(struct seq_file *m,
 	 * read inconsistent state.
 	 */
 
-	mmap_read_lock(alloc->vma_vm_mm);
+	mmap_read_lock(alloc->mm);
 	if (binder_alloc_get_vma(alloc) == NULL) {
-		mmap_read_unlock(alloc->vma_vm_mm);
+		mmap_read_unlock(alloc->mm);
 		goto uninitialized;
 	}
 
-	mmap_read_unlock(alloc->vma_vm_mm);
+	mmap_read_unlock(alloc->mm);
 
 	spin_lock(&alloc->lock);
 	for (i = 0; i < alloc->buffer_size / PAGE_SIZE; i++) {
@@ -1111,7 +1111,7 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 {
 	struct binder_lru_page *page = container_of(item, typeof(*page), lru);
 	struct binder_alloc *alloc = page->alloc;
-	struct mm_struct *mm = alloc->vma_vm_mm;
+	struct mm_struct *mm = alloc->mm;
 	struct vm_area_struct *vma;
 	struct page *page_to_free;
 	unsigned long page_addr;
@@ -1199,8 +1199,8 @@ static struct shrinker binder_shrinker = {
 void binder_alloc_init(struct binder_alloc *alloc)
 {
 	alloc->pid = current->group_leader->pid;
-	alloc->vma_vm_mm = current->mm;
-	mmgrab(alloc->vma_vm_mm);
+	alloc->mm = current->mm;
+	mmgrab(alloc->mm);
 	spin_lock_init(&alloc->lock);
 	INIT_LIST_HEAD(&alloc->buffers);
 }
