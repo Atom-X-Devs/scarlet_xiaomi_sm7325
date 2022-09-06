@@ -356,26 +356,6 @@ static void binder_lru_freelist_del(struct binder_alloc *alloc,
 }
 
 
-static inline void binder_alloc_set_vma(struct binder_alloc *alloc,
-		struct vm_area_struct *vma)
-{
-	unsigned long vm_start = 0;
-
-	/*
-	 * Allow clearing the vma with holding just the read lock to allow
-	 * munmapping downgrade of the write lock before freeing and closing the
-	 * file using binder_alloc_vma_close().
-	 */
-	if (vma) {
-		vm_start = vma->vm_start;
-		mmap_assert_write_locked(alloc->mm);
-	} else {
-		mmap_assert_locked(alloc->mm);
-	}
-
-	alloc->vma_addr = vm_start;
-}
-
 static inline struct vm_area_struct *binder_alloc_get_vma(
 		struct binder_alloc *alloc)
 {
@@ -905,7 +885,7 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 	buffer->free = 1;
 	binder_insert_free_buffer(alloc, buffer);
 	alloc->free_async_space = alloc->buffer_size / 2;
-	binder_alloc_set_vma(alloc, vma);
+	alloc->vma_addr = vma->vm_start;
 
 	return 0;
 
@@ -1091,7 +1071,7 @@ int binder_alloc_get_allocated_count(struct binder_alloc *alloc)
  */
 void binder_alloc_vma_close(struct binder_alloc *alloc)
 {
-	binder_alloc_set_vma(alloc, NULL);
+	alloc->vma_addr = 0;
 }
 
 /**
