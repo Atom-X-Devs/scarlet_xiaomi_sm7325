@@ -255,9 +255,10 @@ lookup_dcookie(struct mm_struct *mm, unsigned long addr, off_t *offset)
 {
 	unsigned long cookie = NO_COOKIE;
 	struct vm_area_struct *vma;
+	VMA_ITERATOR(vmi, mm, addr);
 
 	mmap_read_lock(mm);
-	for (vma = find_vma(mm, addr); vma; vma = vma->vm_next) {
+	for_each_vma(vmi, vma) {
 
 		if (addr < vma->vm_start || addr >= vma->vm_end)
 			continue;

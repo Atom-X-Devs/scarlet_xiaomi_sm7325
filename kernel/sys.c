@@ -1880,9 +1880,10 @@ static int prctl_set_mm_exe_file(struct mm_struct *mm, unsigned int fd)
 	err = -EBUSY;
 	if (exe_file) {
 		struct vm_area_struct *vma;
+		VMA_ITERATOR(vmi, mm, 0);
 
 		mmap_read_lock(mm);
-		for (vma = mm->mmap; vma; vma = vma->vm_next) {
+		for_each_vma(vmi, vma) {
 			if (!vma->vm_file)
 				continue;
 			if (path_equal(&vma->vm_file->f_path,
@@ -2388,10 +2389,7 @@ static int prctl_set_vma_anon_name(unsigned long start, unsigned long end,
 		error = unmapped_error;
 		if (start >= end)
 			return error;
-		if (prev)
-			vma = prev->vm_next;
-		else	/* madvise_remove dropped mmap_sem */
-			vma = find_vma(current->mm, start);
+		vma = find_vma(current->mm, start);
 	}
 }
 

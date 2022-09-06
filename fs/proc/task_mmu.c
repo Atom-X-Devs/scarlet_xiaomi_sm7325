@@ -1444,9 +1444,13 @@ static ssize_t clear_refs_write(struct file *file, const char __user *buf,
 					mmap_write_unlock(mm);
 					goto out_mm;
 				}
-				for (vma = mm->mmap; vma; vma = vma->vm_next) {
-					vma->vm_flags &= ~VM_SOFTDIRTY;
-					vma_set_page_prot(vma);
+				{
+					VMA_ITERATOR(vmi, mm, 0);
+
+					for_each_vma(vmi, vma) {
+						vma->vm_flags &= ~VM_SOFTDIRTY;
+						vma_set_page_prot(vma);
+					}
 				}
 				mmap_write_downgrade(mm);
 				break;
