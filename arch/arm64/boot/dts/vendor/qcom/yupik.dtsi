@@ -479,6 +479,7 @@
 		console-size = <0x200000>;
 		pmsg-size = <0x200000>;
 		mem-type = <2>;
+		max-reason = <0x4>;
 	};
 
 	/* global autoconfigured region for contiguous allocations */
