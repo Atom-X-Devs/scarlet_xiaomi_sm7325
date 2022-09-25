@@ -1787,6 +1787,10 @@ static int battery_psy_get_prop(struct power_supply *psy,
 		pval->intval = (pst->prop[prop_id] * 60) >= 65535 ?
 			65535 : (pst->prop[prop_id] * 60);
 		break;
+#else
+	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+		pval->intval = DIV_ROUND_CLOSEST(pst->prop[prop_id], 100);
+		break;
 #endif
 	default:
 		pval->intval = pst->prop[prop_id];
