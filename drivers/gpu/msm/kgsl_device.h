@@ -317,6 +317,8 @@ struct kgsl_device {
 	struct idr timelines;
 	/** @timelines_lock: Spinlock to protect the timelines idr */
 	spinlock_t timelines_lock;
+	/** @idle_jiffies: Latest idle jiffies */
+	unsigned long idle_jiffies;
 };
 
 #define KGSL_MMU_DEVICE(_mmu) \
@@ -616,8 +618,8 @@ static inline int kgsl_state_is_awake(struct kgsl_device *device)
  */
 static inline void kgsl_start_idle_timer(struct kgsl_device *device)
 {
-	mod_timer(&device->idle_timer,
-			jiffies + msecs_to_jiffies(device->pwrctrl.interval_timeout));
+	device->idle_jiffies = jiffies + msecs_to_jiffies(device->pwrctrl.interval_timeout);
+	mod_timer(&device->idle_timer, device->idle_jiffies);
 }
 
 int kgsl_readtimestamp(struct kgsl_device *device, void *priv,
