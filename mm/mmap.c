@@ -2722,15 +2722,20 @@ cannot_expand:
 	vma->vm_page_prot = vm_get_page_prot(vm_flags);
 	vma->vm_pgoff = pgoff;
 
+	if (mas_preallocate(&mas, vma, GFP_KERNEL)) {
+		error = -ENOMEM;
+		goto free_vma;
+	}
+
 	if (file) {
 		if (vm_flags & VM_DENYWRITE) {
 			error = deny_write_access(file);
 			if (error)
-				goto free_vma;
+				goto free_iter_vma;
 		}
 
 		/* ->mmap() can change vma->vm_file, but must guarantee that
-		 * vma_link() below can deny write-access if VM_DENYWRITE is set
+		 * the store below can deny write-access if VM_DENYWRITE is set
 		 * and map writably if VM_SHARED is set. This usually means the
 		 * new file must not have been exposed to user-space, yet.
 		 */
@@ -2778,6 +2783,7 @@ cannot_expand:
 				/* Update vm_flags to pick up the change. */
 				addr = vma->vm_start;
 				vm_flags = vma->vm_flags;
+				mas_destroy(&mas);
 				goto file_expanded;
 			}
 		}
@@ -2786,18 +2792,26 @@ cannot_expand:
 	} else if (vm_flags & VM_SHARED) {
 		error = shmem_zero_setup(vma);
 		if (error)
-			goto free_vma;
+			goto free_iter_vma;
 	} else {
 		vma_set_anonymous(vma);
 	}
 
-	if (vma_link(mm, vma)) {
-		error = -ENOMEM;
-		if (file)
-			goto unmap_and_free_vma;
-		else
-			goto free_vma;
+#ifdef CONFIG_SPARC64
+	/* TODO: Fix SPARC ADI! */
+	WARN_ON_ONCE(!arch_validate_flags(vm_flags));
+#endif
+
+	if (vma->vm_file)
+		i_mmap_lock_write(vma->vm_file->f_mapping);
+
+	vma_mas_store(vma, &mas);
+	mm->map_count++;
+	if (vma->vm_file) {
+		__vma_link_file(vma, vma->vm_file->f_mapping);
+		i_mmap_unlock_write(vma->vm_file->f_mapping);
 	}
+
 	/* Once vma denies write, undo our temporary denial count */
 	if (file) {
 		if (writable_file_mapping)
@@ -2851,6 +2865,8 @@ unmap_and_free_vma:
 		mapping_unmap_writable(file->f_mapping);
 	if (vm_flags & VM_DENYWRITE)
 		allow_write_access(file);
+free_iter_vma:
+	mas_destroy(&mas);
 free_vma:
 	vm_area_free(vma);
 unacct_error:
