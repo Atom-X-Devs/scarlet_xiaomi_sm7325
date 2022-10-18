@@ -2753,14 +2753,20 @@ cannot_expand:
 			writable_file_mapping = true;
 		}
 
-		/* Can addr have changed??
-		 *
-		 * Answer: Yes, several device drivers can do it in their
-		 *         f_op->mmap method. -DaveM
+		/*
+		 * Expansion is handled above, merging is handled below.
+		 * Drivers should not alter the address of the VMA.
 		 */
 		WARN_ON_ONCE(addr != vma->vm_start);
 
-		addr = vma->vm_start;
+		/*
+		 * Drivers should not permit writability when previously it was
+		 * disallowed.
+		 */
+		VM_WARN_ON_ONCE(vm_flags != vma->vm_flags &&
+				!(vm_flags & VM_MAYWRITE) &&
+				(vma->vm_flags & VM_MAYWRITE));
+
 		mas_reset(&mas);
 
 		/*
@@ -2782,7 +2788,6 @@ cannot_expand:
 				vm_area_free(vma);
 				vma = merge;
 				/* Update vm_flags to pick up the change. */
-				addr = vma->vm_start;
 				vm_flags = vma->vm_flags;
 				mas_destroy(&mas);
 				goto file_expanded;
