@@ -19,7 +19,7 @@ void __write_overflow_field(size_t avail, size_t wanted) __compiletime_warning("
 
 #define __compiletime_strlen(p)				\
 ({							\
-	unsigned char *__p = (unsigned char *)(p);      \
+	char *__p = (char *)(p);			\
 	size_t ret = SIZE_MAX;				\
 	size_t p_size = __builtin_object_size(p, 1);	\
 	if (p_size != SIZE_MAX &&			\
