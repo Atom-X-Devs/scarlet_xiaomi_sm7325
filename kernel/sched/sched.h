@@ -3146,11 +3146,9 @@ unsigned long scale_irq_capacity(unsigned long util, unsigned long irq, unsigned
 
 #define perf_domain_span(pd) (to_cpumask(((pd)->em_pd->cpus)))
 
-DECLARE_STATIC_KEY_FALSE(sched_energy_present);
-
 static inline bool sched_energy_enabled(void)
 {
-	return static_branch_likely(&sched_energy_present);
+	return true;
 }
 
 #else /* !CONFIG_ENERGY_MODEL */
