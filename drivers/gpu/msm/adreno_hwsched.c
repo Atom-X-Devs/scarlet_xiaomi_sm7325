@@ -1312,7 +1312,7 @@ static void reset_and_snapshot(struct adreno_device *adreno_dev)
 
 	force_retire_timestamp(device, drawobj);
 
-	if (context->flags & KGSL_CONTEXT_INVALIDATE_ON_FAULT) {
+	if (context && (context->flags & KGSL_CONTEXT_INVALIDATE_ON_FAULT)) {
 		adreno_mark_guilty_context(device, context->id);
 		adreno_drawctxt_invalidate(device, context);
 	}

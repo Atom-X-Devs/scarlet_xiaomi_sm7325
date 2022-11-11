@@ -1048,7 +1048,7 @@ static int send_context_pointers(struct adreno_device *adreno_dev,
 	struct kgsl_context *context)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-	struct hfi_context_pointers_cmd cmd;
+	struct hfi_context_pointers_cmd cmd = {0};
 
 	CMD_MSG_HDR(cmd, H2F_MSG_CONTEXT_POINTERS);
 	cmd.ctxt_id = context->id;
@@ -1057,8 +1057,6 @@ static int send_context_pointers(struct adreno_device *adreno_dev,
 	if (context->user_ctxt_record)
 		cmd.user_ctxt_record_addr =
 			context->user_ctxt_record->memdesc.gpuaddr;
-	else
-		cmd.user_ctxt_record_addr = 0;
 
 	return a6xx_hfi_send_cmd_async(adreno_dev, &cmd);
 }
