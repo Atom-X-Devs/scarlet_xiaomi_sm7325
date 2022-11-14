@@ -1441,10 +1441,12 @@ void zap_page_range(struct vm_area_struct *vma, unsigned long start,
  * @size: number of bytes to zap
  * @details: details of shared cache invalidation
  *
- * The range must fit into one VMA.
+ * The range must fit into one VMA. The caller must stabilize the VMA
+ * and its page tables. For a Binder VM_MIXEDMAP VMA with base-page
+ * mappings, the VMA read lock is sufficient.
  */
-static void zap_page_range_single(struct vm_area_struct *vma, unsigned long address,
-		unsigned long size, struct zap_details *details)
+void zap_page_range_single(struct vm_area_struct *vma, unsigned long address,
+			   unsigned long size, struct zap_details *details)
 {
 	struct mmu_notifier_range range;
 	struct mmu_gather tlb;
