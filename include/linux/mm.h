@@ -1593,6 +1593,19 @@ int follow_phys(struct vm_area_struct *vma, unsigned long address,
 int generic_access_phys(struct vm_area_struct *vma, unsigned long addr,
 			void *buf, int len, int write);
 
+/*
+ * VMA sequence count based protection was reverted on this tree
+ * (see 996e69897d83); keep these as no-ops for the remaining caller
+ * in mm/khugepaged.c until the per-VMA lock series lands.
+ */
+static inline void vm_write_begin(struct vm_area_struct *vma)
+{
+}
+
+static inline void vm_write_end(struct vm_area_struct *vma)
+{
+}
+
 extern void truncate_pagecache(struct inode *inode, loff_t new);
 extern void truncate_setsize(struct inode *inode, loff_t newsize);
 void pagecache_isize_extended(struct inode *inode, loff_t from, loff_t to);
