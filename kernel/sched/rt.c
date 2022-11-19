@@ -474,10 +474,6 @@ static inline bool rt_task_fits_capacity(struct task_struct *p, int cpu)
 	unsigned int max_cap;
 	unsigned int cpu_cap;
 
-	/* Only heterogeneous systems can benefit from this check */
-	if (!sched_asym_cpucap_active())
-		return true;
-
 	min_cap = uclamp_eff_value(p, UCLAMP_MIN);
 	max_cap = uclamp_eff_value(p, UCLAMP_MAX);
 
@@ -1788,16 +1784,9 @@ static int find_lowest_rq(struct task_struct *task)
 	 * If we're on asym system ensure we consider the different capacities
 	 * of the CPUs when searching for the lowest_mask.
 	 */
-	if (sched_asym_cpucap_active()) {
-
-		ret = cpupri_find_fitness(&task_rq(task)->rd->cpupri,
-					  task, lowest_mask,
-					  rt_task_fits_capacity);
-	} else {
-
-		ret = cpupri_find(&task_rq(task)->rd->cpupri,
-				  task, lowest_mask);
-	}
+	ret = cpupri_find_fitness(&task_rq(task)->rd->cpupri,
+				  task, lowest_mask,
+				  rt_task_fits_capacity);
 
 	if (!ret)
 		return -1; /* No targets found */
