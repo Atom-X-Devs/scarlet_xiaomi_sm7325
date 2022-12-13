@@ -47,7 +47,7 @@ static int hash_walk_next(struct crypto_hash_walk *walk)
 	if (walk->flags & CRYPTO_ALG_ASYNC)
 		walk->data = kmap(walk->pg);
 	else
-		walk->data = kmap_atomic(walk->pg);
+		walk->data = kmap_local_page(walk->pg);
 	walk->data += offset;
 
 	if (offset & alignmask) {
@@ -100,7 +100,7 @@ int crypto_hash_walk_done(struct crypto_hash_walk *walk, int err)
 	if (walk->flags & CRYPTO_ALG_ASYNC)
 		kunmap(walk->pg);
 	else {
-		kunmap_atomic(walk->data);
+		kunmap_local(walk->data);
 		/*
 		 * The may sleep test only makes sense for sync users.
 		 * Async users don't need to sleep here anyway.
