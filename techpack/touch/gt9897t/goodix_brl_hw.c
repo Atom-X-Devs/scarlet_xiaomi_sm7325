@@ -184,15 +184,18 @@ static int brl_power_on(struct goodix_ts_core *cd, bool on)
 			return ret;
 		}
 		ts_info("regulator enable SUCCESS");
+
+		gpio_direction_output(cd->board_data.reset_gpio, 0);
 		usleep_range(15000, 15100);
 		gpio_direction_output(cd->board_data.reset_gpio, 1);
+		msleep(GOODIX_NORMAL_RESET_DELAY_MS);
+
 		ret = brl_reset_after(cd);
 		if (ret < 0) {
 			ts_err("reset_after process failed,ret=%d", ret);
 			gpio_direction_output(cd->board_data.reset_gpio, 0);
 			return ret;
 		}
-		msleep(GOODIX_NORMAL_RESET_DELAY_MS);
 		return 0;
 	}
 
