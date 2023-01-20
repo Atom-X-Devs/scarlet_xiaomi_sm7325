@@ -2512,10 +2512,6 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 	mt_init_flags(&mt_detach, mas->tree->ma_flags & MT_FLAGS_LOCK_MASK);
 	mt_set_external_lock(&mt_detach, &mm->mmap_lock);
 
-	if (mas_preallocate(mas, vma, GFP_KERNEL))
-		return -ENOMEM;
-
-	mas->last = end - 1;
 	/*
 	 * If we need to split any vma, do it now to save pain later.
 	 *
@@ -2615,6 +2611,34 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 			goto userfaultfd_error;
 	}
 
+#if defined(CONFIG_DEBUG_VM_MAPLE_TREE)
+	/* Make sure no VMAs are about to be lost. */
+	{
+		MA_STATE(test, &mt_detach, start, end - 1);
+		struct vm_area_struct *vma_mas, *vma_test;
+		int test_count = 0;
+
+		mas_set_range(mas, start, end - 1);
+		rcu_read_lock();
+		vma_test = mas_find(&test, end - 1);
+		mas_for_each(mas, vma_mas, end - 1) {
+			BUG_ON(vma_mas != vma_test);
+			test_count++;
+			vma_test = mas_next(&test, end - 1);
+		}
+		rcu_read_unlock();
+		BUG_ON(count != test_count);
+	}
+#endif
+	mas_set_range(mas, start, end - 1);
+	error = mas_store_gfp(mas, NULL, GFP_KERNEL);
+	if (error) {
+		mas_destroy(mas);
+		goto clear_tree_failed;
+	}
+
+	/* Point of no return */
+
 	/*
 	 * Before v5.18 the pages of mlocked VMAs must be munlocked before the
 	 * VMAs are unmapped. Do it only once nothing can fail any more, as
@@ -2630,33 +2654,10 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 		}
 	}
 
-	/* Point of no return */
-	mas_set_range(mas, start, end - 1);
-#if defined(CONFIG_DEBUG_VM_MAPLE_TREE)
-	/* Make sure no VMAs are about to be lost. */
-	{
-		MA_STATE(test, &mt_detach, start, end - 1);
-		struct vm_area_struct *vma_mas, *vma_test;
-		int test_count = 0;
-
-		rcu_read_lock();
-		vma_test = mas_find(&test, end - 1);
-		mas_for_each(mas, vma_mas, end - 1) {
-			BUG_ON(vma_mas != vma_test);
-			test_count++;
-			vma_test = mas_next(&test, end - 1);
-		}
-		rcu_read_unlock();
-		BUG_ON(count != test_count);
-		mas_set_range(mas, start, end - 1);
-	}
-#endif
-	/* Point of no return */
-	mas_store_prealloc(mas, NULL);
-
 	/* Keep events from earlier successful unmaps on the caller's list. */
 	if (uf)
 		list_splice_tail(&uf_new_unmaps, uf);
+
 
 	mm->locked_vm -= locked_vm;
 	mm->map_count -= count;
@@ -2684,6 +2685,7 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 	validate_mm(mm);
 	return downgrade ? 1 : 0;
 
+clear_tree_failed:
 userfaultfd_error:
 munmap_gather_failed:
 end_split_failed:
@@ -2695,7 +2697,6 @@ end_split_failed:
 	userfaultfd_unmap_abort(&uf_new_unmaps);
 start_split_failed:
 map_count_exceeded:
-	mas_destroy(mas);
 	return error;
 }
 

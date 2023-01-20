@@ -5621,13 +5621,25 @@ void *mas_store(struct ma_state *mas, void *entry)
 int mas_store_gfp(struct ma_state *mas, void *entry, gfp_t gfp)
 {
 	MA_WR_STATE(wr_mas, mas, entry);
+	unsigned long allocated;
 
 	mas_wr_store_setup(&wr_mas);
 	trace_ma_write(TP_FCT, mas, 0, entry);
 retry:
 	mas_wr_store_entry(&wr_mas);
-	if (unlikely(mas_nomem(mas, gfp)))
-		goto retry;
+	if (unlikely(mas->node == MA_ERROR(-ENOMEM))) {
+		allocated = mas_allocated(mas);
+		if (mas_nomem(mas, gfp)) {
+			if (mas_allocated(mas) > allocated)
+				goto retry;
+
+			/* mas_nomem() can reset the cursor without adding nodes. */
+			mas_destroy(mas);
+			mas_set_err(mas, -ENOMEM);
+		}
+	} else {
+		mas_destroy(mas);
+	}
 
 	if (unlikely(mas_is_err(mas)))
 		return xa_err(mas->node);
