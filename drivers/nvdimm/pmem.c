@@ -229,28 +229,6 @@ static blk_qc_t pmem_make_request(struct request_queue *q, struct bio *bio)
 	return BLK_QC_T_NONE;
 }
 
-static int pmem_rw_page(struct block_device *bdev, sector_t sector,
-		       struct page *page, unsigned int op)
-{
-	struct pmem_device *pmem = bdev->bd_queue->queuedata;
-	blk_status_t rc;
-
-	if (op_is_write(op))
-		rc = pmem_do_write(pmem, page, 0, sector, thp_size(page));
-	else
-		rc = pmem_do_read(pmem, page, 0, sector, thp_size(page));
-	/*
-	 * The ->rw_page interface is subtle and tricky.  The core
-	 * retries on any error, so we can only invoke page_endio() in
-	 * the successful completion case.  Otherwise, we'll see crashes
-	 * caused by double completion.
-	 */
-	if (rc == 0)
-		page_endio(page, op_is_write(op), 0);
-
-	return blk_status_to_errno(rc);
-}
-
 /* see "strong" declaration in tools/testing/nvdimm/pmem-dax.c */
 __weak long __pmem_direct_access(struct pmem_device *pmem, pgoff_t pgoff,
 		long nr_pages, void **kaddr, pfn_t *pfn)
@@ -277,7 +255,6 @@ __weak long __pmem_direct_access(struct pmem_device *pmem, pgoff_t pgoff,
 
 static const struct block_device_operations pmem_fops = {
 	.owner =		THIS_MODULE,
-	.rw_page =		pmem_rw_page,
 	.revalidate_disk =	nvdimm_revalidate_disk,
 };
 
@@ -464,6 +441,7 @@ static int pmem_attach_disk(struct device *dev,
 	blk_queue_logical_block_size(q, pmem_sector_size(ndns));
 	blk_queue_max_hw_sectors(q, UINT_MAX);
 	blk_queue_flag_set(QUEUE_FLAG_NONROT, q);
+	blk_queue_flag_set(QUEUE_FLAG_SYNCHRONOUS, q);
 	if (pmem->pfn_flags & PFN_MAP)
 		blk_queue_flag_set(QUEUE_FLAG_DAX, q);
 	q->queuedata = pmem;
