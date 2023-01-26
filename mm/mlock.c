@@ -446,7 +446,7 @@ static unsigned long __munlock_pagevec_fill(struct pagevec *pvec,
 void munlock_vma_pages_range(struct vm_area_struct *vma,
 			     unsigned long start, unsigned long end)
 {
-	vma->vm_flags &= VM_LOCKED_CLEAR_MASK;
+	vma->vm_flags &= ~VM_LOCKED_MASK;
 
 	while (start < end) {
 		struct page *page;
@@ -607,7 +607,7 @@ static int apply_vma_lock_flags(unsigned long start, size_t len,
 		prev = mas_prev(&mas, 0);
 
 	for (nstart = start ; ; ) {
-		vm_flags_t newflags = vma->vm_flags & VM_LOCKED_CLEAR_MASK;
+		vm_flags_t newflags = vma->vm_flags & ~VM_LOCKED_MASK;
 
 		newflags |= flags;
 
@@ -769,7 +769,7 @@ static int apply_mlockall_flags(int flags)
 	struct vm_area_struct *vma, *prev = NULL;
 	vm_flags_t to_add = 0;
 
-	current->mm->def_flags &= VM_LOCKED_CLEAR_MASK;
+	current->mm->def_flags &= ~VM_LOCKED_MASK;
 	if (flags & MCL_FUTURE) {
 		current->mm->def_flags |= VM_LOCKED;
 
@@ -789,7 +789,7 @@ static int apply_mlockall_flags(int flags)
 	mas_for_each(&mas, vma, ULONG_MAX) {
 		vm_flags_t newflags;
 
-		newflags = vma->vm_flags & VM_LOCKED_CLEAR_MASK;
+		newflags = vma->vm_flags & ~VM_LOCKED_MASK;
 		newflags |= to_add;
 
 		/* Ignore errors */
