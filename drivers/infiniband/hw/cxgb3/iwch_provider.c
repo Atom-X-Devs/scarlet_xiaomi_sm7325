@@ -272,8 +272,7 @@ static int iwch_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 		}
 
 		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
-		vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND;
-		vma->vm_flags &= ~VM_MAYREAD;
+		vm_flags_mod(vma, VM_DONTCOPY | VM_DONTEXPAND, VM_MAYREAD);
 		ret = io_remap_pfn_range(vma, vma->vm_start,
 					 addr >> PAGE_SHIFT,
 				         len, vma->vm_page_prot);

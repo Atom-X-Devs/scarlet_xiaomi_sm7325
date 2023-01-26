@@ -455,7 +455,7 @@ success:
 	 * vm_flags and vm_page_prot are protected by the mmap_sem
 	 * held in write mode.
 	 */
-	vma->vm_flags = vma_pad_fixup_flags(vma, newflags);
+	vm_flags_reset(vma, vma_pad_fixup_flags(vma, newflags));
 	dirty_accountable = vma_wants_writenotify(vma, vma->vm_page_prot);
 	vma_set_page_prot(vma);
 

@@ -731,7 +731,7 @@ int vc4_mmap(struct file *filp, struct vm_area_struct *vma)
 	 * vm_pgoff (used as a fake buffer offset by DRM) to 0 as we want to map
 	 * the whole buffer.
 	 */
-	vma->vm_flags &= ~VM_PFNMAP;
+	vm_flags_clear(vma, VM_PFNMAP);
 
 	/* This ->vm_pgoff dance is needed to make all parties happy:
 	 * - dma_mmap_wc() uses ->vm_pgoff as an offset within the allocated

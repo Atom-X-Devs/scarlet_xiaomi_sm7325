@@ -246,7 +246,7 @@ static int vgem_mmap(struct file *filp, struct vm_area_struct *vma)
 	/* Keep the WC mmaping set by drm_gem_mmap() but our pages
 	 * are ordinary and not special.
 	 */
-	vma->vm_flags = flags | VM_DONTEXPAND | VM_DONTDUMP;
+	vm_flags_reset(vma, flags | VM_DONTEXPAND | VM_DONTDUMP);
 	return 0;
 }
 
@@ -393,7 +393,7 @@ static int vgem_prime_mmap(struct drm_gem_object *obj,
 		return ret;
 
 	vma_set_file(vma, obj->filp);
-	vma->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;
+	vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP);
 	vma->vm_page_prot = pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
 
 	return 0;

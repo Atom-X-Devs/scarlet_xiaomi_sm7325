@@ -242,7 +242,7 @@ static int rockchip_drm_gem_object_mmap(struct drm_gem_object *obj,
 	 * We allocated a struct page table for rk_obj, so clear
 	 * VM_PFNMAP flag that was set by drm_gem_mmap_obj()/drm_gem_mmap().
 	 */
-	vma->vm_flags &= ~VM_PFNMAP;
+	vm_flags_clear(vma, VM_PFNMAP);
 
 	if (rk_obj->pages)
 		ret = rockchip_drm_gem_object_mmap_iommu(obj, vma);

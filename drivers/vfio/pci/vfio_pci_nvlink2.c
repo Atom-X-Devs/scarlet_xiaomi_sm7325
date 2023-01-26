@@ -149,7 +149,7 @@ static int vfio_pci_nvgpu_mmap(struct vfio_pci_device *vdev,
 		return -EINVAL;
 
 	vma->vm_private_data = region;
-	vma->vm_flags |= VM_PFNMAP;
+	vm_flags_set(vma, VM_PFNMAP);
 	vma->vm_ops = &vfio_pci_nvgpu_mmap_vmops;
 
 	/*
@@ -338,7 +338,7 @@ static int vfio_pci_npu2_mmap(struct vfio_pci_device *vdev,
 	if (req_len != PAGE_SIZE)
 		return -EINVAL;
 
-	vma->vm_flags |= VM_PFNMAP;
+	vm_flags_set(vma, VM_PFNMAP);
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 
 	ret = remap_pfn_range(vma, vma->vm_start, data->mmio_atsd >> PAGE_SHIFT,

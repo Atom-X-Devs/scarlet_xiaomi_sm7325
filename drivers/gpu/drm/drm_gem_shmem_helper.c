@@ -558,8 +558,7 @@ int drm_gem_shmem_mmap(struct file *filp, struct vm_area_struct *vma)
 		return ret;
 
 	/* VM_PFNMAP was set by drm_gem_mmap() */
-	vma->vm_flags &= ~VM_PFNMAP;
-	vma->vm_flags |= VM_MIXEDMAP;
+	vm_flags_mod(vma, VM_MIXEDMAP, VM_PFNMAP);
 
 	return 0;
 }

@@ -3357,7 +3357,7 @@ static int snd_pcm_mmap_status(struct snd_pcm_substream *substream, struct file 
 		return -EINVAL;
 	area->vm_ops = &snd_pcm_vm_ops_status;
 	area->vm_private_data = substream;
-	area->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;
+	vm_flags_set(area, VM_DONTEXPAND | VM_DONTDUMP);
 	return 0;
 }
 
@@ -3393,7 +3393,7 @@ static int snd_pcm_mmap_control(struct snd_pcm_substream *substream, struct file
 		return -EINVAL;
 	area->vm_ops = &snd_pcm_vm_ops_control;
 	area->vm_private_data = substream;
-	area->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;
+	vm_flags_set(area, VM_DONTEXPAND | VM_DONTDUMP);
 	return 0;
 }
 
@@ -3505,7 +3505,7 @@ static const struct vm_operations_struct snd_pcm_vm_ops_data_fault = {
 int snd_pcm_lib_default_mmap(struct snd_pcm_substream *substream,
 			     struct vm_area_struct *area)
 {
-	area->vm_flags |= VM_DONTEXPAND | VM_DONTDUMP;
+	vm_flags_set(area, VM_DONTEXPAND | VM_DONTDUMP);
 #ifdef CONFIG_GENERIC_ALLOCATOR
 	if (substream->dma_buffer.dev.type == SNDRV_DMA_TYPE_DEV_IRAM) {
 		area->vm_page_prot = pgprot_writecombine(area->vm_page_prot);

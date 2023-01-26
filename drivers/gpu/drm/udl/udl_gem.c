@@ -92,8 +92,7 @@ int udl_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 	if (ret)
 		return ret;
 
-	vma->vm_flags &= ~VM_PFNMAP;
-	vma->vm_flags |= VM_MIXEDMAP;
+	vm_flags_mod(vma, VM_MIXEDMAP, VM_PFNMAP);
 
 	update_vm_cache_attr(to_udl_bo(vma->vm_private_data), vma);
 

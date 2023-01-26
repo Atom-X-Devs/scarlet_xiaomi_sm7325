@@ -2699,8 +2699,8 @@ static int goya_cb_mmap(struct hl_device *hdev, struct vm_area_struct *vma,
 {
 	int rc;
 
-	vma->vm_flags |= VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP |
-			VM_DONTCOPY | VM_NORESERVE;
+	vm_flags_set(vma, VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP |
+			VM_DONTCOPY | VM_NORESERVE);
 
 	rc = remap_pfn_range(vma, vma->vm_start, paddress >> PAGE_SHIFT,
 				size, vma->vm_page_prot);

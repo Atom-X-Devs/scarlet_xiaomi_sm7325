@@ -42,7 +42,7 @@ static int exynos_drm_fb_mmap(struct fb_info *info,
 	unsigned long vm_size;
 	int ret;
 
-	vma->vm_flags |= VM_IO | VM_DONTEXPAND | VM_DONTDUMP;
+	vm_flags_set(vma, VM_IO | VM_DONTEXPAND | VM_DONTDUMP);
 
 	vm_size = vma->vm_end - vma->vm_start;
 

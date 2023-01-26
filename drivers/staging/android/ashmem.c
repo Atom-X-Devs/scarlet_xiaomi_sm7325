@@ -210,7 +210,7 @@ static int ashmem_mmap(struct file *file, struct vm_area_struct *vma)
 		     calc_vm_prot_bits(PROT_MASK, 0)))
 		return -EPERM;
 
-	vma->vm_flags &= ~calc_vm_may_flags(~prot_mask);
+	vm_flags_clear(vma, calc_vm_may_flags(~prot_mask));
 
 	if (!READ_ONCE(asma->file)) {
 		mutex_lock(&asma->mmap_lock);

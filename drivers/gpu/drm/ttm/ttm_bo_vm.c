@@ -231,7 +231,7 @@ static vm_fault_t ttm_bo_vm_fault(struct vm_fault *vmf)
 	 * and vm_flags if necessary. The vma parameter is protected
 	 * by mmap_sem in write mode.
 	 */
-	cvma = *vma;
+	memcpy(&cvma, vma, sizeof(cvma));
 	cvma.vm_page_prot = vm_get_page_prot(cvma.vm_flags);
 
 	if (bo->mem.bus.is_iomem) {
@@ -471,8 +471,7 @@ int ttm_bo_mmap(struct file *filp, struct vm_area_struct *vma,
 	 * bad for performance. Until that has been sorted out, use
 	 * VM_MIXEDMAP on all mappings. See freedesktop.org bug #75719
 	 */
-	vma->vm_flags |= VM_MIXEDMAP;
-	vma->vm_flags |= VM_IO | VM_DONTEXPAND | VM_DONTDUMP;
+	vm_flags_set(vma, VM_MIXEDMAP | VM_IO | VM_DONTEXPAND | VM_DONTDUMP);
 	return 0;
 out_unref:
 	ttm_bo_put(bo);
@@ -489,8 +488,7 @@ int ttm_fbdev_mmap(struct vm_area_struct *vma, struct ttm_buffer_object *bo)
 
 	vma->vm_ops = &ttm_bo_vm_ops;
 	vma->vm_private_data = bo;
-	vma->vm_flags |= VM_MIXEDMAP;
-	vma->vm_flags |= VM_IO | VM_DONTEXPAND;
+	vm_flags_set(vma, VM_MIXEDMAP | VM_IO | VM_DONTEXPAND);
 	return 0;
 }
 EXPORT_SYMBOL(ttm_fbdev_mmap);

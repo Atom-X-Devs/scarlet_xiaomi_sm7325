@@ -1388,8 +1388,8 @@ static int virtio_eavb_mmap(struct file *file, struct vm_area_struct *vma)
 		LOG_EAVB(LEVEL_ERR, "kmalloc failed\n");
 		return -ENOMEM;
 	}
-	vma->vm_flags |= VM_IO;
-	vma->vm_flags |= VM_LOCKED;
+	vm_flags_set(vma, VM_IO);
+	vm_flags_set(vma, VM_LOCKED);
 
 	if (remap_pfn_range(vma, vma->vm_start,
 		virt_to_phys(buf)>>PAGE_SHIFT, vsize, vma->vm_page_prot)) {

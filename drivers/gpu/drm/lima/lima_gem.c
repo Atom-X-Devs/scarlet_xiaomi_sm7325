@@ -113,8 +113,7 @@ void lima_set_vma_flags(struct vm_area_struct *vma)
 {
 	pgprot_t prot = vm_get_page_prot(vma->vm_flags);
 
-	vma->vm_flags |= VM_MIXEDMAP;
-	vma->vm_flags &= ~VM_PFNMAP;
+	vm_flags_mod(vma, VM_MIXEDMAP, VM_PFNMAP);
 	vma->vm_page_prot = pgprot_writecombine(prot);
 }
 

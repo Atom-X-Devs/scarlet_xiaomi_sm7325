@@ -3706,9 +3706,11 @@ void __unmap_hugepage_range_final(struct mmu_gather *tlb,
 	 * before the __unmap_hugepage_range above, but all that's necessary
 	 * is to clear it before releasing the i_mmap_rwsem. This works
 	 * because in the context this is called, the VMA is about to be
-	 * destroyed and the i_mmap_rwsem is held.
+	 * destroyed and the i_mmap_rwsem is held. The mmap_lock may only be
+	 * held for read here (munmap downgrades it), so modify the flags
+	 * without the write lock assertion of vm_flags_clear().
 	 */
-	vma->vm_flags &= ~VM_MAYSHARE;
+	vm_flags_init(vma, vma->vm_flags & ~VM_MAYSHARE);
 }
 
 void unmap_hugepage_range(struct vm_area_struct *vma, unsigned long start,

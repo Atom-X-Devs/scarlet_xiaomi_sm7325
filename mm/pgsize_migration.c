@@ -118,8 +118,7 @@ void vma_set_pad_pages(struct vm_area_struct *vma,
 	if (!is_pgsize_migration_enabled())
 		return;
 
-	vma->vm_flags &= ~VM_PAD_MASK;
-	vma->vm_flags |= (nr_pages << VM_PAD_SHIFT);
+	vm_flags_mod(vma, nr_pages << VM_PAD_SHIFT, VM_PAD_MASK);
 }
 
 unsigned long vma_pad_pages(struct vm_area_struct *vma)
@@ -274,10 +273,10 @@ static void init_pad_vma(struct vm_area_struct *vma, struct vm_area_struct *pad)
 	pad->vm_start = VMA_PAD_START(pad);
 
 	/* Make the pad vma PROT_NONE */
-	pad->vm_flags &= ~(VM_READ|VM_WRITE|VM_EXEC);
+	vm_flags_init(pad, pad->vm_flags & ~(VM_READ|VM_WRITE|VM_EXEC));
 
 	/* Remove padding bits */
-	pad->vm_flags &= ~VM_PAD_MASK;
+	vm_flags_init(pad, pad->vm_flags & ~VM_PAD_MASK);
 }
 
 /*

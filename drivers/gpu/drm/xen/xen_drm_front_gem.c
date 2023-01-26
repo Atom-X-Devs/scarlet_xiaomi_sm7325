@@ -230,8 +230,8 @@ static int gem_mmap_obj(struct xen_gem_object *xen_obj,
 	 * vm_pgoff (used as a fake buffer offset by DRM) to 0 as we want to map
 	 * the whole buffer.
 	 */
-	vma->vm_flags &= ~VM_PFNMAP;
-	vma->vm_flags |= VM_MIXEDMAP;
+	vm_flags_clear(vma, VM_PFNMAP);
+	vm_flags_set(vma, VM_MIXEDMAP);
 	vma->vm_pgoff = 0;
 	/*
 	 * According to Xen on ARM ABI (xen/include/public/arch-arm.h):
