@@ -3710,7 +3710,7 @@ void __unmap_hugepage_range_final(struct mmu_gather *tlb,
 	 * held for read here (munmap downgrades it), so modify the flags
 	 * without the write lock assertion of vm_flags_clear().
 	 */
-	vm_flags_init(vma, vma->vm_flags & ~VM_MAYSHARE);
+	__vm_flags_mod(vma, 0, VM_MAYSHARE);
 }
 
 void unmap_hugepage_range(struct vm_area_struct *vma, unsigned long start,

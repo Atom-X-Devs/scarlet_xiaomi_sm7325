@@ -129,7 +129,7 @@ void memunmap_pages(struct dev_pagemap *pgmap)
 	}
 	mem_hotplug_done();
 
-	untrack_pfn(NULL, PHYS_PFN(res->start), resource_size(res));
+	untrack_pfn(NULL, PHYS_PFN(res->start), resource_size(res), true);
 	pgmap_array_delete(res);
 	WARN_ONCE(pgmap->altmap.alloc, "failed to free all reserved pages\n");
 	devmap_managed_enable_put();
@@ -309,7 +309,7 @@ void *memremap_pages(struct dev_pagemap *pgmap, int nid)
  err_add_memory:
 	kasan_remove_zero_shadow(__va(res->start), resource_size(res));
  err_kasan:
-	untrack_pfn(NULL, PHYS_PFN(res->start), resource_size(res));
+	untrack_pfn(NULL, PHYS_PFN(res->start), resource_size(res), true);
  err_pfn_remap:
 	pgmap_array_delete(res);
  err_array:
