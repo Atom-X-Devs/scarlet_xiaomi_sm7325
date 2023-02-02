@@ -367,7 +367,7 @@ static irqreturn_t pm8xxx_alarm_trigger(int irq, void *dev_id)
 	/* Clear the alarm enable bit */
 	rc = regmap_read(rtc_dd->regmap, regs->alarm_ctrl, &ctrl_reg);
 	if (rc)
-		goto out;
+		return IRQ_NONE;
 
 	ctrl_reg &= ~regs->alarm_en;
 
@@ -375,7 +375,7 @@ static irqreturn_t pm8xxx_alarm_trigger(int irq, void *dev_id)
 	if (rc) {
 		dev_err(rtc_dd->rtc_dev,
 			"Write to alarm control register failed\n");
-		goto out;
+		return IRQ_NONE;
 	}
 
 	/* Clear RTC alarm register */
@@ -383,7 +383,7 @@ static irqreturn_t pm8xxx_alarm_trigger(int irq, void *dev_id)
 	if (rc) {
 		dev_err(rtc_dd->rtc_dev,
 			"RTC Alarm control2 register read failed\n");
-		goto out;
+		return IRQ_NONE;
 	}
 
 	ctrl_reg |= PM8xxx_RTC_ALARM_CLEAR;
@@ -392,7 +392,6 @@ static irqreturn_t pm8xxx_alarm_trigger(int irq, void *dev_id)
 		dev_err(rtc_dd->rtc_dev,
 			"Write to RTC Alarm control2 register failed\n");
 
-out:
 	return IRQ_HANDLED;
 }
 
