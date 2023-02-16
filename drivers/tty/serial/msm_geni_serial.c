@@ -2199,6 +2199,7 @@ static void msm_geni_serial_handle_isr(struct uart_port *uport,
 	unsigned int dma;
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
 	struct tty_port *tport = &uport->state->port;
+	struct tty_struct *tty = uport->state->port.tty;
 	bool s_cmd_done = false;
 	bool m_cmd_done = false;
 
@@ -2262,9 +2263,19 @@ static void msm_geni_serial_handle_isr(struct uart_port *uport,
 				"%s: sirq:0x%x mirq:0x%x dma_txirq:0x%x dma_rxirq:0x%x is_irq_masked:%d\n",
 				__func__, s_irq_status, m_irq_status,
 				dma_tx_status, dma_rx_status, is_irq_masked);
+
+		/* uport->state->port.tty pointer initialized as part of
+		 * UART port_open. Adding check to ensure tty should have
+		 * a valid value before using.
+		 */
+		if (tty) {
 			m_cmd_done = handle_tx_dma_xfer(m_irq_status, uport);
 			s_cmd_done = handle_rx_dma_xfer(s_irq_status, uport);
+		} else {
+			GENI_SE_DBG(msm_port->ipc_log_irqstatus, false, uport->dev,
+				     "Port is closed!\n");
 		}
+	}
 
 exit_geni_serial_isr:
 	if (m_cmd_done) {
