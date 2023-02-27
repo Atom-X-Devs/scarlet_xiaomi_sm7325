@@ -2547,6 +2547,7 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 
 			mas_set(mas, end);
 			split = mas_prev(mas, 0);
+			vma_start_write(split);
 			mas_set_range(&mas_detach, split->vm_start, split->vm_end - 1);
 			error = mas_store_gfp(&mas_detach, split, GFP_KERNEL);
 			if (error)
@@ -2559,6 +2560,7 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 				vma = split;
 			break;
 		}
+		vma_start_write(next);
 		mas_set_range(&mas_detach, next->vm_start, next->vm_end - 1);
 		error = mas_store_gfp(&mas_detach, next, GFP_KERNEL);
 		if (error)
