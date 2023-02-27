@@ -618,6 +618,8 @@ inline int vma_expand(struct ma_state *mas, struct vm_area_struct *vma,
 	vma->vm_pgoff = pgoff;
 	/* Note: mas must be pointing to the expanding VMA */
 	vma_mas_store(vma, mas);
+	if (remove_next)
+		vma_mark_detached(next, true);
 
 	if (file) {
 		vma_interval_tree_insert(vma, root);
@@ -916,6 +918,7 @@ int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
 
 	if (remove_next) {
 again:
+		vma_mark_detached(next, true);
 		if (file) {
 			uprobe_munmap(next, next->vm_start, next->vm_end);
 			fput(file);
@@ -2552,6 +2555,7 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 			error = mas_store_gfp(&mas_detach, split, GFP_KERNEL);
 			if (error)
 				goto munmap_gather_failed;
+			vma_mark_detached(split, true);
 			if (next->vm_flags & VM_LOCKED)
 				locked_vm += vma_pages(split);
 
@@ -2565,6 +2569,7 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 		error = mas_store_gfp(&mas_detach, next, GFP_KERNEL);
 		if (error)
 			goto munmap_gather_failed;
+		vma_mark_detached(next, true);
 		if (next->vm_flags & VM_LOCKED)
 			locked_vm += vma_pages(next);
 
@@ -2662,6 +2667,10 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 userfaultfd_error:
 munmap_gather_failed:
 end_split_failed:
+	mas_set(&mas_detach, start);
+	mas_for_each(&mas_detach, next, end - 1)
+		vma_mark_detached(next, false);
+
 	__mt_destroy(&mt_detach);
 start_split_failed:
 map_count_exceeded:
