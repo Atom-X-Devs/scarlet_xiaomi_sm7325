@@ -9,7 +9,7 @@ static bool tcp_rack_sent_after(u64 t1, u64 t2, u32 seq1, u32 seq2)
 
 static u32 tcp_rack_reo_wnd(const struct sock *sk)
 {
-	struct tcp_sock *tp = tcp_sk(sk);
+	const struct tcp_sock *tp = tcp_sk(sk);
 
 	if (!tp->reord_seen) {
 		/* If reordering has not been observed, be aggressive during
