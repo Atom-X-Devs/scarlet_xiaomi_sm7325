@@ -53,11 +53,19 @@ static irqreturn_t i2c_irq_handler(int irq, void *dev_id)
 {
 	struct nfc_dev *nfc_dev = dev_id;
 	struct i2c_dev *i2c_dev = &nfc_dev->i2c_dev;
+#ifdef CONFIG_MACH_XIAOMI
+	unsigned long flags;
+#endif
 
 	if (device_may_wakeup(&i2c_dev->client->dev))
 		pm_wakeup_event(&i2c_dev->client->dev, WAKEUP_SRC_TIMEOUT);
 
 	i2c_disable_irq(nfc_dev);
+#ifdef CONFIG_MACH_XIAOMI
+	spin_lock_irqsave(&i2c_dev->irq_enabled_lock, flags);
+	i2c_dev->count_irq++;
+	spin_unlock_irqrestore(&i2c_dev->irq_enabled_lock, flags);
+#endif
 	wake_up(&nfc_dev->read_wq);
 
 	return IRQ_HANDLED;
@@ -275,6 +283,13 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	struct i2c_dev *i2c_dev = NULL;
 	struct platform_gpio nfc_gpio;
 	struct platform_ldo nfc_ldo;
+
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
+	if (get_hw_country_version() == (uint32_t)CountryIndia) {
+		pr_info("%s: NFC is unsupported on redwoodin!", __func__);
+		return -ENODEV;
+	}
+#endif
 
 	pr_debug("%s: enter\n", __func__);
 
