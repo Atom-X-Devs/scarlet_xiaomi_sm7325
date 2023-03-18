@@ -41,7 +41,11 @@ struct qcom_dload {
 static bool enable_dump =
 	IS_ENABLED(CONFIG_POWER_RESET_QCOM_DOWNLOAD_MODE_DEFAULT);
 static enum qcom_download_mode current_download_mode = QCOM_DOWNLOAD_NODUMP;
+#ifndef CONFIG_MACH_XIAOMI
 static enum qcom_download_mode dump_mode = QCOM_DOWNLOAD_FULLDUMP;
+#else
+static enum qcom_download_mode dump_mode = QCOM_DOWNLOAD_BOTHDUMP;
+#endif
 static bool early_pcie_init_enable;
 
 static int set_download_mode(enum qcom_download_mode mode)
