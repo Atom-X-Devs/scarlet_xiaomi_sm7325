@@ -3,6 +3,9 @@
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
+#include <linux/hwid.h>
+#endif
 #include "nfc_common.h"
 
 /**
@@ -275,6 +278,13 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	struct i2c_dev *i2c_dev = NULL;
 	struct platform_gpio nfc_gpio;
 	struct platform_ldo nfc_ldo;
+
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
+	if (get_hw_country_version() == (uint32_t)CountryIndia) {
+		pr_info("%s: NFC is unsupported on redwoodin!", __func__);
+		return -ENODEV;
+	}
+#endif
 
 	pr_debug("%s: enter\n", __func__);
 
