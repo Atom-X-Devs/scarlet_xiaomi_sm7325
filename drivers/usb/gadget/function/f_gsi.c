@@ -2965,6 +2965,7 @@ fail:
 	if (gsi->c_port.notify_req) {
 		kfree(gsi->c_port.notify_req->buf);
 		usb_ep_free_request(gsi->c_port.notify, gsi->c_port.notify_req);
+		gsi->c_port.notify_req = NULL;
 	}
 	/* we might as well release our claims on endpoints */
 	if (gsi->c_port.notify)
@@ -3436,6 +3437,7 @@ static void gsi_unbind(struct usb_configuration *c, struct usb_function *f)
 	if (gsi->c_port.notify) {
 		kfree(gsi->c_port.notify_req->buf);
 		usb_ep_free_request(gsi->c_port.notify, gsi->c_port.notify_req);
+		gsi->c_port.notify_req = NULL;
 	}
 }
 
