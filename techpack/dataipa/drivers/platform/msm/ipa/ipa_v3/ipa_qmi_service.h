@@ -25,7 +25,7 @@
 #define SUBSYS_LOCAL_MODEM "modem"
 #define SUBSYS_REMOTE_MODEM "esoc0"
 
-
+#ifdef CONFIG_IPC_LOGGING
 #define IPAWANDBG(fmt, args...) \
 	do { \
 		pr_debug(DEV_NAME " %s:%d " fmt, __func__,\
@@ -74,6 +74,14 @@
 		IPA_IPC_LOGGING(ipa3_get_ipc_logbuf_low(), \
 				DEV_NAME " %s:%d " fmt, ## args); \
 	} while (0)
+
+#else
+#define IPAWANDBG(fmt, args...) pr_debug(DEV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+#define IPAWANDBG_LOW(fmt, args...) pr_debug(DEV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+#define IPAWANERR(fmt, args...) pr_err(DEV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+#define IPAWANERR_RL(fmt, args...) pr_err_ratelimited_ipa(DEV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+#define IPAWANINFO(fmt, args...) pr_info(DEV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+#endif
 
 extern struct ipa3_qmi_context *ipa3_qmi_ctx;
 
