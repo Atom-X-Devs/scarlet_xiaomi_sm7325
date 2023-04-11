@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __KGSL_IOMMU_H
 #define __KGSL_IOMMU_H
@@ -134,6 +135,7 @@ struct kgsl_iommu {
 	u32 pagesize;
 	/** @cx_gdsc: CX GDSC handle in case the IOMMU needs it */
 	struct regulator *cx_gdsc;
+	u32 pagefault_suppression_count;
 };
 
 /*

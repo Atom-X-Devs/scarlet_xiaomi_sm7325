@@ -587,12 +587,54 @@ static int kgsl_iommu_lpac_fault_handler(struct iommu_domain *domain,
 	return 0;
 }
 
+static bool kgsl_iommu_uche_overfetch(struct kgsl_process_private *private,
+	uint64_t faultaddr)
+{
+	int id;
+	struct kgsl_mem_entry *entry = NULL;
+
+	spin_lock(&private->mem_lock);
+	idr_for_each_entry(&private->mem_idr, entry, id) {
+		struct kgsl_memdesc *m = &entry->memdesc;
+
+		if ((faultaddr >= (m->gpuaddr + m->size))
+			&& (faultaddr < (m->gpuaddr + m->size + 64))) {
+			spin_unlock(&private->mem_lock);
+			return true;
+		}
+	}
+	spin_unlock(&private->mem_lock);
+	return false;
+}
+
+/*
+ * Read pagefaults where the faulting address lies within the first 64 bytes
+ * of a page (UCHE line size is 64 bytes) and the fault page is preceded by a
+ * valid allocation are considered likely due to UCHE overfetch and suppressed.
+ */
+
+static bool kgsl_iommu_suppress_pagefault(uint64_t faultaddr, int write,
+					struct kgsl_process_private *private)
+{
+	/*
+	 * If there is no context associated with the pagefault then this
+	 * could be a fault on a global buffer. We do not suppress faults
+	 * on global buffers as they are mainly accessed by the CP bypassing
+	 * the UCHE. Also, write pagefaults are never suppressed.
+	 */
+	if (!private || write)
+		return false;
+
+	return kgsl_iommu_uche_overfetch(private, faultaddr);
+}
+
 static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 	struct device *dev, unsigned long addr, int flags, void *token)
 {
 	int ret = 0;
 	struct kgsl_pagetable *pt = token;
 	struct kgsl_mmu *mmu = pt->mmu;
+	struct kgsl_iommu *iommu;
 	struct kgsl_iommu_context *ctx;
 	u64 ptbase;
 	u32 contextidr;
@@ -615,7 +657,7 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 
 	if (mmu == NULL)
 		return ret;
-
+	iommu = _IOMMU_PRIV(mmu);
 	device = KGSL_MMU_DEVICE(mmu);
 	adreno_dev = ADRENO_DEVICE(device);
 	gpudev = ADRENO_GPU_DEVICE(adreno_dev);
@@ -640,6 +682,11 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 		comm = private->comm;
 	}
 
+	if (kgsl_iommu_suppress_pagefault(addr, write, private)) {
+		iommu->pagefault_suppression_count++;
+		kgsl_process_private_put(private);
+		return ret;
+	}
 	if (test_bit(KGSL_FT_PAGEFAULT_GPUHALT_ENABLE,
 		&adreno_dev->ft_pf_policy) &&
 		(flags & IOMMU_FAULT_TRANSACTION_STALLED)) {
