@@ -1775,7 +1775,6 @@ static int goodix_ts_resume(struct goodix_ts_core *core_data)
 
 	ts_info("Resume start");
 	atomic_set(&core_data->suspended, 0);
-	hw_ops->irq_enable(core_data, false);
 
 	mutex_lock(&goodix_modules.mutex);
 	if (!list_empty(&goodix_modules.head)) {
