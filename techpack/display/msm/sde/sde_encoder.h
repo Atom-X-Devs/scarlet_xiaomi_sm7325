@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
- * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2023, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -48,7 +48,7 @@
 #define SDE_ENCODER_FRAME_EVENT_SIGNAL_RETIRE_FENCE	BIT(4)
 #define SDE_ENCODER_FRAME_EVENT_CWB_DONE		BIT(5)
 
-#define IDLE_POWERCOLLAPSE_DURATION	(66 - 16/2)
+#define IDLE_POWERCOLLAPSE_DURATION	(300)
 #define IDLE_POWERCOLLAPSE_IN_EARLY_WAKEUP (200 - 16/2)
 
 /**
