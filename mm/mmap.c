@@ -78,7 +78,8 @@ core_param(ignore_rlimit_data, ignore_rlimit_data, bool, 0644);
 static void unmap_region(struct mm_struct *mm, struct maple_tree *mt,
 		struct vm_area_struct *vma, struct vm_area_struct *prev,
 		struct vm_area_struct *next, unsigned long start,
-		unsigned long end, bool mm_wr_locked);
+		unsigned long end, unsigned long tree_start,
+		unsigned long tree_end, bool mm_wr_locked);
 
 /* description of effects of mapping type and prot in current implementation.
  * this is due to the limited x86 page protection hardware.  The expected
@@ -2365,16 +2366,18 @@ static inline void remove_mt(struct mm_struct *mm, struct ma_state *mas)
 static void unmap_region(struct mm_struct *mm, struct maple_tree *mt,
 		struct vm_area_struct *vma, struct vm_area_struct *prev,
 		struct vm_area_struct *next,
-		unsigned long start, unsigned long end, bool mm_wr_locked)
+		unsigned long start, unsigned long end, unsigned long tree_start,
+		unsigned long tree_end, bool mm_wr_locked)
 {
 	struct mmu_gather tlb;
 	struct vm_area_struct *cur_vma;
-	MA_STATE(mas, mt, vma->vm_end, vma->vm_end);
+	MA_STATE(mas, mt, tree_start, tree_start);
 
 	lru_add_drain();
 	tlb_gather_mmu(&tlb, mm, start, end);
 	update_hiwater_rss(mm);
-	unmap_vmas(&tlb, mt, vma, start, end, mm_wr_locked);
+	unmap_vmas(&tlb, mt, vma, start, end, tree_start, tree_end,
+		   mm_wr_locked);
 
 	/*
 	 * Ensure we have no stale TLB entries by the time this mapping is
@@ -2390,10 +2393,11 @@ static void unmap_region(struct mm_struct *mm, struct maple_tree *mt,
 			tlb_flush_mmu(&tlb);
 			break;
 		}
-	} while ((cur_vma = mas_find(&mas, end - 1)) != NULL);
+	} while ((cur_vma = mas_find(&mas, tree_end - 1)) != NULL);
 
 	free_pgtables(&tlb, mt, vma, prev ? prev->vm_end : FIRST_USER_ADDRESS,
-				 next ? next->vm_start : USER_PGTABLES_CEILING, true);
+				 next ? next->vm_start : USER_PGTABLES_CEILING,
+				 tree_start, tree_end, true);
 	tlb_finish_mmu(&tlb, start, end);
 }
 
@@ -2548,6 +2552,9 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 		mas_set(mas, start);
 
 	/*
+	 * Index the detached VMAs in address order, beginning at zero.
+	 * A single VMA can then be stored directly in the tree root.
+	 *
 	 * Detach a range of VMAs from the mm. Using next as a temp variable as
 	 * it is always overwritten.
 	 */
@@ -2563,21 +2570,20 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 			mas_set(mas, end);
 			split = mas_prev(mas, 0);
 			vma_start_write(split);
-			mas_set_range(&mas_detach, split->vm_start, split->vm_end - 1);
+			mas_set(&mas_detach, count);
 			error = mas_store_gfp(&mas_detach, split, GFP_KERNEL);
 			if (error)
 				goto munmap_gather_failed;
 			vma_mark_detached(split, true);
 			if (next->vm_flags & VM_LOCKED)
 				locked_vm += vma_pages(split);
-
 			count++;
 			if (vma == next)
 				vma = split;
 			break;
 		}
 		vma_start_write(next);
-		mas_set_range(&mas_detach, next->vm_start, next->vm_end - 1);
+		mas_set(&mas_detach, count);
 		error = mas_store_gfp(&mas_detach, next, GFP_KERNEL);
 		if (error)
 			goto munmap_gather_failed;
@@ -2614,17 +2620,17 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 #if defined(CONFIG_DEBUG_VM_MAPLE_TREE)
 	/* Make sure no VMAs are about to be lost. */
 	{
-		MA_STATE(test, &mt_detach, start, end - 1);
+		MA_STATE(test, &mt_detach, 0, 0);
 		struct vm_area_struct *vma_mas, *vma_test;
 		int test_count = 0;
 
 		mas_set_range(mas, start, end - 1);
 		rcu_read_lock();
-		vma_test = mas_find(&test, end - 1);
+		vma_test = mas_find(&test, count - 1);
 		mas_for_each(mas, vma_mas, end - 1) {
 			BUG_ON(vma_mas != vma_test);
 			test_count++;
-			vma_test = mas_next(&test, end - 1);
+			vma_test = mas_next(&test, count - 1);
 		}
 		rcu_read_unlock();
 		BUG_ON(count != test_count);
@@ -2639,6 +2645,10 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 
 	/* Point of no return */
 
+	/* Keep events from earlier successful unmaps on the caller's list. */
+	if (uf)
+		list_splice_tail(&uf_new_unmaps, uf);
+
 	/*
 	 * Before v5.18 the pages of mlocked VMAs must be munlocked before the
 	 * VMAs are unmapped. Do it only once nothing can fail any more, as
@@ -2647,17 +2657,12 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 	{
 		struct vm_area_struct *locked;
 
-		mas_set(&mas_detach, start);
-		mas_for_each(&mas_detach, locked, end - 1) {
+		mas_set(&mas_detach, 0);
+		mas_for_each(&mas_detach, locked, count - 1) {
 			if (locked->vm_flags & VM_LOCKED)
 				munlock_vma_pages_all(locked);
 		}
 	}
-
-	/* Keep events from earlier successful unmaps on the caller's list. */
-	if (uf)
-		list_splice_tail(&uf_new_unmaps, uf);
-
 
 	mm->locked_vm -= locked_vm;
 	mm->map_count -= count;
@@ -2675,9 +2680,10 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 			mmap_write_downgrade(mm);
 	}
 
-	unmap_region(mm, &mt_detach, vma, prev, next, start, end, !downgrade);
+	unmap_region(mm, &mt_detach, vma, prev, next, start, end, 1, count,
+		     !downgrade);
 	/* Statistics and freeing VMAs */
-	mas_set(&mas_detach, start);
+	mas_set(&mas_detach, 0);
 	remove_mt(mm, &mas_detach);
 	__mt_destroy(&mt_detach);
 
@@ -3004,7 +3010,7 @@ unmap_and_free_vma:
 
 	/* Undo any partial mapping done by a device driver. */
 	unmap_region(mm, mas.tree, vma, prev, next, vma->vm_start, vma->vm_end,
-		     true);
+		     vma->vm_end, vma->vm_end, true);
 	if (writable_file_mapping)
 		mapping_unmap_writable(file->f_mapping);
 	if (vm_flags & VM_DENYWRITE)
@@ -3400,9 +3406,11 @@ void exit_mmap(struct mm_struct *mm)
 	tlb_gather_mmu(&tlb, mm, 0, -1);
 	/* update_hiwater_rss(mm) here? but nobody should be looking */
 	/* Use ULONG_MAX here to ensure all VMAs in the mm are unmapped */
-	unmap_vmas(&tlb, &mm->mm_mt, vma, 0, ULONG_MAX, true);
+	unmap_vmas(&tlb, &mm->mm_mt, vma, 0, ULONG_MAX, vma->vm_end,
+		   ULONG_MAX, true);
 	mt_clear_in_rcu(&mm->mm_mt);
 	free_pgtables(&tlb, &mm->mm_mt, vma, FIRST_USER_ADDRESS,
+		      USER_PGTABLES_CEILING, vma->vm_end,
 		      USER_PGTABLES_CEILING, true);
 	tlb_finish_mmu(&tlb, 0, -1);
 

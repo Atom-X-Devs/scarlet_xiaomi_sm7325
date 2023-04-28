@@ -1861,7 +1861,8 @@ void zap_page_range(struct vm_area_struct *vma, unsigned long address,
 		    unsigned long size);
 void unmap_vmas(struct mmu_gather *tlb, struct maple_tree *mt,
 		struct vm_area_struct *start_vma, unsigned long start,
-		unsigned long end, bool mm_wr_locked);
+		unsigned long end, unsigned long tree_start,
+		unsigned long tree_end, bool mm_wr_locked);
 
 struct mmu_notifier_range;
 
