@@ -80,8 +80,6 @@ static inline void _update_idle_rq_clock_pelt(struct rq *rq)
 	u64_u32_store(rq->clock_pelt_idle, rq_clock_pelt(rq));
 }
 
-extern unsigned int sched_pelt_lshift;
-
 /*
  * The clock_pelt scales the time to reflect the effective amount of
  * computation done during the running delta time but then sync back to
@@ -96,10 +94,6 @@ extern unsigned int sched_pelt_lshift;
  */
 static inline void update_rq_clock_pelt(struct rq *rq, s64 delta)
 {
-	delta <<= READ_ONCE(sched_pelt_lshift);
-
-	per_cpu(clock_task_mult, rq->cpu) += delta;
-
 	if (unlikely(is_idle_task(rq->curr))) {
 		_update_idle_rq_clock_pelt(rq);
 		return;
@@ -153,8 +147,7 @@ static inline void update_idle_rq_clock_pelt(struct rq *rq)
 	 * rq's clock_task.
 	 */
 	if (util_sum >= divider)
-		rq->lost_idle_time += rq_clock_task_mult(rq) -
-				      rq->clock_pelt;
+		rq->lost_idle_time += rq_clock_task(rq) - rq->clock_pelt;
 
 	_update_idle_rq_clock_pelt(rq);
 }
