@@ -671,14 +671,7 @@ static void reset_hfi_queues(struct adreno_device *adreno_dev)
 		if (hdr->status == HFI_QUEUE_STATUS_DISABLED)
 			continue;
 
-		if (hdr->read_index != hdr->write_index) {
-			dev_err(&gmu->pdev->dev,
-			"HFI queue[%d] is not empty before close: rd=%d,wt=%d\n",
-				i, hdr->read_index, hdr->write_index);
-			hdr->read_index = hdr->write_index;
-
-			gmu_fault_snapshot(KGSL_DEVICE(adreno_dev));
-		}
+		hdr->read_index = hdr->write_index;
 	}
 }
 
@@ -688,8 +681,6 @@ void a6xx_hwsched_hfi_stop(struct adreno_device *adreno_dev)
 	struct a6xx_hwsched_hfi *hfi = to_a6xx_hwsched_hfi(adreno_dev);
 
 	hfi->irq_mask &= ~HFI_IRQ_MSGQ_MASK;
-
-	reset_hfi_queues(adreno_dev);
 
 	kgsl_pwrctrl_axi(KGSL_DEVICE(adreno_dev), KGSL_PWRFLAGS_OFF);
 
@@ -743,6 +734,8 @@ int a6xx_hwsched_hfi_start(struct adreno_device *adreno_dev)
 	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	int ret;
+
+	reset_hfi_queues(adreno_dev);
 
 	ret = a6xx_gmu_hfi_start(adreno_dev);
 	if (ret)
