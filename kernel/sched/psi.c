@@ -1328,11 +1328,16 @@ void psi_trigger_destroy(struct psi_trigger *t)
 		group->nr_triggers[t->state]--;
 		if (!group->nr_triggers[t->state])
 			group->poll_states &= ~(1 << t->state);
-		/* reset min update period for the remaining triggers */
-		list_for_each_entry(tmp, &group->triggers, node)
-			period = min(period, div_u64(tmp->win.size,
-					UPDATES_PER_WINDOW));
-		group->poll_min_period = period;
+		/*
+		 * Reset min update period for the remaining triggers
+		 * iff the destroying trigger had the min window size.
+		 */
+		if (group->poll_min_period == div_u64(t->win.size, UPDATES_PER_WINDOW)) {
+			list_for_each_entry(tmp, &group->triggers, node)
+				period = min(period, div_u64(tmp->win.size,
+						UPDATES_PER_WINDOW));
+			group->poll_min_period = period;
+		}
 		/* Destroy poll_task when the last trigger is destroyed */
 		if (group->poll_states == 0) {
 			group->polling_until = 0;
