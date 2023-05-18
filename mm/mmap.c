@@ -2649,7 +2649,8 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 		goto clear_tree_failed;
 	}
 
-	/* Point of no return */
+	/* Point of no return. Reset the cursor after the tree write. */
+	mas_set(mas, start);
 
 	/* Keep events from earlier successful unmaps on the caller's list. */
 	if (uf)
@@ -2722,9 +2723,9 @@ map_count_exceeded:
  * @downgrade: set to true if the user wants to attempt to write_downgrade the
  * mmap_sem
  *
- * This function takes a @mas that is either pointing to the previous VMA or set
- * to MA_START and sets it up to remove the mapping(s).  The @len will be
- * aligned and any arch_unmap work will be preformed.
+ * Align @len and remove any mappings in the resulting range after arch_unmap().
+ * On success, @mas is either positioned in the gap containing @start or reset
+ * to @start if mappings were removed.
  *
  * Returns: -EINVAL on failure, 1 on success and unlock, 0 otherwise.
  */
@@ -2745,10 +2746,21 @@ int do_mas_munmap(struct ma_state *mas, struct mm_struct *mm,
 	 /* arch_unmap() might do unmaps itself.  */
 	arch_unmap(mm, start, end);
 
-	/* Find the first overlapping VMA */
-	vma = mas_find(mas, end - 1);
-	if (!vma)
-		return 0;
+	/* Keep the cursor in the gap if there is no overlap. */
+	mas_set(mas, start);
+	vma = mas_walk(mas);
+	if (!vma) {
+		struct ma_state lookup = *mas;
+
+		if (mas->last >= end - 1)
+			return 0;
+
+		vma = mas_next(&lookup, end - 1);
+		if (!vma)
+			return 0;
+
+		*mas = lookup;
+	}
 
 	return do_mas_align_munmap(mas, vma, mm, start, end, uf, downgrade);
 }
@@ -2780,6 +2792,7 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	unsigned long end = addr + len;
 	unsigned long merge_start = addr, merge_end = end;
 	pgoff_t vm_pgoff;
+	struct ma_state lookup;
 	int error;
 	MA_STATE(mas, &mm->mm_mt, addr, end - 1);
 
@@ -2812,8 +2825,13 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 		vm_flags |= VM_ACCOUNT;
 	}
 
-	next = mas_next(&mas, ULONG_MAX);
-	prev = mas_prev(&mas, 0);
+	/* Look up neighbors without moving the cursor out of the gap. */
+	if (mas.node == MAS_START)
+		mas_walk(&mas);
+	lookup = mas;
+	next = mas_next(&lookup, ULONG_MAX);
+	lookup = mas;
+	prev = mas_prev(&lookup, 0);
 	if (vm_flags & VM_SPECIAL)
 		goto cannot_expand;
 
@@ -2845,7 +2863,7 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 
 	/* Actually expand, if possible */
 	if (vma &&
-	    !vma_expand(&mas, vma, merge_start, merge_end, vm_pgoff, next)) {
+	    !vma_expand(&lookup, vma, merge_start, merge_end, vm_pgoff, next)) {
 		khugepaged_enter_vma_merge(vma, vm_flags);
 		goto expanded;
 	}
