@@ -2598,8 +2598,14 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 #endif
 	}
 
-	if (!next)
-		next = mas_next(mas, ULONG_MAX);
+	if (!next) {
+		/*
+		 * The bounded gather may leave the cursor at its limit.
+		 * Start at end so a VMA beginning there is included.
+		 */
+		mas_set(mas, end);
+		next = mas_find(mas, ULONG_MAX);
+	}
 
 	if (unlikely(uf)) {
 		/*
