@@ -506,6 +506,10 @@ struct dsi_host_common_cfg {
 	u32 byte_intf_clk_div;
 	u32 dma_sched_line;
 	u32 dma_sched_window;
+#ifdef CONFIG_MACH_XIAOMI
+	u32 clk_strength;
+	u32 phy_voltage;
+#endif
 };
 
 /**
