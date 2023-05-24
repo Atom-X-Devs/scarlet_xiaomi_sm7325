@@ -8388,6 +8388,12 @@ int dsi_display_enable(struct dsi_display *display)
 		goto error;
 	}
 
+#ifdef CONFIG_MACH_XIAOMI
+	rc = dsi_panel_gamma_switch(display->panel);
+	if (rc)
+		DSI_ERR("failed to switch gamma, rc=%d\n", rc);
+#endif
+
 	if (display->config.panel_mode == DSI_OP_VIDEO_MODE) {
 		DSI_DEBUG("%s:enable video timing eng\n", __func__);
 		rc = dsi_display_vid_engine_enable(display);
