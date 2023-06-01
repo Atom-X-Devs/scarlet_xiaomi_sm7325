@@ -2559,43 +2559,42 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 	 * it is always overwritten.
 	 */
 	mas_for_each(mas, next, end - 1) {
+		struct vm_area_struct *unmap = next;
+
 		/* Does it split the end? */
 		if (next->vm_end > end) {
-			struct vm_area_struct *split;
-
 			error = __split_vma(mm, next, end, 1);
 			if (error)
 				goto end_split_failed;
 
 			mas_set(mas, end);
-			split = mas_prev(mas, 0);
-			vma_start_write(split);
-			mas_set(&mas_detach, count);
-			error = mas_store_gfp(&mas_detach, split, GFP_KERNEL);
-			if (error)
-				goto munmap_gather_failed;
-			vma_mark_detached(split, true);
-			if (next->vm_flags & VM_LOCKED)
-				locked_vm += vma_pages(split);
-			count++;
+			unmap = mas_prev(mas, 0);
 			if (vma == next)
-				vma = split;
-			break;
+				vma = unmap;
 		}
-		vma_start_write(next);
+		vma_start_write(unmap);
 		mas_set(&mas_detach, count);
-		error = mas_store_gfp(&mas_detach, next, GFP_KERNEL);
+		error = mas_store_gfp(&mas_detach, unmap, GFP_KERNEL);
 		if (error)
 			goto munmap_gather_failed;
-		vma_mark_detached(next, true);
-		if (next->vm_flags & VM_LOCKED)
-			locked_vm += vma_pages(next);
-
+		vma_mark_detached(unmap, true);
+		if (unmap->vm_flags & VM_LOCKED)
+			locked_vm += vma_pages(unmap);
 		count++;
+
+		if (unlikely(uf)) {
+			error = userfaultfd_unmap_prep(unmap, start, end,
+						      &uf_new_unmaps);
+			if (error)
+				goto userfaultfd_error;
+		}
 #ifdef CONFIG_DEBUG_VM_MAPLE_TREE
-		BUG_ON(next->vm_start < start);
-		BUG_ON(next->vm_start > end);
+		BUG_ON(unmap->vm_start < start);
+		BUG_ON(unmap->vm_end > end);
 #endif
+		/* A split leaves next pointing to the surviving upper VMA. */
+		if (unmap != next)
+			break;
 	}
 
 	if (!next) {
@@ -2605,22 +2604,6 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 		 */
 		mas_set(mas, end);
 		next = mas_find(mas, ULONG_MAX);
-	}
-
-	if (unlikely(uf)) {
-		/*
-		 * If userfaultfd_unmap_prep returns an error the vmas
-		 * will remain splitted, but userland will get a
-		 * highly unexpected error anyway. This is no
-		 * different than the case where the first of the two
-		 * __split_vma fails, but we don't undo the first
-		 * split, despite we could. This is unlikely enough
-		 * failure that it's not worth optimizing it for.
-		 */
-		error = userfaultfd_unmap_prep(mm, start, end, &uf_new_unmaps);
-
-		if (error)
-			goto userfaultfd_error;
 	}
 
 #if defined(CONFIG_DEBUG_VM_MAPLE_TREE)
