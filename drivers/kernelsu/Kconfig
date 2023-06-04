@@ -2,7 +2,6 @@ menu "KernelSU"
 
 config KSU
 	tristate "KernelSU function support"
-	default y
 	help
 	  Enable kernel-level root privileges on Android System.
 	  To compile as a module, choose M here: the
