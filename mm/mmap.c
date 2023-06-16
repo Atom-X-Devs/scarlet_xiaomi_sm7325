@@ -2012,7 +2012,8 @@ static int acct_stack_growth(struct vm_area_struct *vma,
  * PA-RISC uses this for its stack; IA64 for its Register Backing Store.
  * vma is the last one with address > vma->vm_end.  Have to extend vma.
  */
-int expand_upwards(struct vm_area_struct *vma, unsigned long address)
+int expand_upwards(struct vm_area_struct *vma, unsigned long address,
+		bool write_locked)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	struct vm_area_struct *next;
@@ -2036,6 +2037,8 @@ int expand_upwards(struct vm_area_struct *vma, unsigned long address)
 	if (gap_addr < address || gap_addr > TASK_SIZE)
 		gap_addr = TASK_SIZE;
 
+	if (!write_locked)
+		return -EAGAIN;
 	next = find_vma_intersection(mm, vma->vm_end, gap_addr);
 	if (next && (next->vm_flags & (VM_READ | VM_EXEC | VM_WRITE))) {
 		if (!(next->vm_flags & VM_GROWSUP))
@@ -2104,7 +2107,8 @@ int expand_upwards(struct vm_area_struct *vma, unsigned long address)
 /*
  * vma is the first one with address < vma->vm_start.  Have to extend vma.
  */
-int expand_downwards(struct vm_area_struct *vma, unsigned long address)
+int expand_downwards(struct vm_area_struct *vma, unsigned long address,
+		bool write_locked)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	MA_STATE(mas, &mm->mm_mt, vma->vm_start, vma->vm_start);
@@ -2118,10 +2122,13 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 	/* Enforce stack_guard_gap */
 	prev = mas_prev(&mas, 0);
 	/* Check that both stack segments have the same anon_vma? */
-	if (prev && !(prev->vm_flags & VM_GROWSDOWN) &&
-			(prev->vm_flags & (VM_WRITE|VM_READ|VM_EXEC))) {
-		if (address - prev->vm_end < stack_guard_gap)
+	if (prev) {
+		if (!(prev->vm_flags & VM_GROWSDOWN) &&
+		    (prev->vm_flags & (VM_WRITE|VM_READ|VM_EXEC)) &&
+		    (address - prev->vm_end < stack_guard_gap))
 			return -ENOMEM;
+		if (!write_locked && (prev->vm_end == address))
+			return -EAGAIN;
 	}
 
 	if (mas_preallocate(&mas, vma, GFP_KERNEL))
@@ -2199,13 +2206,14 @@ static int __init cmdline_parse_stack_guard_gap(char *p)
 __setup("stack_guard_gap=", cmdline_parse_stack_guard_gap);
 
 #ifdef CONFIG_STACK_GROWSUP
-int expand_stack(struct vm_area_struct *vma, unsigned long address)
+int expand_stack_locked(struct vm_area_struct *vma, unsigned long address,
+		bool write_locked)
 {
-	return expand_upwards(vma, address);
+	return expand_upwards(vma, address, write_locked);
 }
 
-struct vm_area_struct *
-find_extend_vma(struct mm_struct *mm, unsigned long addr)
+struct vm_area_struct *find_extend_vma_locked(struct mm_struct *mm,
+		unsigned long addr, bool write_locked)
 {
 	struct vm_area_struct *vma, *prev;
 
@@ -2213,21 +2221,25 @@ find_extend_vma(struct mm_struct *mm, unsigned long addr)
 	vma = find_vma_prev(mm, addr, &prev);
 	if (vma && (vma->vm_start <= addr))
 		return vma;
-	/* don't alter vm_end if the coredump is running */
-	if (!prev || !mmget_still_valid(mm) || expand_stack(prev, addr))
+	if (!prev || !mmget_still_valid(mm))
+		return NULL;
+	if (expand_stack_locked(prev, addr, write_locked))
 		return NULL;
 	if (prev->vm_flags & VM_LOCKED)
 		populate_vma_page_range(prev, addr, prev->vm_end, NULL);
 	return prev;
 }
 #else
-int expand_stack(struct vm_area_struct *vma, unsigned long address)
+int expand_stack_locked(struct vm_area_struct *vma, unsigned long address,
+		bool write_locked)
 {
-	return expand_downwards(vma, address);
+	if (unlikely(!(vma->vm_flags & VM_GROWSDOWN)))
+		return -EINVAL;
+	return expand_downwards(vma, address, write_locked);
 }
 
-struct vm_area_struct *
-find_extend_vma(struct mm_struct *mm, unsigned long addr)
+struct vm_area_struct *find_extend_vma_locked(struct mm_struct *mm,
+		unsigned long addr, bool write_locked)
 {
 	struct vm_area_struct *vma;
 	unsigned long start;
@@ -2238,13 +2250,11 @@ find_extend_vma(struct mm_struct *mm, unsigned long addr)
 		return NULL;
 	if (vma->vm_start <= addr)
 		return vma;
-	if (!(vma->vm_flags & VM_GROWSDOWN))
-		return NULL;
 	/* don't alter vm_start if the coredump is running */
 	if (!mmget_still_valid(mm))
 		return NULL;
 	start = vma->vm_start;
-	if (expand_stack(vma, addr))
+	if (expand_stack_locked(vma, addr, write_locked))
 		return NULL;
 	if (vma->vm_flags & VM_LOCKED)
 		populate_vma_page_range(vma, addr, start, NULL);
@@ -2252,6 +2262,11 @@ find_extend_vma(struct mm_struct *mm, unsigned long addr)
 }
 #endif
 
+struct vm_area_struct *find_extend_vma(struct mm_struct *mm,
+		unsigned long addr)
+{
+	return find_extend_vma_locked(mm, addr, false);
+}
 EXPORT_SYMBOL_GPL(find_extend_vma);
 
 /*
