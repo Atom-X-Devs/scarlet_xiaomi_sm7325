@@ -1556,45 +1556,48 @@ EXPORT_SYMBOL_GPL(__lock_page_killable);
 
 /*
  * Return values:
- * 1 - page is locked; mmap_sem is still held.
- * 0 - page is not locked.
- *     mmap_sem has been released (up_read()), unless flags had both
+ * 0 - page is locked.
+ * non-zero - page is not locked.
+ *     mmap_lock has been released (mmap_read_unlock(), unless flags had both
  *     FAULT_FLAG_ALLOW_RETRY and FAULT_FLAG_RETRY_NOWAIT set, in
- *     which case mmap_sem is still held.
+ *     which case mmap_lock is still held.
  *
- * If neither ALLOW_RETRY nor KILLABLE are set, will always return 1
- * with the page locked and the mmap_sem unperturbed.
+ * If neither ALLOW_RETRY nor KILLABLE are set, will always return 0
+ * with the page locked and the mmap_lock unperturbed.
  */
-int __lock_page_or_retry(struct page *page, struct mm_struct *mm,
-			 unsigned int flags)
+vm_fault_t __lock_page_or_retry(struct page *page, struct vm_fault *vmf)
 {
+	struct mm_struct *mm = vmf->vma->vm_mm;
+	unsigned int flags = vmf->flags;
+
 	if (fault_flag_allow_retry_first(flags)) {
 		/*
-		 * CAUTION! In this case, mmap_sem is not released
-		 * even though return 0.
+		 * CAUTION! In this case, mmap_lock is not released
+		 * even though return VM_FAULT_RETRY.
 		 */
 		if (flags & FAULT_FLAG_RETRY_NOWAIT)
-			return 0;
+			return VM_FAULT_RETRY;
 
 		mmap_read_unlock(mm);
 		if (flags & FAULT_FLAG_KILLABLE)
 			wait_on_page_locked_killable(page);
 		else
 			wait_on_page_locked(page);
-		return 0;
-	} else {
-		if (flags & FAULT_FLAG_KILLABLE) {
-			int ret;
-
-			ret = __lock_page_killable(page);
-			if (ret) {
-				mmap_read_unlock(mm);
-				return 0;
-			}
-		} else
-			__lock_page(page);
-		return 1;
+		return VM_FAULT_RETRY;
 	}
+	if (flags & FAULT_FLAG_KILLABLE) {
+		int ret;
+
+		ret = __lock_page_killable(page);
+		if (ret) {
+			mmap_read_unlock(mm);
+			return VM_FAULT_RETRY;
+		}
+	} else {
+		__lock_page(page);
+	}
+	return 0;
+
 }
 
 /**

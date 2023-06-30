@@ -495,8 +495,7 @@ static inline pgoff_t linear_page_index(struct vm_area_struct *vma,
 
 extern void __lock_page(struct page *page);
 extern int __lock_page_killable(struct page *page);
-extern int __lock_page_or_retry(struct page *page, struct mm_struct *mm,
-				unsigned int flags);
+extern vm_fault_t __lock_page_or_retry(struct page *page, struct vm_fault *vmf);
 extern void unlock_page(struct page *page);
 
 /*
@@ -538,11 +537,13 @@ static inline int lock_page_killable(struct page *page)
  * Return value and mmap_sem implications depend on flags; see
  * __lock_page_or_retry().
  */
-static inline int lock_page_or_retry(struct page *page, struct mm_struct *mm,
-				     unsigned int flags)
+static inline vm_fault_t lock_page_or_retry(struct page *page,
+						    struct vm_fault *vmf)
 {
 	might_sleep();
-	return trylock_page(page) || __lock_page_or_retry(page, mm, flags);
+	if (!trylock_page(page))
+		return __lock_page_or_retry(page, vmf);
+	return 0;
 }
 
 /*

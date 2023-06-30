@@ -2959,11 +2959,11 @@ void unmap_mapping_range(struct address_space *mapping,
 EXPORT_SYMBOL(unmap_mapping_range);
 
 /*
- * We enter with non-exclusive mmap_sem (to exclude vma changes,
+ * We enter with non-exclusive mmap_lock (to exclude vma changes,
  * but allow concurrent faults), and pte mapped but not yet locked.
  * We return with pte unmapped and unlocked.
  *
- * We return with the mmap_sem locked or unlocked in the same cases
+ * We return with the mmap_lock locked or unlocked in the same cases
  * as does filemap_fault().
  */
 /* Wait for the slot to free up, or give up after a timeout. */
@@ -2976,7 +2976,6 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	struct mem_cgroup *memcg;
 	swp_entry_t entry;
 	pte_t pte;
-	int locked;
 	int exclusive = 0;
 	vm_fault_t ret = 0;
 	bool need_clear_cache = false;
@@ -3074,13 +3073,11 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 		goto out_release;
 	}
 
-	locked = lock_page_or_retry(page, vma->vm_mm, vmf->flags);
+	ret |= lock_page_or_retry(page, vmf);
 
 	delayacct_clear_flag(DELAYACCT_PF_SWAPIN);
-	if (!locked) {
-		ret |= VM_FAULT_RETRY;
+	if (ret & VM_FAULT_RETRY)
 		goto out_release;
-	}
 
 	/*
 	 * Make sure try_to_free_swap or reuse_swap_page or swapoff did not
