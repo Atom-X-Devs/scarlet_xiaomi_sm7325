@@ -4509,13 +4509,6 @@ retry:
 	if (unlikely(!vma->anon_vma))
 		goto inval_end_read;
 
-	/*
-	 * Due to the possibility of userfault handler dropping mmap_lock, avoid
-	 * it for now and fall back to page fault handling under mmap_lock.
-	 */
-	if (userfaultfd_armed(vma))
-		goto inval_end_read;
-
 	rcu_read_unlock();
 	return vma;
 
