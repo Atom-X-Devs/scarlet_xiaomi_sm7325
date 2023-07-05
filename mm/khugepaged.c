@@ -1060,7 +1060,6 @@ static void collapse_huge_page(struct mm_struct *mm,
 	_pmd = pmdp_collapse_flush(vma, address, pmd);
 	spin_unlock(pmd_ptl);
 	mmu_notifier_invalidate_range_end(&range);
-	tlb_remove_table_sync_one();
 
 	spin_lock(pte_ptl);
 	isolated = __collapse_huge_page_isolate(vma, address, pte);
@@ -1409,7 +1408,6 @@ void collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr)
 	_pmd = pmdp_collapse_flush(vma, haddr, pmd);
 	spin_unlock(ptl);
 	mm_dec_nr_ptes(mm);
-	tlb_remove_table_sync_one();
 	mmu_notifier_invalidate_range_end(&range);
 	pte_free(mm, pmd_pgtable(_pmd));
 
@@ -1510,7 +1508,6 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 				_pmd = pmdp_collapse_flush(vma, addr, pmd);
 				spin_unlock(ptl);
 				mm_dec_nr_ptes(mm);
-				tlb_remove_table_sync_one();
 				pte_free(mm, pmd_pgtable(_pmd));
 				mmu_notifier_invalidate_range_end(&range);
 			}
