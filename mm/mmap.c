@@ -2928,11 +2928,11 @@ cannot_expand:
 	WARN_ON_ONCE(!arch_validate_flags(vm_flags));
 #endif
 
+	/* Lock the VMA since it is modified after insertion into VMA tree */
+	vma_start_write(vma);
 	if (vma->vm_file)
 		i_mmap_lock_write(vma->vm_file->f_mapping);
 
-	/* Lock the VMA since it is modified after insertion into VMA tree */
-	vma_start_write(vma);
 	vma_mas_store(vma, &mas);
 	mm->map_count++;
 	if (vma->vm_file) {
