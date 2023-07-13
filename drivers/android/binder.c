@@ -7420,6 +7420,9 @@ static int __init binder_init(void)
 	struct binder_device *device;
 	struct hlist_node *tmp;
 	char *device_names = NULL;
+#ifdef CONFIG_ANDROID_BINDER_LOGS
+	const struct binder_debugfs_entry *db_entry;
+#endif
 
 	ret = binder_create_pools();
 	if (ret)
@@ -7434,19 +7437,16 @@ static int __init binder_init(void)
 	atomic_set(&binder_transaction_log_failed.cur, ~0U);
 
 	binder_debugfs_dir_entry_root = debugfs_create_dir("binder", NULL);
-	if (binder_debugfs_dir_entry_root) {
-		const struct binder_debugfs_entry *db_entry;
 
-		binder_for_each_debugfs_entry(db_entry)
-			debugfs_create_file(db_entry->name,
-					    db_entry->mode,
-					    binder_debugfs_dir_entry_root,
-					    db_entry->data,
-					    db_entry->fops);
+	binder_for_each_debugfs_entry(db_entry)
+		debugfs_create_file(db_entry->name,
+					db_entry->mode,
+					binder_debugfs_dir_entry_root,
+					db_entry->data,
+					db_entry->fops);
 
-		binder_debugfs_dir_entry_proc = debugfs_create_dir("proc",
-						 binder_debugfs_dir_entry_root);
-	}
+	binder_debugfs_dir_entry_proc = debugfs_create_dir("proc",
+						binder_debugfs_dir_entry_root);
 #endif
 
 	if (!IS_ENABLED(CONFIG_ANDROID_BINDERFS) &&
