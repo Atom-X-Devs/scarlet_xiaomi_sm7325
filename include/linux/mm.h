@@ -774,7 +774,7 @@ static inline void vma_mark_detached(struct vm_area_struct *vma,
 
 static inline void release_fault_lock(struct vm_fault *vmf)
 {
-	mmap_read_unlock(vmf->vm_mm);
+	mmap_read_unlock(vmf->vma->vm_mm);
 }
 
 static inline void assert_fault_locked(struct vm_fault *vmf)
