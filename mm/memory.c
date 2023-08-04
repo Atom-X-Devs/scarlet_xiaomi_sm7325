@@ -1033,7 +1033,7 @@ int copy_page_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		 * Use the raw variant of the seqcount_t write API to avoid
 		 * lockdep complaining about preemptibility.
 		 */
-		mmap_assert_write_locked(src_mm);
+		vma_assert_write_locked(vma);
 		raw_write_seqcount_begin(&src_mm->write_protect_seq);
 	}
 

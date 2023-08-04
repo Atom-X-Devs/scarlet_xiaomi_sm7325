@@ -3493,6 +3493,7 @@ int copy_hugetlb_page_range(struct mm_struct *dst, struct mm_struct *src,
 					vma->vm_start,
 					vma->vm_end);
 		mmu_notifier_invalidate_range_start(&range);
+		vma_assert_write_locked(vma);
 	}
 
 	for (addr = vma->vm_start; addr < vma->vm_end; addr += sz) {
