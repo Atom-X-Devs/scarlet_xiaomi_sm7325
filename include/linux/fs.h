@@ -1897,7 +1897,6 @@ struct file_operations {
 	ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);
 	ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);
 	int (*iopoll)(struct kiocb *kiocb, bool spin);
-	int (*iterate) (struct file *, struct dir_context *);
 	int (*iterate_shared) (struct file *, struct dir_context *);
 	__poll_t (*poll) (struct file *, struct poll_table_struct *);
 	long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
@@ -1935,6 +1934,13 @@ struct file_operations {
 	ANDROID_KABI_RESERVE(3);
 	ANDROID_KABI_RESERVE(4);
 } __randomize_layout;
+
+/* Wrap a directory iterator that needs exclusive inode access */
+int wrap_directory_iterator(struct file *, struct dir_context *,
+			    int (*) (struct file *, struct dir_context *));
+#define WRAP_DIR_ITER(x) \
+	static int shared_##x(struct file *file , struct dir_context *ctx) \
+	{ return wrap_directory_iterator(file, ctx, x); }
 
 struct inode_operations {
 	struct dentry * (*lookup) (struct inode *,struct dentry *, unsigned int);
