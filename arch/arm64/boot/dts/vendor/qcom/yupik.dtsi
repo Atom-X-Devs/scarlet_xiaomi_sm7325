@@ -471,10 +471,9 @@
 	qcom: ramoops {
 		compatible = "ramoops";
 		reg = <0x0 0xb0000000 0x0 0x400000>;
-		console-size = <0x200000>;
+		record-size = <0x200000>;
 		pmsg-size = <0x200000>;
-		mem-type = <2>;
-		max-reason = <0x4>;
+		max-reason = <4>;
 	};
 
 	/* global autoconfigured region for contiguous allocations */
