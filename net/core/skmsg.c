@@ -1040,16 +1040,21 @@ out:
 static void sk_psock_verdict_data_ready(struct sock *sk)
 {
 	struct socket *sock = sk->sk_socket;
+	const struct proto_ops *ops;
 	read_descriptor_t desc;
 
-	if (unlikely(!sock || !sock->ops || !sock->ops->read_sock))
+	if (unlikely(!sock))
+		return;
+
+	ops = READ_ONCE(sock->ops);
+	if (!ops || !ops->read_sock)
 		return;
 
 	desc.arg.data = sk;
 	desc.error = 0;
 	desc.count = 1;
 
-	sock->ops->read_sock(sk, &desc, sk_psock_verdict_recv);
+	ops->read_sock(sk, &desc, sk_psock_verdict_recv);
 }
 
 void sk_psock_start_verdict(struct sock *sk, struct sk_psock *psock)
