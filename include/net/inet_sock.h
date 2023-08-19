@@ -208,8 +208,8 @@ struct inet_sock {
 	__be32			inet_saddr;
 	__s16			uc_ttl;
 	__u16			cmsg_flags;
+	atomic_t		inet_id;
 	__be16			inet_sport;
-	__u16			inet_id;
 
 	struct ip_options_rcu __rcu	*inet_opt;
 	int			rx_dst_ifindex;

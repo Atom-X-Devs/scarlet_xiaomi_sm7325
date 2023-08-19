@@ -313,7 +313,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 						 inet->inet_daddr);
 	}
 
-	inet->inet_id = prandom_u32();
+	atomic_set(&inet->inet_id, prandom_u32());
 
 	if (tcp_fastopen_defer_connect(sk, &err))
 		return err;
@@ -1473,7 +1473,7 @@ struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 	inet_csk(newsk)->icsk_ext_hdr_len = 0;
 	if (inet_opt)
 		inet_csk(newsk)->icsk_ext_hdr_len = inet_opt->opt.optlen;
-	newinet->inet_id = prandom_u32();
+	atomic_set(&newinet->inet_id, prandom_u32());
 
 	if (!dst) {
 		dst = inet_csk_route_child_sock(sk, newsk, req);

@@ -9357,7 +9357,7 @@ void sctp_copy_sock(struct sock *newsk, struct sock *sk,
 	newinet->inet_rcv_saddr = inet->inet_rcv_saddr;
 	newinet->inet_dport = htons(asoc->peer.port);
 	newinet->pmtudisc = inet->pmtudisc;
-	newinet->inet_id = prandom_u32();
+	atomic_set(&newinet->inet_id, prandom_u32());
 
 	newinet->uc_ttl = inet->uc_ttl;
 	newinet->mc_loop = 1;
