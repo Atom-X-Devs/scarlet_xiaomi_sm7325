@@ -139,12 +139,12 @@ static unsigned long kallsyms_sym_address(int idx)
 	return kallsyms_relative_base - 1 - kallsyms_offsets[idx];
 }
 
-static bool cleanup_symbol_name(char *s)
+static void cleanup_symbol_name(char *s)
 {
 	char *res;
 
 	if (!IS_ENABLED(CONFIG_LTO_CLANG))
-		return false;
+		return;
 
 	/*
 	 * LLVM appends various suffixes for local functions and variables that
@@ -156,13 +156,13 @@ static bool cleanup_symbol_name(char *s)
 	res = strstr(s, ".llvm.");
 	if (res) {
 		*res = '\0';
-		return true;
+		return;
 	}
 
 	if (!IS_ENABLED(CONFIG_CFI_CLANG) ||
 	    !IS_ENABLED(CONFIG_LTO_CLANG_THIN) ||
 	    CONFIG_CLANG_VERSION >= 130000)
-		return false;
+		return;
 
 	/*
 	 * Prior to LLVM 13, the following suffixes were observed when thinLTO
@@ -170,12 +170,10 @@ static bool cleanup_symbol_name(char *s)
 	 * - foo$[0-9]+
 	 */
 	res = strrchr(s, '$');
-	if (res) {
+	if (res)
 		*res = '\0';
-		return true;
-	}
 
-	return false;
+	return;
 }
 
 static int compare_symbol_name(const char *name, char *namebuf)
