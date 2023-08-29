@@ -316,12 +316,9 @@ static int a6xx_rgmu_wait_for_lowest_idle(struct adreno_device *adreno_dev)
 	struct a6xx_rgmu_device *rgmu = to_a6xx_rgmu(adreno_dev);
 	unsigned int reg[10] = {0};
 	unsigned long t;
-	uint64_t ts1, ts2, ts3;
 
 	if (rgmu->idle_level != GPU_HW_IFPC)
 		return 0;
-
-	ts1 = a6xx_read_alwayson(adreno_dev);
 
 	t = jiffies + msecs_to_jiffies(RGMU_IDLE_TIMEOUT);
 	do {
@@ -335,16 +332,12 @@ static int a6xx_rgmu_wait_for_lowest_idle(struct adreno_device *adreno_dev)
 		usleep_range(10, 100);
 	} while (!time_after(jiffies, t));
 
-	ts2 = a6xx_read_alwayson(adreno_dev);
-
 	/* Do one last read incase it succeeds */
 	gmu_core_regread(device,
 		A6XX_GMU_SPTPRAC_PWR_CLK_STATUS, &reg[0]);
 
 	if (reg[0] & GX_GDSC_POWER_OFF)
 		return 0;
-
-	ts3 = a6xx_read_alwayson(adreno_dev);
 
 	/* Collect abort data to help with debugging */
 	gmu_core_regread(device, A6XX_RGMU_CX_PCC_DEBUG, &reg[1]);
@@ -360,8 +353,6 @@ static int a6xx_rgmu_wait_for_lowest_idle(struct adreno_device *adreno_dev)
 	dev_err(&rgmu->pdev->dev,
 		"----------------------[ RGMU error ]----------------------\n");
 	dev_err(&rgmu->pdev->dev, "Timeout waiting for lowest idle level\n");
-	dev_err(&rgmu->pdev->dev,
-			"Timestamps: %llx %llx %llx\n", ts1, ts2, ts3);
 	dev_err(&rgmu->pdev->dev,
 			"SPTPRAC_PWR_CLK_STATUS=%x PCC_DEBUG=%x PCC_STATUS=%x\n",
 			reg[0], reg[1], reg[2]);
