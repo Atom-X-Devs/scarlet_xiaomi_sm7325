@@ -408,6 +408,7 @@ static void gmu_ao_sync_event(struct adreno_device *adreno_dev)
 	unsigned long flags;
 	u64 ticks;
 
+	return;
 	local_irq_save(flags);
 
 	/* Read GMU always on register */
@@ -1125,9 +1126,6 @@ int a6xx_gmu_wait_for_lowest_idle(struct adreno_device *adreno_dev)
 	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
 	unsigned int reg, reg1, reg2, reg3, reg4, reg5, reg6, reg7, reg8;
 	unsigned long t;
-	uint64_t ts1, ts2, ts3;
-
-	ts1 = a6xx_read_alwayson(adreno_dev);
 
 	t = jiffies + msecs_to_jiffies(GMU_IDLE_TIMEOUT);
 	do {
@@ -1142,7 +1140,6 @@ int a6xx_gmu_wait_for_lowest_idle(struct adreno_device *adreno_dev)
 		usleep_range(10, 100);
 	} while (!time_after(jiffies, t));
 
-	ts2 = a6xx_read_alwayson(adreno_dev);
 	/* Check one last time */
 
 	gmu_core_regread(device, A6XX_GPU_GMU_CX_GMU_RPMH_POWER_STATE, &reg);
@@ -1150,8 +1147,6 @@ int a6xx_gmu_wait_for_lowest_idle(struct adreno_device *adreno_dev)
 
 	if (idle_trandition_complete(gmu->idle_level, reg, reg1))
 		return 0;
-
-	ts3 = a6xx_read_alwayson(adreno_dev);
 
 	/* Collect abort data to help with debugging */
 	gmu_core_regread(device, A6XX_GPU_GMU_AO_GPU_CX_BUSY_STATUS, &reg2);
@@ -1164,11 +1159,6 @@ int a6xx_gmu_wait_for_lowest_idle(struct adreno_device *adreno_dev)
 	dev_err(&gmu->pdev->dev,
 		"Timeout waiting for lowest idle level %s\n",
 		idle_level_name(gmu->idle_level));
-	dev_err(&gmu->pdev->dev, "Start: %llx (absolute ticks)\n", ts1);
-	dev_err(&gmu->pdev->dev, "Poll: %llx (ticks relative to start)\n",
-		ts2-ts1);
-	dev_err(&gmu->pdev->dev, "Retry: %llx (ticks relative to poll)\n",
-		ts3-ts2);
 	dev_err(&gmu->pdev->dev,
 		"RPMH_POWER_STATE=%x SPTPRAC_PWR_CLK_STATUS=%x\n", reg, reg1);
 	dev_err(&gmu->pdev->dev, "CX_BUSY_STATUS=%x\n", reg2);
@@ -1208,16 +1198,14 @@ int a6xx_gmu_wait_for_idle(struct adreno_device *adreno_dev)
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
 	unsigned int status2;
-	uint64_t ts1;
 
-	ts1 = a6xx_read_alwayson(adreno_dev);
 	if (timed_poll_check(device, A6XX_GPU_GMU_AO_GPU_CX_BUSY_STATUS,
 			0, GMU_START_TIMEOUT, CXGXCPUBUSYIGNAHB)) {
 		gmu_core_regread(device,
 				A6XX_GPU_GMU_AO_GPU_CX_BUSY_STATUS2, &status2);
 		dev_err(&gmu->pdev->dev,
-				"GMU not idling: status2=0x%x %llx %llx\n",
-				status2, ts1,
+				"GMU not idling: status2=0x%x %llx\n",
+				status2,
 				a6xx_read_alwayson(ADRENO_DEVICE(device)));
 		gmu_fault_snapshot(device);
 		return -ETIMEDOUT;
