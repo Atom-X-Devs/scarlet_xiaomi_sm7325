@@ -679,7 +679,6 @@ static void sched_debug_header(struct seq_file *m)
 #define PN(x) \
 	SEQ_printf(m, "  .%-40s: %Ld.%06ld\n", #x, SPLIT_NS(x))
 	PN(sysctl_sched_base_slice);
-	P(sysctl_sched_child_runs_first);
 #undef PN
 #undef P
 
