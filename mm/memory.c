@@ -2802,6 +2802,11 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 			return wp_pfn_shared(vmf);
 
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		if ((vmf->flags & FAULT_FLAG_VMA_LOCK) && !vma->anon_vma) {
+			vma_end_read(vmf->vma);
+			return VM_FAULT_RETRY;
+		}
+		vmf->pte = NULL;
 		return wp_page_copy(vmf);
 	}
 
@@ -2834,6 +2839,12 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 		return wp_page_shared(vmf);
 	}
 copy:
+	if ((vmf->flags & FAULT_FLAG_VMA_LOCK) && !vma->anon_vma) {
+		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		vma_end_read(vmf->vma);
+		return VM_FAULT_RETRY;
+	}
+
 	/*
 	 * Ok, we need to copy. Oh, well..
 	 */
