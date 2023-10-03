@@ -3,6 +3,7 @@
 #define _LINUX_KERNEL_H
 
 
+#include <linux/array_size.h>
 #include <linux/stdarg.h>
 #include <linux/limits.h>
 #include <linux/linkage.h>
@@ -39,12 +40,6 @@
 /* generic data direction definitions */
 #define READ			0
 #define WRITE			1
-
-/**
- * ARRAY_SIZE - get the number of elements in array @arr
- * @arr: array to be sized
- */
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]) + __must_be_array(arr))
 
 #define u64_to_user_ptr(x) (		\
 {					\
