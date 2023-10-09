@@ -1563,7 +1563,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 
 		irq_set_status_flags(gi2c->irq, IRQ_NOAUTOEN);
 		ret = devm_request_irq(gi2c->dev, gi2c->irq, geni_i2c_irq,
-					0, "i2c_geni", gi2c);
+				       IRQF_NOBALANCING, "i2c_geni", gi2c);
 		if (ret) {
 			dev_err(gi2c->dev, "Request_irq failed:%d: err:%d\n",
 					   gi2c->irq, ret);
