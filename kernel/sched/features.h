@@ -82,7 +82,6 @@
 /*
  * When doing wakeups, attempt to limit superfluous scans of the LLC domain.
  */
-#define SCHED_FEAT_SIS_PROP 0
 #define SCHED_FEAT_SIS_UTIL 1
 
 /*
