@@ -342,6 +342,11 @@ DECLARE_HOOK(android_vh_cpu_cgroup_css_free,
 	TP_PROTO(struct cgroup_subsys_state *css),
 	TP_ARGS(css));
 
+DECLARE_RESTRICTED_HOOK(android_rvh_util_fits_cpu,
+	TP_PROTO(unsigned long util, unsigned long uclamp_min, unsigned long uclamp_max,
+		 int cpu, bool *fits, bool *done),
+	TP_ARGS(util, uclamp_min, uclamp_max, cpu, fits, done), 1);
+
 /* macro versions of hooks are no longer required */
 
 #endif /* _TRACE_HOOK_SCHED_H */
