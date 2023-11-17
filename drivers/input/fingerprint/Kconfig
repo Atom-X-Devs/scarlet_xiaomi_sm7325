@@ -1,0 +1,41 @@
+#
+# Fingerprint driver configuration
+#
+
+config INPUT_FINGERPRINT
+	bool "Fingerprints"
+	help
+	  Say Y here and a list of supported fingerprints will be displayed.
+	  This option doesn't affect the kernel.
+
+	  If unsure, say Y.
+
+config GOODIX_FINGERPRINT
+	tristate "Goodix fingerprint driver"
+	depends on INPUT_FINGERPRINT
+	help
+	  Say Y here to enable support for Goodix fingerprint driver.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here.
+
+config FPC_FINGERPRINT
+	tristate "FPC fingerprint driver"
+	depends on INPUT_FINGERPRINT
+	help
+	  Say Y here to enable support for FPC fingerprint driver.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here.
+
+config XIAOMI_FINGERPRINT
+	tristate "Xiaomi fingerprint driver"
+	depends on INPUT_FINGERPRINT && !MACH_XIAOMI_LISA
+	help
+	  Say Y here to enable support for Xiaomi fingerprint driver.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here.
