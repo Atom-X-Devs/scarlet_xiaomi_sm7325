@@ -40,13 +40,13 @@ EXPORT_SYMBOL_GPL(page_poisoning_enabled);
 
 static void poison_page(struct page *page)
 {
-	void *addr = kmap_atomic(page);
+	void *addr = kmap_local_page(page);
 
 	/* KASAN still think the page is in-use, so skip it. */
 	kasan_disable_current();
 	memset(addr, PAGE_POISON, PAGE_SIZE);
 	kasan_enable_current();
-	kunmap_atomic(addr);
+	kunmap_local(addr);
 }
 
 static void poison_pages(struct page *page, int n)
@@ -102,14 +102,14 @@ static void unpoison_page(struct page *page)
 {
 	void *addr;
 
-	addr = kmap_atomic(page);
+	addr = kmap_local_page(page);
 	/*
 	 * Page poisoning when enabled poisons each and every page
 	 * that is freed to buddy. Thus no extra check is done to
 	 * see if a page was poisoned.
 	 */
 	check_poison_mem(page, addr, PAGE_SIZE);
-	kunmap_atomic(addr);
+	kunmap_local(addr);
 }
 
 static void unpoison_pages(struct page *page, int n)
