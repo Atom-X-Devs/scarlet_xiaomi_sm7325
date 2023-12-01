@@ -3001,7 +3001,7 @@ static inline unsigned long cpu_util_cfs(int cpu)
 
 	if (sched_feat(UTIL_EST)) {
 		util = max_t(unsigned long, util,
-			     READ_ONCE(cfs_rq->avg.util_est.enqueued));
+			     READ_ONCE(cfs_rq->avg.util_est));
 	}
 
 	return min(util, capacity_orig_of(cpu));
