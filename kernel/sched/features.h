@@ -119,7 +119,6 @@
  * UtilEstimation. Use estimated CPU utilization.
  */
 #define SCHED_FEAT_UTIL_EST 1
-#define SCHED_FEAT_UTIL_EST_FASTUP 1
 
 #define SCHED_FEAT_ALT_PERIOD 1
 #define SCHED_FEAT_BASE_SLICE 1
