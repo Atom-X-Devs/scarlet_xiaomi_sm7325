@@ -4465,6 +4465,12 @@ static int _sde_kms_get_splash_data(struct sde_kms *sde_kms,
 	num_displays = dsi_display_get_num_of_displays();
 	num_regions = of_property_count_u64_elems(node, "reg") / 2;
 
+	if (num_displays >= MAX_DSI_DISPLAYS) {
+		SDE_ERROR("invalid number of built in displays %d\n",
+				num_displays);
+		return -EINVAL;
+	}
+
 	data->num_splash_displays = num_displays;
 
 	SDE_DEBUG("splash mem num_regions:%d\n", num_regions);
