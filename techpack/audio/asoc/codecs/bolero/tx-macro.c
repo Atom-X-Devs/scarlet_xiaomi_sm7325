@@ -1069,8 +1069,8 @@ void bolero_tx_macro_mute_hs(void)
 	}
 
 	snd_soc_component_update_bits(component, reg, mask, val);
-	schedule_delayed_work(&g_tx_priv->tx_hs_unmute_dwork,
-			msecs_to_jiffies(tx_unmute_delay_plugout));
+	queue_delayed_work(system_power_efficient_wq, &g_tx_priv->tx_hs_unmute_dwork,
+			   msecs_to_jiffies(tx_unmute_delay_plugout));
 	return;
 }
 EXPORT_SYMBOL(bolero_tx_macro_mute_hs);
