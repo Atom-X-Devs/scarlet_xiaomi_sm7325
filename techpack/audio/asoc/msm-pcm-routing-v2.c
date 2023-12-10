@@ -43658,8 +43658,8 @@ static void get_drift_and_put_asrc(struct work_struct *work)
 	}
 
 	if (continue_to_sched)
-		schedule_delayed_work(&p_asrc_cfg->drift_work,
-					msecs_to_jiffies(sched_delay_ms));
+		queue_delayed_work(system_power_efficient_wq, &p_asrc_cfg->drift_work,
+				   msecs_to_jiffies(sched_delay_ms));
 done:
 	mutex_unlock(&p_asrc_cfg->lock);
 exit:
@@ -43845,7 +43845,8 @@ static int msm_dai_q6_asrc_config_put(
 		goto done;
 	} else if (enable == ENABLE_ASRC_DRIFT_HW) {
 		mutex_lock(&asrc_cfg[idx].lock);
-		schedule_delayed_work(&asrc_cfg[idx].drift_work, 0);
+		queue_delayed_work(system_power_efficient_wq,
+				   &asrc_cfg[idx].drift_work, 0);
 		mutex_unlock(&asrc_cfg[idx].lock);
 	}
 
