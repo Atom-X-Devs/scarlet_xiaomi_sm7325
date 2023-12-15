@@ -21,6 +21,7 @@
 #define TIME_BUF_LEN  17
 #define DBG_EVENT_LEN  143
 
+#ifdef CONFIG_DEBUG_KERNEL
 #define LOGLEVEL_NONE 8
 #define LOGLEVEL_DEBUG 7
 #define LOGLEVEL_ERR 3
@@ -44,6 +45,12 @@ do {									\
 #define log_event_none(x, ...) log_event(LOGLEVEL_NONE, x, ##__VA_ARGS__)
 #define log_event_dbg(x, ...) log_event(LOGLEVEL_DEBUG, x, ##__VA_ARGS__)
 #define log_event_err(x, ...) log_event(LOGLEVEL_ERR, x, ##__VA_ARGS__)
+#else
+#define log_event(...) ((void)0)
+#define log_event_none(...) ((void)0)
+#define log_event_dbg(...) ((void)0)
+#define log_event_err(...) ((void)0)
+#endif
 
 enum usb_bam_event_type {
 	USB_BAM_EVENT_WAKEUP_PIPE = 0,	/* Wake a pipe */
@@ -212,7 +219,7 @@ static struct {
 	char buf[DBG_MAX_MSG][DBG_MSG_LEN];   /* buffer */
 	unsigned int idx;   /* index */
 	rwlock_t lck;   /* lock */
-} __maybe_unused usb_bam_dbg = {
+} __maybe_unused usb_bam_dbg __maybe_unused = {
 	.idx = 0,
 	.lck = __RW_LOCK_UNLOCKED(lck)
 };
