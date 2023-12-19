@@ -208,9 +208,9 @@ long kgsl_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	};
 	long ret;
 
-	pm_qos_add_request(&req, PM_QOS_CPU_DMA_LATENCY, 100);
+	cpu_latency_qos_add_request(&req, 100);
 	ret = __kgsl_ioctl(filep, cmd, arg);
-	pm_qos_remove_request(&req);
+	cpu_latency_qos_remove_request(&req);
 
 	return ret;
 }
