@@ -1447,9 +1447,9 @@ int drm_mode_atomic_ioctl(struct drm_device *dev, void *data,
 	};
 	int ret;
 
-	pm_qos_add_request(&req, PM_QOS_CPU_DMA_LATENCY, 100);
+	cpu_latency_qos_add_request(&req, 100);
 	ret = __drm_mode_atomic_ioctl(dev, data, file_priv);
-	pm_qos_remove_request(&req);
+	cpu_latency_qos_remove_request(&req);
 
 	return ret;
 }
