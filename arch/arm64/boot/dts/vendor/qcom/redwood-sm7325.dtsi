@@ -96,6 +96,51 @@
 };
 
 &thermal_zones {
+	modem-mmw0-usr {
+		disable-thermal-zone;
+		status = "disabled";
+	};
+
+	modem-mmw1-usr {
+		disable-thermal-zone;
+		status = "disabled";
+	};
+
+	modem-mmw2-usr {
+		disable-thermal-zone;
+		status = "disabled";
+	};
+
+	modem-mmw3-usr {
+		disable-thermal-zone;
+		status = "disabled";
+	};
+
+	modem-streamer-usr {
+		disable-thermal-zone;
+		status = "disabled";
+	};
+
+	modem-mmw0-mod-usr {
+		disable-thermal-zone;
+		status = "disabled";
+	};
+
+	modem-mmw1-mod-usr {
+		disable-thermal-zone;
+		status = "disabled";
+	};
+
+	modem-mmw2-mod-usr {
+		disable-thermal-zone;
+		status = "disabled";
+	};
+
+	modem-mmw3-mod-usr {
+		disable-thermal-zone;
+		status = "disabled";
+	};
+
 	conn_therm {
 		polling-delay-passive = <0>;
 		polling-delay = <0>;
