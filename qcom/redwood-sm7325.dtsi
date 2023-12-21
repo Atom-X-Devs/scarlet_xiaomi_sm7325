@@ -103,6 +103,18 @@
 };
 
 &thermal_zones {
+	pm8350c-bcl-lvl0 {
+		status = "disabled";
+	};
+
+	pm8350c-bcl-lvl1 {
+		status = "disabled";
+	};
+
+	pm8350c-bcl-lvl2 {
+		status = "disabled";
+	};
+
 	batt_therm {
 		polling-delay-passive = <0>;
 		polling-delay = <0>;
