@@ -293,7 +293,7 @@ static int aw86927_haptic_read_lra_f0(struct aw86927 *aw86927)
 	aw86927->f0_cali_status = true;
 	f0_tmp = 384000 * 10 / f0_reg;
 	aw86927->f0 = (unsigned int)f0_tmp;
-	aw_info("%s lra_f0=%d\n", __func__, aw86927->f0);
+	aw_dbg("%s lra_f0=%d\n", __func__, aw86927->f0);
 
 	return ret;
 }
@@ -640,12 +640,12 @@ static int aw86927_get_fifo_addr(struct aw86927 *aw86927)
 	temp = ((reg_val & 0x0f) << 24) | ((reg_val & 0xf0) << 4);
 	aw86927_i2c_read(aw86927, AW86927_REG_RTPCFG4, &reg_val);
 	temp = temp | reg_val;
-	aw_info("%s: almost_empty_threshold = %d\n", __func__,
-		    (unsigned short)temp);
+	aw_dbg("%s: almost_empty_threshold = %d\n", __func__,
+	       (unsigned short)temp);
 	aw86927_i2c_read(aw86927, AW86927_REG_RTPCFG5, &reg_val);
 	temp = temp | (reg_val << 16);
-	aw_info("%s: almost_full_threshold = %d\n", __func__,
-		    temp >> 16);
+	aw_dbg("%s: almost_full_threshold = %d\n", __func__,
+	       temp >> 16);
 	return 0;
 }
 
@@ -765,7 +765,7 @@ void aw86927_interrupt_setup(struct aw86927 *aw86927)
 
 	aw86927_i2c_read(aw86927, AW86927_REG_SYSINT, &reg_val);
 
-	aw_info("%s: reg SYSINT=0x%02X\n", __func__, reg_val);
+	aw_dbg("%s: reg SYSINT=0x%02X\n", __func__, reg_val);
 	/* edge mode */
 	aw86927_select_edge_int_mode(aw86927);
 	/* int enable */
@@ -855,8 +855,7 @@ static int aw86927_haptic_read_cont_f0(struct aw86927 *aw86927)
 	}
 	f0_tmp = 384000 * 10 / f0_reg;
 	aw86927->cont_f0 = (unsigned int)f0_tmp;
-	aw_info("%s cont_f0=%d\n", __func__,
-		    aw86927->cont_f0);
+	aw_dbg("%s cont_f0=%d\n", __func__, aw86927->cont_f0);
 	return ret;
 }
 
@@ -928,8 +927,8 @@ static int aw86927_haptic_cont_get_f0(struct aw86927 *aw86927)
 		aw86927_haptic_read_cont_f0(aw86927);
 	} else {
 		aw86927->f0 = 0;
-		aw_err("%s enter standby mode failed, stop reading f0!\n",
-			__func__);
+		aw_dbg("%s enter standby mode failed, stop reading f0!\n",
+		       __func__);
 	}
 	aw86927_haptic_vbat_mode_config(aw86927, AW86927_VBAT_SW_ADJUST_MODE);
 	/* restore default config */
@@ -951,13 +950,13 @@ static void aw86927_haptic_upload_lra(struct aw86927 *aw86927,
 			  AW86927_BIT_TMCFG_TM_UNLOCK);
 	switch (flag) {
 	case AW86927_WRITE_ZERO:
-		aw_info("%s write zero to trim_lra!\n",
-			    __func__);
+		aw_dbg("%s write zero to trim_lra!\n",
+		       __func__);
 		aw86927_i2c_write(aw86927, AW86927_REG_ANACFG20,0x00);
 		break;
 	case AW86927_F0_CALI:
-		aw_info("%s write f0_calib_data to trim_lra = 0x%02X\n",
-			__func__, aw86927->f0_calib_data);
+		aw_dbg("%s write f0_calib_data to trim_lra = 0x%02X\n",
+		       __func__, aw86927->f0_calib_data);
 		aw86927_i2c_write(aw86927, AW86927_REG_ANACFG20,
 				       (char)aw86927->f0_calib_data);
 		break;
@@ -1034,8 +1033,8 @@ static int aw86927_haptic_get_vbat(struct aw86927 *aw86927)
 		aw_info("%s vbat min limit = %dmV\n",
 			    __func__, aw86927->vbat);
 	}
-	aw_info("%s aw86927->vbat=%dmV, vbat_code=0x%02X\n",
-		    __func__, aw86927->vbat, vbat_code);
+	aw_dbg("%s aw86927->vbat=%dmV, vbat_code=0x%02X\n",
+	       __func__, aw86927->vbat, vbat_code);
 	aw86927_haptic_raminit(aw86927, false);
 	return 0;
 }
@@ -1299,15 +1298,15 @@ static void aw86927_haptic_bst_mode_config(struct aw86927 *aw86927,
 	aw86927->bst_mode = mode;
 	switch (mode) {
 	case AW86927_BST_MODE:
-		aw_info("%s haptic bst mode = bst\n",
-			    __func__);
+		aw_dbg("%s haptic bst mode = bst\n",
+		       __func__);
 		aw86927_i2c_write_bits(aw86927, AW86927_REG_PLAYCFG1,
 				       AW86927_BIT_PLAYCFG1_BST_MODE_MASK,
 				       AW86927_BIT_PLAYCFG1_BST_MODE);
 		break;
 	case AW86927_BST_MODE_BYPASS:
-		aw_info("%s haptic bst mode = bypass\n",
-			    __func__);
+		aw_dbg("%s haptic bst mode = bypass\n",
+		       __func__);
 		aw86927_i2c_write_bits(aw86927, AW86927_REG_PLAYCFG1,
 				       AW86927_BIT_PLAYCFG1_BST_MODE_MASK,
 				       AW86927_BIT_PLAYCFG1_BST_MODE_BYPASS);
@@ -1432,7 +1431,8 @@ static void aw86927_haptic_set_gain(struct aw86927 *aw86927, unsigned char gain)
 
 	tzd = thermal_zone_get_zone_by_name(type);
 	ret = thermal_zone_get_temp(tzd, &temp);
-	aw_info("The temperature:%d,return value:%d\n",temp,ret);
+	aw_dbg("The temperature:%d,return value:%d\n",temp,ret);
+
 	if (aw86927->ram_vbat_comp == AW86927_RAM_VBAT_COMP_ENABLE){
 		aw86927_haptic_get_vbat(aw86927);
 		aw_dbg("%s: aw86927->vbat(%dmV) VBAT_REFER(%dmv)\n",
@@ -1444,8 +1444,8 @@ static void aw86927_haptic_set_gain(struct aw86927 *aw86927, unsigned char gain)
 			aw_dbg("%s comp gain limit is %d\n", __func__,
 				comp_gain);
 		}
-		aw_info("%s: enable vbat comp, level = %x comp level = %x", __func__,
-			   gain, comp_gain);
+		aw_dbg("%s: enable vbat comp, level = %x comp level = %x",
+		       __func__, gain, comp_gain);
 		if (aw86927->effect_id == 10 && ret == 0 && temp < 0){
 			comp_gain = 2*(int)comp_gain/3;
 			aw_info("The comp_gain is:%d\n",comp_gain);
@@ -1537,12 +1537,12 @@ static int aw86927_haptic_play_mode(struct aw86927 *aw86927,
 {
 	switch (play_mode) {
 	case AW86927_STANDBY_MODE:
-		aw_info("%s: enter standby mode\n", __func__);
+		aw_dbg("%s: enter standby mode\n", __func__);
 		aw86927->play_mode = AW86927_STANDBY_MODE;
 		aw86927_haptic_stop(aw86927);
 		break;
 	case AW86927_RAM_MODE:
-		aw_info("%s: enter ram mode\n", __func__);
+		aw_dbg("%s: enter ram mode\n", __func__);
 		aw86927->play_mode = AW86927_RAM_MODE;
 		aw86927_i2c_write_bits(aw86927, AW86927_REG_PLAYCFG3,
 				       AW86927_BIT_PLAYCFG3_PLAY_MODE_MASK,
@@ -1552,8 +1552,7 @@ static int aw86927_haptic_play_mode(struct aw86927 *aw86927,
 					      AW86927_BST_MODE);
 		break;
 	case AW86927_RAM_LOOP_MODE:
-		aw_info("%s: enter ram loop mode\n",
-			    __func__);
+		aw_dbg("%s: enter ram loop mode\n", __func__);
 		aw86927->play_mode = AW86927_RAM_LOOP_MODE;
 		aw86927_i2c_write_bits(aw86927, AW86927_REG_PLAYCFG3,
 				       AW86927_BIT_PLAYCFG3_PLAY_MODE_MASK,
@@ -1580,7 +1579,7 @@ static int aw86927_haptic_play_mode(struct aw86927 *aw86927,
 				       AW86927_BIT_PLAYCFG3_PLAY_MODE_RAM);
 		break;
 	case AW86927_CONT_MODE:
-		aw_info("%s: enter cont mode\n", __func__);
+		aw_dbg("%s: enter cont mode\n", __func__);
 		aw86927->play_mode = AW86927_CONT_MODE;
 		aw86927_i2c_write_bits(aw86927, AW86927_REG_PLAYCFG3,
 				       AW86927_BIT_PLAYCFG3_PLAY_MODE_MASK,
@@ -1608,8 +1607,8 @@ static int aw86927_haptic_stop(struct aw86927 *aw86927)
 	ret = aw86927_haptic_wait_enter_standby(aw86927, 40);
 
 	if (ret < 0) {
-		aw_err("%s force to enter standby mode!\n",
-			   __func__);
+		aw_dbg("%s force to enter standby mode!\n",
+		       __func__);
 		aw86927_force_enter_standby(aw86927);
 	}
 	return 0;
@@ -1881,9 +1880,9 @@ static int aw86927_haptic_is_within_cali_range(struct aw86927 *aw86927)
 	f0_cali_max = aw86927->info.f0_pre *
 				(100 + aw86927->info.f0_cali_percen) / 100;
 
-	aw_info("%s f0_pre = %d, f0_cali_min = %d, f0_cali_max = %d, f0 = %d\n",
-		__func__, aw86927->info.f0_pre,
-		f0_cali_min, f0_cali_max, aw86927->f0);
+	aw_dbg("%s f0_pre = %d, f0_cali_min = %d, f0_cali_max = %d, f0 = %d\n",
+	       __func__, aw86927->info.f0_pre, f0_cali_min, f0_cali_max,
+	       aw86927->f0);
 
 	if ((aw86927->f0 < f0_cali_min) || aw86927->f0 > f0_cali_max) {
 		aw_err("%s f0 calibration out of range = %d!\n",
@@ -3541,14 +3540,14 @@ int aw86927_parse_dt(struct aw86927 *aw86927, struct device *dev,
 		effect->brake_pattern_length = tmp;
 	}
 
-	aw_info("%s aw86927->info.brk_bst_md: %d\n",
-		    __func__, aw86927->info.brk_bst_md);
-	aw_info("%s aw86927->info.bst_vol_default: %d\n",
-		    __func__, aw86927->info.bst_vol_default);
-	aw_info("%s aw86927->info.bst_vol_ram: %d\n",
-		    __func__, aw86927->info.bst_vol_ram);
-	aw_info("%s aw86927->info.bst_vol_rtp: %d\n",
-		    __func__, aw86927->info.bst_vol_rtp);
+	aw_dbg("%s aw86927->info.brk_bst_md: %d\n",
+	       __func__, aw86927->info.brk_bst_md);
+	aw_dbg("%s aw86927->info.bst_vol_default: %d\n",
+	       __func__, aw86927->info.bst_vol_default);
+	aw_dbg("%s aw86927->info.bst_vol_ram: %d\n",
+	       __func__, aw86927->info.bst_vol_ram);
+	aw_dbg("%s aw86927->info.bst_vol_rtp: %d\n",
+	       __func__, aw86927->info.bst_vol_rtp);
 
 	return 0;
 }
@@ -3577,7 +3576,7 @@ static int aw86927_haptic_effect_strength(struct aw86927 *aw86927)
 	if (aw86927->level < 0x1E)
 		aw86927->level = 0x1E; /*30*/
 
-	aw_info("%s: aw86927->level =0x%x\n", __func__, aw86927->level);
+	aw_dbg("%s: aw86927->level =0x%x\n", __func__, aw86927->level);
 	return 0;
 }
 
@@ -3759,8 +3758,8 @@ static int aw86927_container_update(struct aw86927 *aw86927,
 	aw86927->ram.base_addr =
 	    (unsigned int)((aw86927_cont->data[0 + shift] << 8) |
 			   (aw86927_cont->data[1 + shift]));
-	aw_info("%s: base_addr = %d\n", __func__,
-		    aw86927->ram.base_addr);
+	aw_dbg("%s: base_addr = %d\n", __func__,
+	       aw86927->ram.base_addr);
 
 	aw86927_set_base_addr(aw86927);
 	aw86927_set_fifo_addr(aw86927);
@@ -3784,9 +3783,9 @@ static int aw86927_container_update(struct aw86927 *aw86927,
 		i += len;
 	}
 	if (ret)
-		aw_err("%s: ram data check sum error\n", __func__);
+		aw_dbg("%s: ram data check sum error\n", __func__);
 	else
-		aw_info("%s: ram data check sum pass\n", __func__);
+		aw_dbg("%s: ram data check sum pass\n", __func__);
 #endif
 	/* RAMINIT Disable */
 	aw86927_haptic_raminit(aw86927, false);
@@ -3835,7 +3834,7 @@ static void aw86927_ram_loaded(const struct firmware *cont, void *context)
 		release_firmware(cont);
 		return;
 	}
-	aw_info("%s: check sum pass: 0x%04x\n",  __func__, check_sum);
+	aw_dbg("%s: check sum pass: 0x%04x\n",  __func__, check_sum);
 	aw86927->ram.check_sum = check_sum;
 
 	/* aw86927 ram update less then 128kB */
@@ -3869,12 +3868,12 @@ static int aw86927_ram_update(struct aw86927 *aw86927)
 	aw86927->ram_init = 0;
 	aw86927->rtp_init = 0;
 	if(aw86927->nv_flag == 1){
-		aw_info("Use the backup ram file!\n");
+		aw_dbg("Use the backup ram file!\n");
 		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 				       awinic_ram_name[1], aw86927->dev,
 				       GFP_KERNEL, aw86927, aw86927_ram_loaded);
 	}else{
-		aw_info("Use the default ram file!\n");
+		aw_dbg("Use the default ram file!\n");
 		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 				       awinic_ram_name[0], aw86927->dev,
 				       GFP_KERNEL, aw86927, aw86927_ram_loaded);
@@ -3956,8 +3955,8 @@ static void aw86927_rtp_work_routine(struct work_struct *work)
 	    (aw86927->effect_id > aw86927->info.effect_max))
 		return;
 
-	aw_info("%s: effect_id = %d state=%d activate_mode = %d\n", __func__,
-		aw86927->effect_id, aw86927->state, aw86927->activate_mode);
+	aw_dbg("%s: effect_id = %d state=%d activate_mode = %d\n", __func__,
+	       aw86927->effect_id, aw86927->state, aw86927->activate_mode);
 	mutex_lock(&aw86927->lock);
 	aw86927_haptic_upload_lra(aw86927, AW86927_OSC_CALI);
 	aw86927_haptic_set_rtp_aei(aw86927, false);
@@ -4132,8 +4131,8 @@ static void aw86927_vibrator_work_routine(struct work_struct *work)
 	struct aw86927 *aw86927 = container_of(work, struct aw86927,
 					       vibrator_work);
 
-	aw_info("%s: effect_id = %d state=%d activate_mode = %d duration = %d\n",
-		__func__,
+	aw_dbg("%s: effect_id = %d state=%d activate_mode = %d duration = %d\n",
+	       __func__,
 		aw86927->effect_id, aw86927->state, aw86927->activate_mode,
 		aw86927->duration);
 	mutex_lock(&aw86927->lock);
@@ -4515,7 +4514,7 @@ void aw86927_haptics_set_gain_work_routine(struct work_struct *work)
 	struct thermal_zone_device *tzd;
 	tzd = thermal_zone_get_zone_by_name(type);
 	ret = thermal_zone_get_temp(tzd, &temp);
-	aw_info("The temperature:%d,return value:%d\n",temp,ret);
+	aw_dbg("The temperature:%d,return value:%d\n",temp,ret);
 
 	if (aw86927->new_gain >= 0x7FFF)
 		aw86927->level = 0x80;	/*128 */
@@ -4526,8 +4525,8 @@ void aw86927_haptics_set_gain_work_routine(struct work_struct *work)
 
 	if (aw86927->level < 0x1E)
 		aw86927->level = 0x1E;	/*30 */
-	aw_info("%s: set_gain queue work, new_gain = %x level = %x\n",
-		__func__, aw86927->new_gain, aw86927->level);
+	aw_dbg("%s: set_gain queue work, new_gain = %x level = %x\n",
+	       __func__, aw86927->new_gain, aw86927->level);
 
 	if (aw86927->ram_vbat_comp == AW86927_RAM_VBAT_COMP_ENABLE
 		&& aw86927->vbat) {
@@ -4539,8 +4538,8 @@ void aw86927_haptics_set_gain_work_routine(struct work_struct *work)
 			aw_dbg("%s: comp level limit is %d ",
 				 __func__, comp_level);
 		}
-		aw_info("%s: enable vbat comp, level = %x comp level = %x",
-			__func__, aw86927->level, comp_level);
+		aw_dbg("%s: enable vbat comp, level = %x comp level = %x",
+		       __func__, aw86927->level, comp_level);
 		if (aw86927->effect_id == 10 && ret == 0 && temp < 0){
 			comp_level = 2*(int)comp_level/3;
 			aw_info("The comp_level is:%d\n",comp_level);
