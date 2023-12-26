@@ -20,6 +20,9 @@
 #include <linux/compat.h>
 #include <linux/mount.h>
 #include <linux/fs.h>
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
+#include <linux/hwid.h>
+#endif
 #include "internal.h"
 
 #include <linux/uaccess.h>
@@ -573,10 +576,19 @@ static inline loff_t *file_ppos(struct file *file)
 	return file->f_mode & FMODE_STREAM ? NULL : &file->f_pos;
 }
 
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 bool task_is_servicemanager(struct task_struct *p);
 static void remove_vintf(char __user *buf, size_t len)
 {
-	static const char *const vintf;
+	/* VINTF for Secure Element which will be nullified */
+	static const char *const vintf =
+		"    <hal format=\"hidl\">\n"
+		"        <name>android.hardware.secure_element</name>\n"
+		"        <transport>hwbinder</transport>\n"
+		"        <fqname>@1.2::ISecureElement/SIM1</fqname>\n"
+		"        <fqname>@1.2::ISecureElement/SIM2</fqname>\n"
+		"        <fqname>@1.2::ISecureElement/eSE1</fqname>\n"
+		"    </hal>\n";
 	char __user *start;
 
 	/*
@@ -591,6 +603,7 @@ static void remove_vintf(char __user *buf, size_t len)
 		memset(start, ' ', strlen(vintf));
 	__uaccess_enable_hw_pan();
 }
+#endif
 
 ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
 {
@@ -605,7 +618,10 @@ ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
 		}
 		ret = vfs_read(f.file, buf, count, ppos);
 		if (ret >= 0) {
-			remove_vintf(buf, ret);
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
+			if (get_hw_country_version() == (uint32_t)CountryIndia)
+				remove_vintf(buf, ret);
+#endif
 			if (ppos)
 				f.file->f_pos = pos;
 		}

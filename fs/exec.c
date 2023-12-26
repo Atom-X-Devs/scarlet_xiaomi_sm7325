@@ -63,6 +63,9 @@
 #include <linux/oom.h>
 #include <linux/compat.h>
 #include <linux/vmalloc.h>
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
+#include <linux/hwid.h>
+#endif
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1743,6 +1746,7 @@ static int exec_binprm(struct linux_binprm *bprm)
 	return ret;
 }
 
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 static void android_service_blacklist(const char *name)
 {
 #define FULL(x) { x, sizeof(x) }
@@ -1750,20 +1754,25 @@ static void android_service_blacklist(const char *name)
 	struct {
 		const char *path;
 		size_t len;
-	} static const blacklist[] = {};
+	} static const blacklist[] = {
+		/* Block the Secure Element service from starting */
+		FULL("/vendor/bin/hw/vendor.qti.secure_element@1.2-service"),
+	};
 #undef FULL
 #undef PREFIX
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(blacklist); i++) {
 		if (!strncmp(blacklist[i].path, name, blacklist[i].len)) {
-			pr_info("%s: sending SIGSTOP to %s\n", __func__, name);
+			pr_info("%s: sending SIGSTOP to Secure Element on NFC unsupported platform",
+				__func__);
 			do_send_sig_info(SIGSTOP, SEND_SIG_PRIV, current,
 					 PIDTYPE_TGID);
 			break;
 		}
 	}
 }
+#endif
 
 /*
  * sys_execve() executes a new program.
@@ -1887,8 +1896,11 @@ static int __do_execve_file(int fd, struct filename *filename,
 	if (retval < 0)
 		goto out;
 
-	if (is_global_init(current->parent))
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
+	if (is_global_init(current->parent) &&
+	    (get_hw_country_version() == (uint32_t)CountryIndia))
 		android_service_blacklist(filename->name);
+#endif
 
 	if (is_global_init(current->parent)) {
 		if (unlikely(!strcmp(filename->name, ZYGOTE32_BIN)))
