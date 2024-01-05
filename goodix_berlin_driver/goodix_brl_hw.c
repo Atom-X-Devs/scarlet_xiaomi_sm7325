@@ -518,6 +518,7 @@ read_end:
     temp_cmd.len = 4;
     temp_cmd.cmd = 0x0C;
     brl_send_cmd(cd, &temp_cmd);
+    kfree(tmp_buf);
     return ret;
 }
 
