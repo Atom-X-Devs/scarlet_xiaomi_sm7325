@@ -23,7 +23,7 @@ ifeq ($(CONFIG_CNSS_QCA6390), y)
 	endif
 	CONFIG_SCALE_INCLUDES := y
 	CONFIG_HASTINGS_BT_WAR := y
-	CONFIG_WDI3_IPA_OVER_GSI := y
+	CONFIG_WDI3_IPA_OVER_GSI :=y
 	CONFIG_DIRECT_BUF_RX_ENABLE := y
 	CONFIG_WMI_DBR_SUPPORT := y
 	CONFIG_MORE_TX_DESC := y
@@ -155,7 +155,11 @@ ifeq (y,$(findstring y,$(CONFIG_ICNSS) $(CONFIG_ICNSS_MODULE) $(CONFIG_ICNSS2_HE
 endif
 
 DEVELOPER_DISABLE_BUILD_TIMESTAMP := y
-WLAN_DISABLE_BUILD_TAG := y
+ifneq ($(DEVELOPER_DISABLE_BUILD_TIMESTAMP), y)
+ifneq ($(WLAN_DISABLE_BUILD_TAG), y)
+CONFIG_BUILD_TAG := y
+endif
+endif
 
 ifeq ($(CONFIG_ARCH_MDM9630), y)
 CONFIG_MOBILE_ROUTER := y
@@ -213,8 +217,10 @@ CONFIG_WLAN_SYSFS := y
 CONFIG_THERMAL_STATS_SUPPORT := y
 
 ifeq ($(CONFIG_WLAN_SYSFS), y)
+	CONFIG_WLAN_SYSFS_STA_INFO := y
 	CONFIG_WLAN_SYSFS_CHANNEL := y
 	CONFIG_WLAN_SYSFS_FW_MODE_CFG := y
+	CONFIG_WLAN_SYSFS_MEM_STATS := y
 	CONFIG_WLAN_REASSOC := y
 	CONFIG_WLAN_SYSFS_CONNECT_INFO := y
 	CONFIG_WLAN_SCAN_DISABLE := y
@@ -231,6 +237,10 @@ ifeq ($(CONFIG_WLAN_SYSFS), y)
 	CONFIG_WLAN_SYSFS_RADAR := y
 	CONFIG_WLAN_SYSFS_RTS_CTS := y
 	CONFIG_WLAN_SYSFS_HE_BSS_COLOR := y
+	CONFIG_WLAN_TXRX_FW_STATS := y
+	CONFIG_WLAN_TXRX_STATS := y
+	CONFIG_WLAN_SYSFS_DP_TRACE := y
+	CONFIG_WLAN_SYSFS_STATS := y
 ifeq ($(CONFIG_QCOM_TDLS), y)
 	CONFIG_WLAN_SYSFS_TDLS_PEERS := y
 endif
@@ -239,6 +249,11 @@ endif
 	CONFIG_WLAN_DL_MODES := y
 	CONFIG_WLAN_DUMP_IN_PROGRESS := y
 endif
+
+CONFIG_WLAN_POWER_DEBUG := y
+
+#Disable Beacon Reception Stats
+CONFIG_FEATURE_BECN_STATS := n
 endif
 
 #Disable the Export Symbol config
@@ -280,6 +295,7 @@ endif
 
 ifeq ($(CONFIG_ARCH_KONA), y)
 CONFIG_QCACLD_FEATURE_METERING := y
+CONFIG_WDI3_STATS_UPDATE := y
 ifeq ($(CONFIG_WDI3_STATS_UPDATE), y)
 CONFIG_WDI3_STATS_BW_MONITOR := y
 endif
@@ -353,8 +369,10 @@ endif
 
 #Flag to enable Linux QCMBR feature as default feature
 ifeq ($(CONFIG_ROME_IF),usb)
-	CONFIG_LINUX_QCMBR := y
+	CONFIG_LINUX_QCMBR :=y
 endif
+
+CONFIG_FEATURE_EPPING := n
 
 #Flag to enable offload packets feature
 CONFIG_WLAN_OFFLOAD_PACKETS := y
@@ -384,6 +402,7 @@ ifneq ($(CONFIG_ROME_IF),sdio)
 
 	# Flag to enable NAPI
 	CONFIG_WLAN_NAPI := y
+	CONFIG_WLAN_NAPI_DEBUG := n
 
 	# Flag to enable FW based TX Flow control
 	ifeq ($(CONFIG_LITHIUM), y)
@@ -414,6 +433,13 @@ CONFIG_LFR_SUBNET_DETECTION := y
 
 # Flag to enable MCC to SCC switch feature
 CONFIG_MCC_TO_SCC_SWITCH := y
+
+ifeq ($(CONFIG_SLUB_DEBUG), y)
+	# Enable Obj Mgr Degug services if slub build
+	CONFIG_WLAN_OBJMGR_DEBUG:= y
+	CONFIG_MPC_UT_FRAMEWORK := y
+	CONFIG_LOCK_STATS_ON:= y
+endif
 
 ifeq ($(CONFIG_WLAN_SYSFS), y)
 ifeq ($(CONFIG_MPC_UT_FRAMEWORK), y)
@@ -460,6 +486,12 @@ ifeq ($(CONFIG_HELIUMPLUS), y)
 
 ifeq ($(CONFIG_64BIT_PADDR), y)
 CONFIG_HTT_PADDR64 := y
+endif
+
+ifeq ($(CONFIG_SLUB_DEBUG_ON), y)
+CONFIG_OL_RX_INDICATION_RECORD := y
+CONFIG_TSOSEG_DEBUG := y
+CONFIG_HIF_LARGE_CE_RING_HISTORY := 8192
 endif
 
 endif #CONFIG_HELIUMPLUS
@@ -526,7 +558,7 @@ CONFIG_TX_TID_OVERRIDE := y
 CONFIG_DP_TXRX_SOC_ATTACH := y
 CONFIG_WLAN_CLD_PM_QOS := n
 CONFIG_WLAN_CLD_DEV_PM_QOS := y
-CONFIG_DISABLE_DP_STATS := y
+CONFIG_DISABLE_DP_STATS := n
 CONFIG_MAX_ALLOC_PAGE_SIZE := y
 CONFIG_REO_DESC_DEFER_FREE := y
 CONFIG_RXDMA_ERR_PKT_DROP := y
@@ -536,7 +568,73 @@ CONFIG_DP_MEM_PRE_ALLOC := y
 
 endif
 
+# As per target team, build is done as follows:
+# Defconfig : build with default flags
+# Slub      : defconfig  + CONFIG_SLUB_DEBUG=y +
+#	      CONFIG_SLUB_DEBUG_ON=y + CONFIG_PAGE_POISONING=y
+# Perf      : Using appropriate msmXXXX-perf_defconfig
+#
+# Shipment builds (user variants) should not have any debug feature
+# enabled. This is identified using 'TARGET_BUILD_VARIANT'. Slub builds
+# are identified using the CONFIG_SLUB_DEBUG_ON configuration. Since
+# there is no other way to identify defconfig builds, QCOMs internal
+# representation of perf builds (identified using the string 'perf'),
+# is used to identify if the build is a slub or defconfig one. This
+# way no critical debug feature will be enabled for perf and shipment
+# builds. Other OEMs are also protected using the TARGET_BUILD_VARIANT
+# config.
+ifneq ($(TARGET_BUILD_VARIANT),user)
+	CONFIG_FEATURE_PKTLOG := y
+	CONFIG_WLAN_DEBUG_CRASH_INJECT := y
+endif
+
+#Disable pktlog feature for lithium based target
+ifeq ($(CONFIG_LITHIUM), y)
+	CONFIG_FEATURE_PKTLOG := n
+endif
+
+#Enable WLAN/Power debugfs feature only if debug_fs is enabled
+#ifeq ($(CONFIG_DEBUG_FS), y)
+       # Flag to enable debugfs. Depends on CONFIG_DEBUG_FS in kernel
+       # configuration.
+       # CONFIG_WLAN_DEBUGFS := y
+
+       # Flag to enable streamfs. Depends on CONFIG_DEBUG_FS and
+       # CONFIG_RELAY in kernel configuration.
+#ifeq ($(CONFIG_RELAY), y)
+       # CONFIG_WLAN_STREAMFS := y
+#endif
+#endif
+
+ifeq ($(CONFIG_WLAN_DEBUGFS), y)
+       CONFIG_WLAN_MWS_INFO_DEBUGFS := y
+       CONFIG_WLAN_FEATURE_MIB_STATS := y
+endif
+
 # Feature flags which are not (currently) configurable via Kconfig
+
+#Whether to build debug version
+BUILD_DEBUG_VERSION := n
+
+#Enable this flag to build driver in diag version
+BUILD_DIAG_VERSION := n
+
+ifeq ($(CONFIG_SLUB_DEBUG), y)
+	PANIC_ON_BUG := y
+	WLAN_WARN_ON_ASSERT := y
+else ifeq ($(CONFIG_PERF_DEBUG), y)
+	PANIC_ON_BUG := y
+	WLAN_WARN_ON_ASSERT := y
+else
+	PANIC_ON_BUG := n
+	WLAN_WARN_ON_ASSERT := n
+endif
+
+# Compile all log levels by default
+CONFIG_WLAN_LOG_FATAL := y
+CONFIG_WLAN_LOG_ERROR := n
+CONFIG_WLAN_LOG_WARN := n
+CONFIG_WLAN_LOG_INFO := n
 
 #Enable OL debug and wmi unified functions
 CONFIG_ATH_PERF_PWR_OFFLOAD := y
@@ -694,15 +792,15 @@ CONFIG_QCA_WIFI_FTM := y
 ifeq ($(CONFIG_QCA_WIFI_FTM), y)
 
 ifeq ($(CONFIG_NL80211_TESTMODE), y)
-	QCA_WIFI_FTM_NL80211 := y
+	QCA_WIFI_FTM_NL80211 :=y
 else
-	QCA_WIFI_FTM_NL80211 := n
+	QCA_WIFI_FTM_NL80211 :=n
 endif
-	CONFIG_LINUX_QCMBR := y
+	CONFIG_LINUX_QCMBR :=y
 
 else
-	QCA_WIFI_FTM_NL80211 := n
-	CONFIG_LINUX_QCMBR := n
+	QCA_WIFI_FTM_NL80211 :=n
+	CONFIG_LINUX_QCMBR :=n
 endif
 
 
@@ -785,6 +883,9 @@ CONFIG_QCA_SIGNED_SPLIT_BINARY_SUPPORT := n
 #Enable single firmware binary format
 CONFIG_QCA_SINGLE_BINARY_SUPPORT := n
 
+#Enable collecting target RAM dump after kernel panic
+CONFIG_TARGET_RAMDUMP_AFTER_KERNEL_PANIC := n
+
 #Flag to enable/disable secure firmware feature
 CONFIG_FEATURE_SECURE_FIRMWARE := n
 
@@ -795,6 +896,18 @@ CONFIG_FEATURE_STATS_EXT := y
 CONFIG_WLAN_LOGGING_BUFFERS_DYNAMICALLY := n
 CONFIG_WLAN_DFS_STATIC_MEM_ALLOC := y
 
+#Flag to enable HTC credit history feature
+CONFIG_FEATURE_HTC_CREDIT_HISTORY := y
+
+#Flag to enable MTRACE feature
+CONFIG_TRACE_RECORD_FEATURE := n
+
+#Flag to enable p2p debug feature
+CONFIG_WLAN_FEATURE_P2P_DEBUG := n
+
+#Flag to enable roam debug log
+CONFIG_FEATURE_ROAM_DEBUG := n
+
 #Flag to enable DFS Master feature
 CONFIG_WLAN_DFS_MASTER_ENABLE := y
 
@@ -803,6 +916,12 @@ ifeq ($(CONFIG_WIRELESS_EXT), y)
 CONFIG_WLAN_WEXT_SUPPORT_ENABLE := y
 endif
 
+#Flag to enable/disable MTRACE feature
+CONFIG_ENABLE_MTRACE_LOG := n
+
+#Flag to enable nud tracking feature
+CONFIG_WLAN_NUD_TRACKING := n
+
 #Flag to enable/Disable Function call trace
 CONFIG_FUNC_CALL_MAP := n
 
@@ -810,7 +929,7 @@ CONFIG_FUNC_CALL_MAP := n
 CONFIG_WLAN_WBUFF := y
 
 #Flag to enable set and get disable channel list feature
-CONFIG_DISABLE_CHANNEL_LIST := y
+CONFIG_DISABLE_CHANNEL_LIST :=y
 
 #Flag to enable beacon receive feature
 CONFIG_WLAN_BCN_RECV_FEATURE := y
@@ -843,6 +962,9 @@ CONFIG_FEATURE_INTEROP_ISSUES_AP := y
 
 CONFIG_FEATURE_WLAN_WAPI := y
 
+#Flag to enable FW log parsing support feature
+CONFIG_FEATURE_FW_LOG_PARSING := n
+
 CONFIG_PTT_SOCK_SVC_ENABLE := y
 CONFIG_SOFTAP_CHANNEL_RANGE := y
 CONFIG_FEATURE_WLAN_SCAN_PNO := y
@@ -851,6 +973,7 @@ CONFIG_WLAN_NS_OFFLOAD := y
 CONFIG_FEATURE_WLAN_RA_FILTERING:= y
 CONFIG_FEATURE_WLAN_LPHB := y
 CONFIG_QCA_SUPPORT_TX_THROTTLE := y
+CONFIG_WMI_INTERFACE_EVENT_LOGGING := n
 CONFIG_WLAN_FEATURE_LINK_LAYER_STATS := y
 CONFIG_FEATURE_CLUB_LL_STATS_AND_GET_STATION := y
 CONFIG_FEATURE_WLAN_EXTSCAN := n
@@ -901,11 +1024,30 @@ CONFIG_WMI_ROAM_SUPPORT := y
 CONFIG_WMI_CONCURRENCY_SUPPORT := y
 CONFIG_WMI_STA_SUPPORT := y
 
+CONFIG_DP_TRACE := n
+
 ifeq ($(CONFIG_HELIUMPLUS), y)
 ifneq ($(CONFIG_FORCE_ALLOC_FROM_DMA_ZONE), y)
 CONFIG_ENABLE_DEBUG_ADDRESS_MARKING := y
 endif
 CONFIG_RX_OL := y
+endif
+
+ifeq ($(CONFIG_SLUB_DEBUG_ON), y)
+	CONFIG_DSC_DEBUG := y
+	CONFIG_DESC_TIMESTAMP_DEBUG_INFO := y
+	CONFIG_FEATURE_UNIT_TEST_SUSPEND := y
+	CONFIG_LEAK_DETECTION := y
+	CONFIG_MAX_LOGS_PER_SEC := 500
+	CONFIG_SCHED_HISTORY_SIZE := 256
+	CONFIG_TALLOC_DEBUG := y
+	CONFIG_UNIT_TEST := y
+	CONFIG_REGISTER_OP_DEBUG := y
+	CONFIG_ENABLE_QDF_PTR_HASH_DEBUG := y
+
+ifneq ($(CONFIG_ARCH_HOLI), y)
+	CONFIG_HIF_DETECTION_LATENCY_ENABLE := y
+endif
 endif
 
 ifeq ($(CONFIG_UNIT_TEST), y)
@@ -938,6 +1080,9 @@ ifeq ($(CONFIG_LITHIUM), y)
 	CONFIG_WLAN_SKIP_BAR_UPDATE := y
 endif
 
+#Flag to enable hdd memory dump feature
+CONFIG_FEATURE_MEMDUMP_ENABLE := n
+
 #Flag to enable/disable WLAN D0-WOW
 ifeq ($(CONFIG_PCI_MSM), y)
 ifeq ($(CONFIG_HIF_PCI), y)
@@ -954,9 +1099,19 @@ CONFIG_CHANNEL_HOPPING_ALL_BANDS := y
 endif
 
 ifeq ($(CONFIG_ARCH_SDXPRAIRIE), y)
+	ifneq ($(CONFIG_SLUB_DEBUG), y)
+		CONFIG_DP_TRACE := n
+	endif
+
 	CONFIG_DIRECT_BUF_RX_ENABLE := n
 	CONFIG_WMI_DBR_SUPPORT := n
 	CONFIG_MAX_CLIENTS_ALLOWED := 64
+endif
+
+CONFIG_WLAN_LOGGING_SOCK_SVC := n
+
+ifneq ($(TARGET_BUILD_VARIANT),user)
+CONFIG_DESC_DUP_DETECT_DEBUG := y
 endif
 
 ifeq (y,$(findstring y,$(CONFIG_CNSS) $(CONFIG_CNSS_MODULE)))
@@ -1047,6 +1202,9 @@ CONFIG_DP_RX_BUFFER_POOL_SIZE := 128
 CONFIG_DP_RX_BUFFER_POOL_ALLOC_THRES := 5
 CONFIG_DP_SWLM := y
 endif
+
+#Disable Hang Event
+CONFIG_WLAN_HANG_EVENT := n
 
 ifeq ($(CONFIG_CNSS_QCA6750), y)
 ifeq ($(CONFIG_FW_THERMAL_THROTTLE), y)
