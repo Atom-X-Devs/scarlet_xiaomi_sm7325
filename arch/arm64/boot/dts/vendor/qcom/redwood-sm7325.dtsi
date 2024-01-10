@@ -396,12 +396,13 @@
 	pinctrl-1 = <&qupv3_se13_spi_sleep &qupv3_se13_spi_sleep_cs>;
 
 	xiaomi_m20_touch@0 {
-		compatible = "goodix,brl-d";
+		compatible = "goodix,brl-d", "focaltech,3680-spi";
 		reg = <0>;
 		spi-max-frequency = <5000000>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <81 0x2802>;
 
+		/* Goodix */
 		goodix,reset-gpio = <&tlmm 105 0x00>;
 		goodix,irq-gpio = <&tlmm 81 0x2802>;
 		goodix,irq-flags = <2>;
@@ -412,11 +413,23 @@
 		goodix,firmware-name = "goodix_firmware_m20.bin";
 		goodix,config-name = "goodix_cfg_group_m20.bin";
 		goodix,sleep-enable;
-
 		goodix,iovdd-name = "vdd";
 		goodix,avdd-gpio = <&tlmm 107 0x00>;
-
 		vdd-supply = <&L2C>;
+
+		/* Focaltech */
+		focaltech,max-touch-number = <10>;
+		focaltech,display-coords = <0 0 10800 24000>;
+		focaltech,irq-gpio = <&tlmm 81 0x2808>;
+		focaltech,reset-gpio = <&tlmm 105 0x00>;
+		focaltech,avdd-gpio = <&tlmm 107 0x00>;
+		focaltech,super-resolution-factors = <10>;
+		focaltech,touch-range-array = <1 5 10 15 20>;
+		focaltech,touch-def-array = <4 3 3 3>;
+		focaltech,touch-expert-array = <10 15 10 10
+						20 15 15 10
+						15 15 20 10>;
+		iovdd-supply = <&L2C>;
 	};
 };
 
