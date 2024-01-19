@@ -64,7 +64,7 @@ static DEFINE_SPINLOCK(pm_qos_lock);
 
 static struct pm_qos_object null_pm_qos;
 
-static BLOCKING_NOTIFIER_HEAD(cpu_dma_lat_notifier);
+SRCU_NOTIFIER_HEAD_STATIC(cpu_dma_lat_notifier);
 static struct pm_qos_constraints cpu_dma_constraints = {
 	.list = PLIST_HEAD_INIT(cpu_dma_constraints.list),
 	.target_value = PM_QOS_CPU_DMA_LAT_DEFAULT_VALUE,
@@ -253,9 +253,9 @@ int pm_qos_update_target(struct pm_qos_constraints *c, struct plist_node *node,
 	if (prev_value != curr_value) {
 		ret = 1;
 		if (c->notifiers)
-			blocking_notifier_call_chain(c->notifiers,
-						     (unsigned long)curr_value,
-						     NULL);
+			srcu_notifier_call_chain(c->notifiers,
+						 (unsigned long)curr_value,
+						 NULL);
 	} else {
 		ret = 0;
 	}
@@ -449,7 +449,7 @@ int pm_qos_add_notifier(int pm_qos_class, struct notifier_block *notifier)
 {
 	int retval;
 
-	retval = blocking_notifier_chain_register(
+	retval = srcu_notifier_chain_register(
 			pm_qos_array[pm_qos_class]->constraints->notifiers,
 			notifier);
 
@@ -469,7 +469,7 @@ int pm_qos_remove_notifier(int pm_qos_class, struct notifier_block *notifier)
 {
 	int retval;
 
-	retval = blocking_notifier_chain_unregister(
+	retval = srcu_notifier_chain_unregister(
 			pm_qos_array[pm_qos_class]->constraints->notifiers,
 			notifier);
 
@@ -619,7 +619,7 @@ void freq_constraints_init(struct freq_constraints *qos)
 	c->no_constraint_value = FREQ_QOS_MIN_DEFAULT_VALUE;
 	c->type = PM_QOS_MAX;
 	c->notifiers = &qos->min_freq_notifiers;
-	BLOCKING_INIT_NOTIFIER_HEAD(c->notifiers);
+	srcu_init_notifier_head(c->notifiers);
 
 	c = &qos->max_freq;
 	plist_head_init(&c->list);
@@ -628,7 +628,7 @@ void freq_constraints_init(struct freq_constraints *qos)
 	c->no_constraint_value = FREQ_QOS_MAX_DEFAULT_VALUE;
 	c->type = PM_QOS_MIN;
 	c->notifiers = &qos->max_freq_notifiers;
-	BLOCKING_INIT_NOTIFIER_HEAD(c->notifiers);
+	srcu_init_notifier_head(c->notifiers);
 }
 
 /**
@@ -801,12 +801,12 @@ int freq_qos_add_notifier(struct freq_constraints *qos,
 
 	switch (type) {
 	case FREQ_QOS_MIN:
-		ret = blocking_notifier_chain_register(qos->min_freq.notifiers,
-						       notifier);
+		ret = srcu_notifier_chain_register(qos->min_freq.notifiers,
+						   notifier);
 		break;
 	case FREQ_QOS_MAX:
-		ret = blocking_notifier_chain_register(qos->max_freq.notifiers,
-						       notifier);
+		ret = srcu_notifier_chain_register(qos->max_freq.notifiers,
+						   notifier);
 		break;
 	default:
 		WARN_ON(1);
@@ -834,12 +834,12 @@ int freq_qos_remove_notifier(struct freq_constraints *qos,
 
 	switch (type) {
 	case FREQ_QOS_MIN:
-		ret = blocking_notifier_chain_unregister(qos->min_freq.notifiers,
-							 notifier);
+		ret = srcu_notifier_chain_unregister(qos->min_freq.notifiers,
+						     notifier);
 		break;
 	case FREQ_QOS_MAX:
-		ret = blocking_notifier_chain_unregister(qos->max_freq.notifiers,
-							 notifier);
+		ret = srcu_notifier_chain_unregister(qos->max_freq.notifiers,
+						     notifier);
 		break;
 	default:
 		WARN_ON(1);

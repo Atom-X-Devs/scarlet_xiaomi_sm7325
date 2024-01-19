@@ -195,7 +195,7 @@ static int dev_pm_qos_constraints_allocate(struct device *dev)
 {
 	struct dev_pm_qos *qos;
 	struct pm_qos_constraints *c;
-	struct blocking_notifier_head *n;
+	struct srcu_notifier_head *n;
 
 	qos = kzalloc(sizeof(*qos), GFP_KERNEL);
 	if (!qos)
@@ -214,7 +214,7 @@ static int dev_pm_qos_constraints_allocate(struct device *dev)
 	c->no_constraint_value = PM_QOS_RESUME_LATENCY_NO_CONSTRAINT;
 	c->type = PM_QOS_MIN;
 	c->notifiers = n;
-	BLOCKING_INIT_NOTIFIER_HEAD(n);
+	srcu_init_notifier_head(n);
 
 	c = &qos->latency_tolerance;
 	plist_head_init(&c->list);
@@ -549,8 +549,8 @@ int dev_pm_qos_add_notifier(struct device *dev, struct notifier_block *notifier,
 
 	switch (type) {
 	case DEV_PM_QOS_RESUME_LATENCY:
-		ret = blocking_notifier_chain_register(dev->power.qos->resume_latency.notifiers,
-						       notifier);
+		ret = srcu_notifier_chain_register(dev->power.qos->resume_latency.notifiers,
+						   notifier);
 		break;
 	case DEV_PM_QOS_MIN_FREQUENCY:
 		ret = freq_qos_add_notifier(&dev->power.qos->freq,
@@ -596,8 +596,8 @@ int dev_pm_qos_remove_notifier(struct device *dev,
 
 	switch (type) {
 	case DEV_PM_QOS_RESUME_LATENCY:
-		ret = blocking_notifier_chain_unregister(dev->power.qos->resume_latency.notifiers,
-							 notifier);
+		ret = srcu_notifier_chain_unregister(dev->power.qos->resume_latency.notifiers,
+						      notifier);
 		break;
 	case DEV_PM_QOS_MIN_FREQUENCY:
 		ret = freq_qos_remove_notifier(&dev->power.qos->freq,

@@ -67,7 +67,7 @@ struct pm_qos_constraints {
 	s32 default_value;
 	s32 no_constraint_value;
 	enum pm_qos_type type;
-	struct blocking_notifier_head *notifiers;
+	struct srcu_notifier_head *notifiers;
 };
 
 struct pm_qos_flags {
@@ -86,9 +86,9 @@ enum freq_qos_req_type {
 
 struct freq_constraints {
 	struct pm_qos_constraints min_freq;
-	struct blocking_notifier_head min_freq_notifiers;
+	struct srcu_notifier_head min_freq_notifiers;
 	struct pm_qos_constraints max_freq;
-	struct blocking_notifier_head max_freq_notifiers;
+	struct srcu_notifier_head max_freq_notifiers;
 };
 
 struct freq_qos_request {
