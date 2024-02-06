@@ -3501,6 +3501,25 @@ int swapcache_prepare(swp_entry_t entry)
 	return __swap_duplicate(entry, SWAP_HAS_CACHE);
 }
 
+void swapcache_clear(swp_entry_t entry)
+{
+	struct swap_info_struct *si = get_swap_device(entry);
+	unsigned long offset;
+	struct swap_cluster_info *ci;
+	unsigned char usage;
+
+	if (!si)
+		return;
+
+	offset = swp_offset(entry);
+	ci = lock_cluster_or_swap_info(si, offset);
+	usage = __swap_entry_free_locked(si, offset, SWAP_HAS_CACHE);
+	unlock_cluster_or_swap_info(si, ci);
+	if (!usage)
+		free_swap_slot(entry);
+	put_swap_device(si);
+}
+
 struct swap_info_struct *swp_swap_info(swp_entry_t entry)
 {
 	return swap_type_to_swap_info(swp_type(entry));

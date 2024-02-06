@@ -455,6 +455,7 @@ extern int add_swap_count_continuation(swp_entry_t, gfp_t);
 extern void swap_shmem_alloc(swp_entry_t);
 extern int swap_duplicate(swp_entry_t);
 extern int swapcache_prepare(swp_entry_t);
+void swapcache_clear(swp_entry_t entry);
 extern void swap_free(swp_entry_t);
 extern void swapcache_free_entries(swp_entry_t *entries, int n);
 extern int free_swap_and_cache(swp_entry_t);
@@ -513,6 +514,10 @@ static inline void show_swap_cache_info(void)
 
 #define free_swap_and_cache(e) ({(is_migration_entry(e) || is_device_private_entry(e));})
 #define swapcache_prepare(e) ({(is_migration_entry(e) || is_device_private_entry(e));})
+
+static inline void swapcache_clear(swp_entry_t entry)
+{
+}
 
 static inline int add_swap_count_continuation(swp_entry_t swp, gfp_t gfp_mask)
 {
