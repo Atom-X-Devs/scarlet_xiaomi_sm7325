@@ -579,12 +579,17 @@ static void remove_vintf(char __user *buf, size_t len)
 	static const char *const vintf;
 	char __user *start;
 
-	/* Replace the VINTF XML entry with whitespace */
-	uaccess_enable_privileged();
+	/*
+	 * Replace the VINTF XML entry with whitespace.
+	 * We have CONFIG_ARM64_SW_TTBR0_PAN and CONFIG_ARCH_MTE disabled. So, we can use
+	 * the toggle for enabling/disabling HW PAN in place of uaccess_[enable|disable]_privileged()
+	 * on older kernel revisions.
+	 */
+	__uaccess_disable_hw_pan();
 	start = strnstr(buf, vintf, len);
 	if (unlikely(start))
 		memset(start, ' ', strlen(vintf));
-	uaccess_disable_privileged();
+	__uaccess_enable_hw_pan();
 }
 
 ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
