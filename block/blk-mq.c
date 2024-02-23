@@ -613,7 +613,8 @@ static void __blk_mq_complete_request(struct request *rq)
 
 	cpu = get_cpu();
 	if (!test_bit(QUEUE_FLAG_SAME_FORCE, &q->queue_flags))
-		shared = cpus_share_cache(cpu, ctx->cpu);
+		shared = cpus_share_cache(cpu, ctx->cpu) &&
+			 cpus_equal_capacity(cpu, ctx->cpu);
 
 	if (cpu != ctx->cpu && !shared && cpu_online(ctx->cpu)) {
 		INIT_CSD(&rq->csd, __blk_mq_complete_request_remote, rq);
