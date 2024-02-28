@@ -2599,7 +2599,7 @@ static void ufshcd_pm_qos_get_worker(struct work_struct *work)
 
 	mutex_lock(&hba->pm_qos.lock);
 	if (atomic_read(&hba->pm_qos.count) && !hba->pm_qos.active) {
-		cpu_latency_qos_update_request(&hba->pm_qos.req, 100);
+		pm_qos_update_request(&hba->pm_qos.req, 100);
 		hba->pm_qos.active = true;
 	}
 	mutex_unlock(&hba->pm_qos.lock);
@@ -2614,7 +2614,7 @@ static void ufshcd_pm_qos_put_worker(struct work_struct *work)
 
 	mutex_lock(&hba->pm_qos.lock);
 	if (!atomic_read(&hba->pm_qos.count) && hba->pm_qos.active) {
-		cpu_latency_qos_update_request(&hba->pm_qos.req, PM_QOS_DEFAULT_VALUE);
+		pm_qos_update_request(&hba->pm_qos.req, PM_QOS_DEFAULT_VALUE);
 		hba->pm_qos.active = false;
 	}
 	mutex_unlock(&hba->pm_qos.lock);
@@ -9298,7 +9298,7 @@ void ufshcd_remove(struct ufs_hba *hba)
 	ufshcd_hba_stop(hba, true);
 	cancel_work_sync(&hba->pm_qos.put_work);
 	cancel_work_sync(&hba->pm_qos.get_work);
-	cpu_latency_qos_remove_request(&hba->pm_qos.req);
+	pm_qos_remove_request(&hba->pm_qos.req);
 
 	ufshcd_exit_clk_scaling(hba);
 	ufshcd_exit_clk_gating(hba);
@@ -9509,7 +9509,8 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	INIT_WORK(&hba->pm_qos.put_work, ufshcd_pm_qos_put_worker);
 	hba->pm_qos.req.type = PM_QOS_REQ_AFFINE_IRQ;
 	hba->pm_qos.req.irq = irq;
-	cpu_latency_qos_add_request(&hba->pm_qos.req, PM_QOS_DEFAULT_VALUE);
+	pm_qos_add_request(&hba->pm_qos.req, PM_QOS_CPU_DMA_LATENCY,
+			   PM_QOS_DEFAULT_VALUE);
 
 	/* IRQ registration */
 	err = devm_request_irq(dev, irq, ufshcd_intr, IRQF_SHARED, UFSHCD, hba);
@@ -9617,7 +9618,7 @@ free_cmd_queue:
 out_remove_scsi_host:
 	scsi_remove_host(hba->host);
 exit_gating:
-	cpu_latency_qos_remove_request(&hba->pm_qos.req);
+	pm_qos_remove_request(&hba->pm_qos.req);
 	ufshcd_exit_clk_scaling(hba);
 	ufshcd_exit_clk_gating(hba);
 	destroy_workqueue(hba->eh_wq);
