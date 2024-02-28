@@ -1278,7 +1278,7 @@ static int do_ipv6_getsockopt(struct sock *sk, int level, int optname,
 		}
 
 		if (val < 0)
-			val = sock_net(sk)->ipv6.devconf_all->hop_limit;
+			val = READ_ONCE(sock_net(sk)->ipv6.devconf_all->hop_limit);
 		break;
 	}
 
