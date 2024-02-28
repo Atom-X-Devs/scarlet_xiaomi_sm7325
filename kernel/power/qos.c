@@ -98,16 +98,8 @@ static const struct file_operations pm_qos_power_fops = {
 	.llseek = noop_llseek,
 };
 
-/**
- * pm_qos_read_value - Return the current effective constraint value.
- * @c: List of PM QoS constraint requests.
- */
-s32 pm_qos_read_value(struct pm_qos_constraints *c)
-{
-	return c->target_value;
-}
-
-static int pm_qos_get_value(struct pm_qos_constraints *c)
+/* unlocked internal variant */
+static inline int pm_qos_get_value(struct pm_qos_constraints *c)
 {
 	if (plist_head_empty(&c->list))
 		return c->no_constraint_value;
@@ -120,12 +112,18 @@ static int pm_qos_get_value(struct pm_qos_constraints *c)
 		return plist_last(&c->list)->prio;
 
 	default:
-		WARN(1, "Unknown PM QoS type in %s\n", __func__);
+		/* runtime check for not using enum */
+		BUG();
 		return PM_QOS_DEFAULT_VALUE;
 	}
 }
 
-static void pm_qos_set_value(struct pm_qos_constraints *c, s32 value)
+s32 pm_qos_read_value(struct pm_qos_constraints *c)
+{
+	return c->target_value;
+}
+
+static inline void pm_qos_set_value(struct pm_qos_constraints *c, s32 value)
 {
 	c->target_value = value;
 }
