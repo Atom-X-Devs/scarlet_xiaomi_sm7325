@@ -56,6 +56,14 @@
  */
 static DEFINE_SPINLOCK(pm_qos_lock);
 
+static struct pm_qos_constraints cpu_dma_constraints = {
+	.list = PLIST_HEAD_INIT(cpu_dma_constraints.list),
+	.target_value = PM_QOS_CPU_DMA_LAT_DEFAULT_VALUE,
+	.default_value = PM_QOS_CPU_DMA_LAT_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_CPU_DMA_LAT_DEFAULT_VALUE,
+	.type = PM_QOS_MIN,
+};
+
 /**
  * pm_qos_read_value - Return the current effective constraint value.
  * @c: List of PM QoS constraint requests.
@@ -219,16 +227,6 @@ bool pm_qos_update_flags(struct pm_qos_flags *pqf,
 	return prev_value != curr_value;
 }
 
-/* Definitions related to the CPU latency QoS. */
-
-static struct pm_qos_constraints cpu_latency_constraints = {
-	.list = PLIST_HEAD_INIT(cpu_latency_constraints.list),
-	.target_value = PM_QOS_CPU_LATENCY_DEFAULT_VALUE,
-	.default_value = PM_QOS_CPU_LATENCY_DEFAULT_VALUE,
-	.no_constraint_value = PM_QOS_CPU_LATENCY_DEFAULT_VALUE,
-	.type = PM_QOS_MIN,
-};
-
 /**
  * pm_qos_request - returns current system wide qos expectation
  * @pm_qos_class: Ignored.
@@ -237,13 +235,13 @@ static struct pm_qos_constraints cpu_latency_constraints = {
  */
 int pm_qos_request(int pm_qos_class)
 {
-	return pm_qos_read_value(&cpu_latency_constraints);
+	return pm_qos_read_value(&cpu_dma_constraints);
 }
 EXPORT_SYMBOL_GPL(pm_qos_request);
 
 int pm_qos_request_active(struct pm_qos_request *req)
 {
-	return req->qos == &cpu_latency_constraints;
+	return req->qos == &cpu_dma_constraints;
 }
 EXPORT_SYMBOL_GPL(pm_qos_request_active);
 
@@ -280,7 +278,7 @@ void pm_qos_add_request(struct pm_qos_request *req,
 
 	trace_pm_qos_add_request(PM_QOS_CPU_DMA_LATENCY, value);
 
-	req->qos = &cpu_latency_constraints;
+	req->qos = &cpu_dma_constraints;
 	cpu_latency_qos_update(req, PM_QOS_ADD_REQ, value);
 }
 EXPORT_SYMBOL_GPL(pm_qos_add_request);
@@ -340,9 +338,9 @@ void pm_qos_remove_request(struct pm_qos_request *req)
 }
 EXPORT_SYMBOL_GPL(pm_qos_remove_request);
 
-/* User space interface to the CPU latency QoS via misc device. */
+/* User space interface to global PM QoS via misc device. */
 
-static int cpu_latency_qos_open(struct inode *inode, struct file *filp)
+static int pm_qos_power_open(struct inode *inode, struct file *filp)
 {
 	struct pm_qos_request *req;
 
@@ -356,7 +354,7 @@ static int cpu_latency_qos_open(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static int cpu_latency_qos_release(struct inode *inode, struct file *filp)
+static int pm_qos_power_release(struct inode *inode, struct file *filp)
 {
 	struct pm_qos_request *req = filp->private_data;
 
@@ -368,8 +366,8 @@ static int cpu_latency_qos_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static ssize_t cpu_latency_qos_read(struct file *filp, char __user *buf,
-				    size_t count, loff_t *f_pos)
+static ssize_t pm_qos_power_read(struct file *filp, char __user *buf,
+				 size_t count, loff_t *f_pos)
 {
 	struct pm_qos_request *req = filp->private_data;
 	unsigned long flags;
@@ -379,14 +377,14 @@ static ssize_t cpu_latency_qos_read(struct file *filp, char __user *buf,
 		return -EINVAL;
 
 	spin_lock_irqsave(&pm_qos_lock, flags);
-	value = pm_qos_get_value(&cpu_latency_constraints);
+	value = pm_qos_get_value(&cpu_dma_constraints);
 	spin_unlock_irqrestore(&pm_qos_lock, flags);
 
 	return simple_read_from_buffer(buf, count, f_pos, &value, sizeof(s32));
 }
 
-static ssize_t cpu_latency_qos_write(struct file *filp, const char __user *buf,
-				     size_t count, loff_t *f_pos)
+static ssize_t pm_qos_power_write(struct file *filp, const char __user *buf,
+				  size_t count, loff_t *f_pos)
 {
 	s32 value;
 
@@ -409,21 +407,21 @@ static ssize_t cpu_latency_qos_write(struct file *filp, const char __user *buf,
 	return count;
 }
 
-static const struct file_operations cpu_latency_qos_fops = {
-	.write = cpu_latency_qos_write,
-	.read = cpu_latency_qos_read,
-	.open = cpu_latency_qos_open,
-	.release = cpu_latency_qos_release,
+static const struct file_operations pm_qos_power_fops = {
+	.write = pm_qos_power_write,
+	.read = pm_qos_power_read,
+	.open = pm_qos_power_open,
+	.release = pm_qos_power_release,
 	.llseek = noop_llseek,
 };
 
 static struct miscdevice cpu_latency_qos_miscdev = {
 	.minor = MISC_DYNAMIC_MINOR,
 	.name = "cpu_dma_latency",
-	.fops = &cpu_latency_qos_fops,
+	.fops = &pm_qos_power_fops,
 };
 
-static int __init cpu_latency_qos_init(void)
+static int __init pm_qos_power_init(void)
 {
 	int ret;
 
@@ -434,7 +432,7 @@ static int __init cpu_latency_qos_init(void)
 
 	return ret;
 }
-late_initcall(cpu_latency_qos_init);
+late_initcall(pm_qos_power_init);
 
 /* Definitions related to the frequency QoS below. */
 
