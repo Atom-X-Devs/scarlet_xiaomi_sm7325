@@ -532,7 +532,7 @@ int freq_qos_add_request(struct freq_constraints *qos,
 {
 	int ret;
 
-	if (IS_ERR_OR_NULL(qos) || !req || value < 0)
+	if (IS_ERR_OR_NULL(qos) || !req)
 		return -EINVAL;
 
 	if (WARN(freq_qos_request_active(req),
@@ -564,7 +564,7 @@ EXPORT_SYMBOL_GPL(freq_qos_add_request);
  */
 int freq_qos_update_request(struct freq_qos_request *req, s32 new_value)
 {
-	if (!req || new_value < 0)
+	if (!req)
 		return -EINVAL;
 
 	if (WARN(!freq_qos_request_active(req),
