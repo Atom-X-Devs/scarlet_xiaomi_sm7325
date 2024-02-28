@@ -1246,6 +1246,7 @@ static int psci_enter_idle(struct cpuidle_device *dev, struct lpm_cpu *cpu,
 	if (!idx) {
 		if (cpu->bias)
 			biastimer_start(cpu->bias);
+		cpuidle_set_idle_cpu(dev->cpu);
 		stop_critical_timings();
 		cpu_do_idle();
 		start_critical_timings();
@@ -1264,6 +1265,7 @@ static int psci_enter_idle(struct cpuidle_device *dev, struct lpm_cpu *cpu,
 	affinity_level = PSCI_AFFINITY_LEVEL(affinity_level);
 	state_id += power_state + affinity_level + cpu->levels[idx].psci_id;
 
+	cpuidle_set_idle_cpu(dev->cpu);
 	stop_critical_timings();
 
 	ret = psci_cpu_suspend_enter(state_id);
