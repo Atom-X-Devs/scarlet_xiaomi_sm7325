@@ -286,7 +286,6 @@ static int spi_slv_abort(struct spi_master *spi)
 	complete_all(&mas->rx_cb);
 	return 0;
 }
-EXPORT_SYMBOL(geni_spi_get_master_irq);
 
 int geni_spi_get_master_irq(struct spi_device *spi)
 {
@@ -294,6 +293,7 @@ int geni_spi_get_master_irq(struct spi_device *spi)
 
 	return mas->irq;
 }
+EXPORT_SYMBOL(geni_spi_get_master_irq);
 
 static struct spi_master *get_spi_master(struct device *dev)
 {
