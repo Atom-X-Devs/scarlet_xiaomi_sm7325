@@ -674,10 +674,12 @@ static void set_qos_latency(int latency)
 			gcdsprm.qos_request = true;
 	} else {
 		if (!gcdsprm.qos_request) {
-			cpu_latency_qos_add_request(&gcdsprm.pm_qos_req, latency);
+			pm_qos_add_request(&gcdsprm.pm_qos_req,
+				PM_QOS_CPU_DMA_LATENCY, latency);
 			gcdsprm.qos_request = true;
 		} else {
-			cpu_latency_qos_update_request(&gcdsprm.pm_qos_req, latency);
+			pm_qos_update_request(&gcdsprm.pm_qos_req,
+				latency);
 		}
 	}
 }
