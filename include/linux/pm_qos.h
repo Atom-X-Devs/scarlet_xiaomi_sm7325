@@ -53,6 +53,7 @@ enum pm_qos_type {
 	PM_QOS_UNITIALIZED,
 	PM_QOS_MAX,		/* return the largest value */
 	PM_QOS_MIN,		/* return the smallest value */
+	PM_QOS_SUM		/* return the sum */
 };
 
 /*
