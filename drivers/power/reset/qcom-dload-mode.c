@@ -24,7 +24,7 @@ enum qcom_download_dest {
 
 struct qcom_dload {
 	struct notifier_block panic_nb;
-	struct notifier_block restart_nb;
+	struct notifier_block reboot_nb;
 	struct kobject kobj;
 
 	bool in_panic;
@@ -38,11 +38,8 @@ struct qcom_dload {
 static bool enable_dump =
 	IS_ENABLED(CONFIG_POWER_RESET_QCOM_DOWNLOAD_MODE_DEFAULT);
 static enum qcom_download_mode current_download_mode = QCOM_DOWNLOAD_NODUMP;
-#ifndef CONFIG_MACH_XIAOMI
 static enum qcom_download_mode dump_mode = QCOM_DOWNLOAD_FULLDUMP;
-#else
-static enum qcom_download_mode dump_mode = QCOM_DOWNLOAD_BOTHDUMP;
-#endif
+static bool early_pcie_init_enable;
 
 static int set_download_mode(enum qcom_download_mode mode)
 {
@@ -254,17 +251,28 @@ static int qcom_dload_panic(struct notifier_block *this, unsigned long event,
 	return NOTIFY_OK;
 }
 
-static int qcom_dload_restart(struct notifier_block *this, unsigned long event,
+static int qcom_dload_reboot(struct notifier_block *this, unsigned long event,
 			      void *ptr)
 {
-#ifndef CONFIG_MACH_XIAOMI
 	char *cmd = ptr;
+	struct qcom_dload *poweroff = container_of(this, struct qcom_dload,
+						     reboot_nb);
 
-	if (cmd && !strcmp(cmd, "edl")) {
-		set_download_mode(QCOM_DOWNLOAD_EDL);
-		reboot_mode = REBOOT_WARM;
+	/* Clean shutdown, disable dump mode to allow normal restart */
+	if (!poweroff->in_panic)
+		set_download_mode(QCOM_DOWNLOAD_NODUMP);
+
+	if (cmd) {
+		if (!strcmp(cmd, "edl")) {
+			early_pcie_init_enable ? set_download_mode(QCOM_EDLOAD_PCI_MODE)
+				: set_download_mode(QCOM_DOWNLOAD_EDL);
+		}
+		else if (!strcmp(cmd, "qcom_dload"))
+			msm_enable_dump_mode(true);
 	}
-#endif
+
+	if (current_download_mode != QCOM_DOWNLOAD_NODUMP)
+		reboot_mode = REBOOT_WARM;
 
 	return NOTIFY_OK;
 }
@@ -306,6 +314,33 @@ static void store_kaslr_offset(void)
 static void store_kaslr_offset(void) {}
 #endif /* CONFIG_RANDOMIZE_BASE */
 
+static void check_pci_edl(struct device_node *np)
+{
+	void __iomem *mem;
+	uint32_t read_val;
+	int ret_l, ret_h, l, h, mask_value;
+
+	mem = of_iomap(np, 0);
+	if (!mem) {
+		pr_info("Unable to map memory for DT property: %s\n", np->name);
+		return;
+	}
+
+	read_val = __raw_readl(mem);
+	ret_l = of_property_read_u32_index(np, "qcom,boot-config-shift", 0, &l);
+	ret_h = of_property_read_u32_index(np, "qcom,boot-config-shift", 1, &h);
+
+	if (!ret_l && !ret_h) {
+		mask_value = (read_val >> l) & GENMASK(h - l, 0);
+		if (mask_value == 5 || mask_value == 7) {
+			early_pcie_init_enable = true;
+			pr_info("Setting up EDL mode to PCIE\n");
+		}
+	}
+
+	iounmap(mem);
+}
+
 static int qcom_dload_probe(struct platform_device *pdev)
 {
 	struct qcom_dload *poweroff;
@@ -335,6 +370,7 @@ static int qcom_dload_probe(struct platform_device *pdev)
 
 	poweroff->dload_dest_addr = map_prop_mem("qcom,msm-imem-dload-type");
 	store_kaslr_offset();
+	check_pci_edl(pdev->dev.of_node);
 
 	msm_enable_dump_mode(enable_dump);
 	if (!enable_dump)
@@ -345,14 +381,9 @@ static int qcom_dload_probe(struct platform_device *pdev)
 	atomic_notifier_chain_register(&panic_notifier_list,
 				       &poweroff->panic_nb);
 
-	poweroff->restart_nb.notifier_call = qcom_dload_restart;
-	/* Here, Restart handler priority should be higher than
-	 * of restart handler present in scm driver so that
-	 * reboot_mode set by this handler seen by SCM's one
-	 * for EDL mode.
-	 */
-	poweroff->restart_nb.priority = 131;
-	register_restart_handler(&poweroff->restart_nb);
+	poweroff->reboot_nb.notifier_call = qcom_dload_reboot;
+	poweroff->reboot_nb.priority = 255;
+	register_reboot_notifier(&poweroff->reboot_nb);
 
 	platform_set_drvdata(pdev, poweroff);
 
@@ -365,7 +396,7 @@ static int qcom_dload_remove(struct platform_device *pdev)
 
 	atomic_notifier_chain_unregister(&panic_notifier_list,
 					 &poweroff->panic_nb);
-	unregister_restart_handler(&poweroff->restart_nb);
+	unregister_reboot_notifier(&poweroff->reboot_nb);
 
 	if (poweroff->dload_dest_addr)
 		iounmap(poweroff->dload_dest_addr);

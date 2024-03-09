@@ -407,7 +407,7 @@ config BATTERY_TWL4030_MADC
 
 config QTI_BATTERY_CHARGER
 	tristate "QTI Glink battery charger"
-	depends on QTI_PMIC_GLINK
+	depends on QTI_PMIC_GLINK && EXTCON
 	help
 	  Say Y here to enable Qualcomm Technologies, Inc. battery charger
 	  driver which interfaces with the charger firmware running on the
@@ -417,35 +417,6 @@ config QTI_BATTERY_CHARGER
 
 	  To compile the driver as a module, choose M here: the module will be
 	  called qti_battery_charger.
-
-if QTI_BATTERY_CHARGER
-
-config AI_RSOC
-	bool "Get average current and RSOC config"
-	help
-	  Say Y here to enable create node to get average current and RSOC.
-
-config BQ2597X_BATTERY_CHARGER
-	bool "BQ2597X battery charger"
-	help
-	  Say Y here to enable BQ2597X battery charger.
-
-config BQ_CLOUD_AUTHENTICATION
-	bool "BQ cloud authentication config"
-	help
-	  Say Y here to enable Bq cloud authentication.
-
-config BQ_FG_1S
-	bool "BQ for one battery"
-	help
-	  Say Y here to enable BQ_FG_1S.
-
-config BQ_FUEL_GAUGE
-	bool "BQ fuel gauge config"
-	help
-	  Say Y here to enable BQ fuel gauge.
-
-endif
 
 config CHARGER_88PM860X
 	tristate "Marvell 88PM860x Charger driver"
