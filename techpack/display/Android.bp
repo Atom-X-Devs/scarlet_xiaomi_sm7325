@@ -30,11 +30,3 @@ genrule {
          "--headers_install $(location headers_install.sh)",
     out: display_headers_out,
 }
-
-cc_library_headers {
-    name: "qti_display_kernel_headers",
-    generated_headers: ["qti_generate_display_kernel_headers"],
-    export_generated_headers: ["qti_generate_display_kernel_headers"],
-    vendor: true,
-    recovery_available: true
-}
