@@ -1349,6 +1349,11 @@ QDF_STATUS pmo_core_psoc_send_host_wakeup_ind_to_fw(
 	pmo_enter();
 
 	hif_ctx = pmo_core_psoc_get_hif_handle(psoc);
+	if (!hif_ctx) {
+		pmo_err("hif_ctx is NULL");
+		status = QDF_STATUS_E_INVAL;
+		goto out;
+	}
 
 	hif_set_ep_intermediate_vote_access(hif_ctx);
 
