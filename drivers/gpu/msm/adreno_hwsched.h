@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _ADRENO_HWSCHED_H_
@@ -83,6 +84,14 @@ void adreno_hwsched_start(struct adreno_device *adreno_dev);
  * Set up the dispatcher resources
  */
 void adreno_hwsched_init(struct adreno_device *adreno_dev);
+
+/**
+ * adreno_hwsched_clear_fault() - Clear the hwsched fault
+ * @adreno_dev: A pointer to an adreno_device structure
+ *
+ * Clear the hwsched fault status for adreno device
+ */
+void adreno_hwsched_clear_fault(struct adreno_device *adreno_dev);
 
 /**
  * adreno_hwsched_dispatcher_close() - close the hwsched dispatcher
