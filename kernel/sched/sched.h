@@ -332,6 +332,7 @@ static inline bool __dl_overflow(struct dl_bw *dl_b, unsigned long cap,
 }
 
 unsigned long approximate_util_avg(unsigned long util, u64 delta);
+u64 approximate_runtime(unsigned long util);
 
 /*
  * Verify the fitness of task @p to run on @cpu taking into account the
