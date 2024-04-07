@@ -320,6 +320,8 @@ struct dl_bw {
 	u64			total_bw;
 };
 
+unsigned long approximate_util_avg(unsigned long util, u64 delta);
+
 extern void init_dl_bw(struct dl_bw *dl_b);
 extern int  sched_dl_global_validate(void);
 extern void sched_dl_do_global(void);
