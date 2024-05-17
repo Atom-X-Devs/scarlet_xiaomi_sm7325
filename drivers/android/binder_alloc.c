@@ -1125,7 +1125,7 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 	return LRU_REMOVED_RETRY;
 
 err_invalid_vma:
-	up_read(&mm->mmap_sem);
+	mmap_read_unlock(mm);
 err_down_read_mmap_sem_failed:
 	mmput_async(mm);
 err_mmget:
