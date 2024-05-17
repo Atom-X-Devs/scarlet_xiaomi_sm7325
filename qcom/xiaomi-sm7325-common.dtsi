@@ -161,6 +161,10 @@
 };
 
 &pmk8350_vadc {
+	/delete-node/ pmr735a_ref_gnd;
+	/delete-node/ pmr735a_vref_1p25;
+	/delete-node/ pmr735a_die_temp;
+
 	pm7325b_ref_gnd {
 		reg = <PM7325B_ADC7_REF_GND>;
 		label = "pm7325b_ref_gnd";
