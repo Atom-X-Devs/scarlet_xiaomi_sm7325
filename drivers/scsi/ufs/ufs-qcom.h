@@ -346,7 +346,11 @@ struct ufs_qcom_host {
 #ifdef CONFIG_SCSI_UFS_CRYPTO
 	void __iomem *ice_mmio;
 #endif
+#if IS_ENABLED(CONFIG_QTI_HW_KEY_MANAGER)
+	void __iomem *ice_hwkm_mmio;
+#endif
 
+	bool reset_in_progress;
 	u32 dev_ref_clk_en_mask;
 
 	/* Bitmask for enabling debug prints */
@@ -505,6 +509,7 @@ int ufs_qcom_ice_enable(struct ufs_qcom_host *host);
 int ufs_qcom_ice_resume(struct ufs_qcom_host *host);
 int ufs_qcom_ice_program_key(struct ufs_hba *hba,
 			     const union ufs_crypto_cfg_entry *cfg, int slot);
+void ufs_qcom_ice_disable(struct ufs_qcom_host *host);
 #else
 static inline int ufs_qcom_ice_init(struct ufs_qcom_host *host)
 {
@@ -515,6 +520,10 @@ static inline int ufs_qcom_ice_enable(struct ufs_qcom_host *host)
 	return 0;
 }
 static inline int ufs_qcom_ice_resume(struct ufs_qcom_host *host)
+{
+	return 0;
+}
+static inline void ufs_qcom_ice_disable(struct ufs_qcom_host *host)
 {
 	return 0;
 }

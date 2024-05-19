@@ -10,16 +10,17 @@
 #include <linux/hwkm.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <asm/cacheflush.h>
+#include <linux/qcom_scm.h>
+#include <linux/qtee_shmbridge.h>
 
 #include "crypto-qti-ice-regs.h"
 #include "crypto-qti-platform.h"
 
-#define TPKEY_SLOT_ICEMEM_SLAVE		0x92
 #define KEYMANAGER_ICE_MAP_SLOT(slot)	((slot * 2) + 10)
 #define GP_KEYSLOT			140
 #define RAW_SECRET_KEYSLOT		141
-
-#define QTI_HWKM_INIT_DONE		0x1
+#define TPKEY_SLOT_ICEMEM_SLAVE		0x92
 #define SLOT_EMPTY_ERROR		0x1000
 #define INLINECRYPT_CTX			"inline encryption key"
 #define RAW_SECRET_CTX			"raw secret"
@@ -37,6 +38,49 @@ union crypto_cfg {
 	};
 };
 
+static bool qti_hwkm_init_done;
+
+int crypto_qti_get_hwkm_raw_secret_tz(
+				const u8 *wrapped_key,
+				unsigned int wrapped_key_size, u8 *secret,
+				unsigned int secret_size)
+{
+	int err = 0;
+	struct qtee_shm shm_key, shm_secret;
+
+	err = qtee_shmbridge_allocate_shm(wrapped_key_size, &shm_key);
+	if (err)
+		return -ENOMEM;
+
+	err = qtee_shmbridge_allocate_shm(secret_size, &shm_secret);
+	if (err) {
+		qtee_shmbridge_free_shm(&shm_key);
+		return -ENOMEM;
+	}
+
+	memcpy(shm_key.vaddr, wrapped_key, wrapped_key_size);
+	qtee_shmbridge_flush_shm_buf(&shm_key);
+
+	memset(shm_secret.vaddr, 0, secret_size);
+	qtee_shmbridge_flush_shm_buf(&shm_secret);
+
+	err = qcom_scm_derive_raw_secret(shm_key.paddr, wrapped_key_size,
+					shm_secret.paddr, secret_size);
+	if (err) {
+		pr_err("%s:SCM call error for raw secret: 0x%x\n", __func__, err);
+		goto exit;
+	}
+
+	qtee_shmbridge_inv_shm_buf(&shm_secret);
+	memcpy(secret, shm_secret.vaddr, secret_size);
+	qtee_shmbridge_inv_shm_buf(&shm_key);
+
+exit:
+	qtee_shmbridge_free_shm(&shm_key);
+	qtee_shmbridge_free_shm(&shm_secret);
+	return err;
+}
+
 static int crypto_qti_hwkm_evict_slot(unsigned int slot, bool double_key)
 {
 	struct hwkm_cmd cmd_clear;
@@ -47,15 +91,17 @@ static int crypto_qti_hwkm_evict_slot(unsigned int slot, bool double_key)
 	cmd_clear.clear.dks = slot;
 	if (double_key)
 		cmd_clear.clear.is_double_key = true;
+
 	return qti_hwkm_handle_cmd(&cmd_clear, &rsp_clear);
 }
 
-int crypto_qti_program_key(struct crypto_vops_qti_entry *ice_entry,
+int crypto_qti_program_key(const struct ice_mmio_data *mmio_data,
 			   const struct blk_crypto_key *key, unsigned int slot,
 			   unsigned int data_unit_mask, int capid)
 {
 	int err_program = 0;
 	int err_clear = 0;
+	int err = 0;
 	struct hwkm_cmd cmd_unwrap;
 	struct hwkm_cmd cmd_kdf;
 	struct hwkm_rsp rsp_unwrap;
@@ -82,22 +128,20 @@ int crypto_qti_program_key(struct crypto_vops_qti_entry *ice_entry,
 		return -EINVAL;
 	}
 
+	if (qti_hwkm_init_required(mmio_data)) {
+		err = qti_hwkm_init(mmio_data);
+		if (err) {
+			pr_err("%s: Error with HWKM init %d\n", __func__, err);
+			return -EINVAL;
+		}
+		qti_hwkm_init_done = true;
+	}
+
 	err_program = qti_hwkm_clocks(true);
 	if (err_program) {
 		pr_err("%s: Error enabling clocks %d\n", __func__,
 							err_program);
 		return err_program;
-	}
-
-	if ((ice_entry->flags & QTI_HWKM_INIT_DONE) != QTI_HWKM_INIT_DONE) {
-		err_program = qti_hwkm_init(ice_entry->hwkm_slave_mmio_base);
-		if (err_program) {
-			pr_err("%s: Error with HWKM init %d\n", __func__,
-								err_program);
-			qti_hwkm_clocks(false);
-			return -EINVAL;
-		}
-		ice_entry->flags |= QTI_HWKM_INIT_DONE;
 	}
 
 	//Failsafe, clear GP_KEYSLOT incase it is not empty for any reason
@@ -156,7 +200,7 @@ int crypto_qti_program_key(struct crypto_vops_qti_entry *ice_entry,
 	cfg.capidx = capid;
 	cfg.cfge = 0x80;
 
-	ice_writel(ice_entry, 0x0, (ICE_LUT_KEYS_CRYPTOCFG_R_16 +
+	ice_writel(mmio_data->ice_base_mmio, 0x0, (ICE_LUT_KEYS_CRYPTOCFG_R_16 +
 					ICE_LUT_KEYS_CRYPTOCFG_OFFSET*slot));
 	/* Make sure CFGE is cleared */
 	wmb();
@@ -182,7 +226,7 @@ int crypto_qti_program_key(struct crypto_vops_qti_entry *ice_entry,
 		return -EINVAL;
 	}
 
-	ice_writel(ice_entry, cfg.regval[0], (ICE_LUT_KEYS_CRYPTOCFG_R_16 +
+	ice_writel(mmio_data->ice_base_mmio, cfg.regval[0], (ICE_LUT_KEYS_CRYPTOCFG_R_16 +
 					ICE_LUT_KEYS_CRYPTOCFG_OFFSET*slot));
 	/* Make sure CFGE is enabled before moving forward */
 	wmb();
@@ -193,39 +237,40 @@ int crypto_qti_program_key(struct crypto_vops_qti_entry *ice_entry,
 }
 EXPORT_SYMBOL(crypto_qti_program_key);
 
-int crypto_qti_invalidate_key(struct crypto_vops_qti_entry *ice_entry,
+int crypto_qti_invalidate_key(const struct ice_mmio_data *mmio_data,
 			      unsigned int slot)
 {
 	int err = 0;
 
+	if (!qti_hwkm_init_done)
+		return 0;
+
+	/* Clear key from ICE keyslot */
 	err = qti_hwkm_clocks(true);
 	if (err) {
 		pr_err("%s: Error enabling clocks %d\n", __func__, err);
 		return err;
 	}
-
-	/* Clear key from ICE keyslot */
 	err = crypto_qti_hwkm_evict_slot(KEYMANAGER_ICE_MAP_SLOT(slot), true);
-	if (err) {
-		pr_err("%s: Error with key clear %d, slot %d\n",
-				__func__, err, slot);
-		err =  -EINVAL;
+	if (err && (err != SLOT_EMPTY_ERROR)) {
+		pr_err("%s: Error clearing slot %d, err %d\n",
+			__func__, slot, err);
+		qti_hwkm_clocks(false);
+		return -EINVAL;
 	}
-
 	qti_hwkm_clocks(false);
 
 	return err;
 }
 EXPORT_SYMBOL(crypto_qti_invalidate_key);
 
-void crypto_qti_disable_platform(struct crypto_vops_qti_entry *ice_entry)
+void crypto_qti_disable_platform(void)
 {
-	ice_entry->flags &= ~QTI_HWKM_INIT_DONE;
+	qti_hwkm_init_done = false;
 }
 EXPORT_SYMBOL(crypto_qti_disable_platform);
 
 int crypto_qti_derive_raw_secret_platform(
-				struct crypto_vops_qti_entry *ice_entry,
 				const u8 *wrapped_key,
 				unsigned int wrapped_key_size, u8 *secret,
 				unsigned int secret_size)
@@ -264,17 +309,6 @@ int crypto_qti_derive_raw_secret_platform(
 		pr_err("%s: Error enabling clocks %d\n", __func__,
 							err_program);
 		return err_program;
-	}
-
-	if ((ice_entry->flags & QTI_HWKM_INIT_DONE) != QTI_HWKM_INIT_DONE) {
-		err_program = qti_hwkm_init(ice_entry->hwkm_slave_mmio_base);
-		if (err_program) {
-			pr_err("%s: Error with HWKM init %d\n", __func__,
-								err_program);
-			qti_hwkm_clocks(false);
-			return -EINVAL;
-		}
-		ice_entry->flags |= QTI_HWKM_INIT_DONE;
 	}
 
 	//Failsafe, clear GP_KEYSLOT incase it is not empty for any reason
