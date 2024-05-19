@@ -36,7 +36,7 @@ static bool is_boot_dev_type_emmc(void)
 
 }
 
-int crypto_qti_program_key(struct crypto_vops_qti_entry *ice_entry,
+int crypto_qti_program_key(const struct ice_mmio_data *mmio_data,
 			   const struct blk_crypto_key *key, unsigned int slot,
 			   unsigned int data_unit_mask, int capid)
 {
@@ -69,7 +69,7 @@ int crypto_qti_program_key(struct crypto_vops_qti_entry *ice_entry,
 }
 EXPORT_SYMBOL(crypto_qti_program_key);
 
-int crypto_qti_invalidate_key(struct crypto_vops_qti_entry *ice_entry,
+int crypto_qti_invalidate_key(const struct ice_mmio_data *mmio_data,
 			      unsigned int slot)
 {
 	int err = 0;
@@ -87,13 +87,41 @@ int crypto_qti_invalidate_key(struct crypto_vops_qti_entry *ice_entry,
 EXPORT_SYMBOL(crypto_qti_invalidate_key);
 
 int crypto_qti_derive_raw_secret_platform(
-				struct crypto_vops_qti_entry *ice_entry,
 				const u8 *wrapped_key,
 				unsigned int wrapped_key_size, u8 *secret,
 				unsigned int secret_size)
 {
-	memcpy(secret, wrapped_key, secret_size);
-	return 0;
+	int err = 0;
+	struct qtee_shm shm_key, shm_secret;
+
+	err = qtee_shmbridge_allocate_shm(wrapped_key_size, &shm_key);
+	if (err)
+		return -ENOMEM;
+
+	err = qtee_shmbridge_allocate_shm(secret_size, &shm_secret);
+	if (err)
+		return -ENOMEM;
+
+	memcpy(shm_key.vaddr, wrapped_key, wrapped_key_size);
+	qtee_shmbridge_flush_shm_buf(&shm_key);
+
+	memset(shm_secret.vaddr, 0, secret_size);
+	qtee_shmbridge_flush_shm_buf(&shm_secret);
+
+	err = qcom_scm_derive_raw_secret(shm_key.paddr, wrapped_key_size,
+					shm_secret.paddr, secret_size);
+	if (err) {
+		pr_err("%s:SCM call Error for derive raw secret: 0x%x\n",
+				__func__, err);
+	}
+
+	qtee_shmbridge_inv_shm_buf(&shm_secret);
+	memcpy(secret, shm_secret.vaddr, secret_size);
+
+	qtee_shmbridge_inv_shm_buf(&shm_key);
+	qtee_shmbridge_free_shm(&shm_key);
+	qtee_shmbridge_free_shm(&shm_secret);
+	return err;
 }
 EXPORT_SYMBOL(crypto_qti_derive_raw_secret_platform);
 

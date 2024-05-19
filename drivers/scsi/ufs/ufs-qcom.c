@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2013-2020, Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2021, Linux Foundation. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -448,6 +448,8 @@ static int ufs_qcom_host_reset(struct ufs_hba *hba)
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	bool reenable_intr = false;
 
+	host->reset_in_progress = true;
+
 	if (!host->core_reset) {
 		dev_warn(hba->dev, "%s: reset control not set\n", __func__);
 		goto out;
@@ -477,6 +479,13 @@ static int ufs_qcom_host_reset(struct ufs_hba *hba)
 				 __func__, ret);
 
 	usleep_range(1000, 1100);
+	/*
+	 * The ice registers are also reset to default values after a ufs
+	 * host controller reset. Reset the ice internal software flags here
+	 * so that the ice hardware will be re-initialized properly in the
+	 * later part of the UFS host controller reset.
+	 */
+	ufs_qcom_ice_disable(host);
 
 	if (reenable_intr) {
 		enable_irq(hba->irq);
@@ -484,6 +493,7 @@ static int ufs_qcom_host_reset(struct ufs_hba *hba)
 	}
 
 out:
+	host->reset_in_progress = false;
 	return ret;
 }
 
@@ -668,11 +678,16 @@ static int ufs_qcom_hce_enable_notify(struct ufs_hba *hba,
 		 * is initialized.
 		 */
 		err = ufs_qcom_enable_lane_clks(host);
+		/*
+		 * ICE enable needs to be called before ufshcd_crypto_enable
+		 * during resume as it is needed before reprogramming all
+		 * keys. So moving it to PRE_CHANGE.
+		 */
+		ufs_qcom_ice_enable(host);
 		break;
 	case POST_CHANGE:
 		/* check if UFS PHY moved from DISABLED to HIBERN8 */
 		err = ufs_qcom_check_hibern8(hba);
-		ufs_qcom_ice_enable(host);
 		break;
 	default:
 		dev_err(hba->dev, "%s: invalid status %d\n", __func__, status);
@@ -1162,6 +1177,17 @@ static int remove_group_qos(struct qos_cpu_group *qcg)
 	return 0;
 }
 
+static void ufs_qcom_device_reset_ctrl(struct ufs_hba *hba, bool asserted)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	/* reset gpio is optional */
+	if (!host->device_reset)
+		return;
+
+	gpiod_set_value_cansleep(host->device_reset, asserted);
+}
+
 static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
@@ -1186,8 +1212,10 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 #if defined(CONFIG_SCSI_UFSHCD_QTI)
 	/* reset the connected UFS device during power down */
 	if (!err && ufs_qcom_is_link_off(hba) && host->device_reset)
-		gpiod_set_value_cansleep(host->device_reset, 1);
+		ufs_qcom_device_reset_ctrl(hba, true);
 #endif
+
+	ufs_qcom_ice_disable(host);
 
 	return err;
 }
@@ -1206,10 +1234,6 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		ufs_qcom_enable_vreg(hba->dev, host->vccq_parent);
 
 	err = ufs_qcom_enable_lane_clks(host);
-	if (err)
-		return err;
-
-	err = ufs_qcom_ice_resume(host);
 	if (err)
 		return err;
 
@@ -1925,6 +1949,10 @@ static void ufs_qcom_advertise_quirks(struct ufs_hba *hba)
 
 	if (host->disable_lpm)
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_AUTO_HIBERN8;
+
+#if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO_QTI)
+	hba->quirks |= UFSHCD_QUIRK_CUSTOM_KEYSLOT_MANAGER;
+#endif
 }
 
 static void ufs_qcom_set_caps(struct ufs_hba *hba)
@@ -2771,12 +2799,6 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		goto out_variant_clear;
 	}
 
-	/*
-	 * Set the vendor specific ops needed for ICE.
-	 * Default implementation if the ops are not set.
-	 */
-	ufshcd_crypto_qti_set_vops(hba);
-
 	err = ufs_qcom_bus_register(host);
 	if (err)
 		goto out_variant_clear;
@@ -2861,6 +2883,14 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	err = ufs_qcom_ice_init(host);
 	if (err)
 		goto out_variant_clear;
+
+	/*
+	 * Instantiate crypto capabilities for wrapped keys.
+	 * It is controlled by CONFIG_SCSI_UFS_CRYPTO_QTI.
+	 * If this is not defined, this API would return zero and
+	 * non-wrapped crypto capabilities will be instantiated.
+	 */
+	ufshcd_qti_hba_init_crypto_capabilities(hba);
 
 	ufs_qcom_set_bus_vote(hba, true);
 	/* enable the device ref clock for HS mode*/
@@ -3480,10 +3510,10 @@ static void ufs_qcom_device_reset(struct ufs_hba *hba)
 	 * The UFS device shall detect reset pulses of 1us, sleep for 10us to
 	 * be on the safe side.
 	 */
-	gpiod_set_value_cansleep(host->device_reset, 1);
+	ufs_qcom_device_reset_ctrl(hba, true);
 	usleep_range(10, 15);
 
-	gpiod_set_value_cansleep(host->device_reset, 0);
+	ufs_qcom_device_reset_ctrl(hba, false);
 	usleep_range(10, 15);
 }
 

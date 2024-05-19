@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __HWKM_H_
@@ -10,13 +10,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include <linux/crypto-qti-common.h>
+
 /* Maximum number of bytes in a key used in a KEY_SLOT_RDWR operation */
 #define HWKM_MAX_KEY_SIZE 32
 /* Maximum number of bytes in a SW ctx used in a SYSTEM_KDF operation */
 #define HWKM_MAX_CTX_SIZE 64
 /* Maximum number of bytes in a WKB used in a key wrap or unwrap operation */
 #define HWKM_MAX_BLOB_SIZE 68
-
 
 /* Opcodes to be set in the op field of a command */
 enum hwkm_op {
@@ -91,7 +92,6 @@ enum hwkm_alg {
 	HWKM_UNDEF_ALG = 0xFF
 };
 
-/* Key type values which can be used in the key_type field of the key policy */
 enum hwkm_type {
 	KEY_DERIVATION_KEY = 0,
 	KEY_WRAPPING_KEY = 1,
@@ -123,10 +123,6 @@ enum hwkm_destination {
 	HWKM_UNDEF_DESTINATION = 0xFF
 };
 
-/*
- * Key security levels which can be set in the security_lvl field of
- * key policy.
- */
 enum hwkm_security_level {
 	/* Can be read by SW in plaintext using KEY_SLOT_RDWR cmd. */
 	SW_KEY = 0,
@@ -138,6 +134,34 @@ enum hwkm_security_level {
 	HWKM_SECURITY_LEVEL_MAX,
 
 	HWKM_UNDEF_SECURITY_LEVEL = 0xFF
+};
+
+enum hwkm_master_key_slots {
+	/** L1 KDKs. Not usable by SW. Used by HW to derive L2 KDKs */
+	NKDK_L1 = 0,
+	PKDK_L1 = 1,
+	SKDK_L1 = 2,
+	UKDK_L1 = 3,
+
+	/*
+	 * L2 KDKs, used to derive keys by SW.
+	 * Cannot be used for crypto, only key derivation
+	 */
+	TZ_NKDK_L2 = 4,
+	TZ_PKDK_L2 = 5,
+	TZ_SKDK_L2 = 6,
+	MODEM_PKDK_L2 = 7,
+	MODEM_SKDK_L2 = 8,
+	TZ_UKDK_L2 = 9,
+
+	/** Slots reserved for TPKEY */
+	TPKEY_EVEN_SLOT = 10,
+	TPKEY_KEY_ODD_SLOT = 11,
+
+	/** First key slot available for general purpose use cases */
+	MASTER_GENERIC_SLOTS_START,
+
+	UNDEF_SLOT = 0xFF
 };
 
 struct hwkm_key_policy {
@@ -257,39 +281,11 @@ struct hwkm_rsp {
 	};
 };
 
-enum hwkm_master_key_slots {
-	/** L1 KDKs. Not usable by SW. Used by HW to derive L2 KDKs */
-	NKDK_L1 = 0,
-	PKDK_L1 = 1,
-	SKDK_L1 = 2,
-	UKDK_L1 = 3,
-
-	/*
-	 * L2 KDKs, used to derive keys by SW.
-	 * Cannot be used for crypto, only key derivation
-	 */
-	TZ_NKDK_L2 = 4,
-	TZ_PKDK_L2 = 5,
-	TZ_SKDK_L2 = 6,
-	MODEM_PKDK_L2 = 7,
-	MODEM_SKDK_L2 = 8,
-	TZ_UKDK_L2 = 9,
-
-	/** Slots reserved for TPKEY */
-	TPKEY_EVEN_SLOT = 10,
-	TPKEY_KEY_ODD_SLOT = 11,
-
-	/** First key slot available for general purpose use cases */
-	MASTER_GENERIC_SLOTS_START,
-
-	UNDEF_SLOT = 0xFF
-};
-
 #if IS_ENABLED(CONFIG_QTI_HW_KEY_MANAGER)
 int qti_hwkm_handle_cmd(struct hwkm_cmd *cmd, struct hwkm_rsp *rsp);
 int qti_hwkm_clocks(bool on);
-int qti_hwkm_init(void __iomem *hwkm_slave_mmio_base);
-
+int qti_hwkm_init(const struct ice_mmio_data *mmio_data);
+bool qti_hwkm_init_required(const struct ice_mmio_data *mmio_data);
 #else
 static inline int qti_hwkm_add_req(struct hwkm_cmd *cmd,
 				   struct hwkm_rsp *rsp)
@@ -300,7 +296,11 @@ static inline int qti_hwkm_clocks(bool on)
 {
 	return -EOPNOTSUPP;
 }
-static inline int qti_hwkm_init(void __iomem *hwkm_slave_mmio_base)
+static inline int qti_hwkm_init(const struct ice_mmio_data *mmio_data)
+{
+	return -EOPNOTSUPP;
+}
+static inline bool qti_hwkm_init_required(const struct ice_mmio_data *mmio_data)
 {
 	return -EOPNOTSUPP;
 }
