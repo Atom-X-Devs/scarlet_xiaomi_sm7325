@@ -383,11 +383,11 @@ struct ufs_hba_variant_ops {
 	void	(*dbg_register_dump)(struct ufs_hba *hba);
 	int	(*phy_initialization)(struct ufs_hba *);
 	void	(*device_reset)(struct ufs_hba *hba);
-	int	(*program_key)(struct ufs_hba *hba,
-			       const union ufs_crypto_cfg_entry *cfg, int slot);
 	void	(*config_scaling_param)(struct ufs_hba *hba,
 					struct devfreq_dev_profile *profile,
 					void *data);
+	int	(*program_key)(struct ufs_hba *hba,
+			       const union ufs_crypto_cfg_entry *cfg, int slot);
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);
@@ -722,6 +722,15 @@ enum ufshcd_quirks {
 	 * This quirk needs to disable manual flush for write booster
 	 */
 	UFSHCI_QUIRK_SKIP_MANUAL_WB_FLUSH_CTRL		= 1 << 12,
+
+	/*
+	 * This quirk needs to be enabled if the host controller supports inline
+	 * encryption, but it needs to initialize the crypto capabilities in a
+	 * nonstandard way and/or it needs to override blk_ksm_ll_ops.  If
+	 * enabled, the standard code won't initialize the blk_keyslot_manager;
+	 * ufs_hba_variant_ops::init() must do it instead.
+	 */
+	UFSHCD_QUIRK_CUSTOM_KEYSLOT_MANAGER		= 1 << 20,
 };
 
 enum ufshcd_caps {
