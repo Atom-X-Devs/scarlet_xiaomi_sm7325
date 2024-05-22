@@ -840,6 +840,7 @@ int msm_pcm_routing_set_stream_ec_ref_chmix_cfg(
 	int fedai_id, struct msm_pcm_channel_mixer *cfg_data);
 int msm_pcm_asm_cfg_get(int fe_id, int mode);
 
+#ifndef CONFIG_SOFT_PCM_DISABLE
 
 /* array element of usr elem */
 struct snd_pcm_soft_vol_usr_elem {
@@ -861,6 +862,7 @@ int snd_pcm_add_soft_volume_ctls(struct snd_pcm *pcm, int stream,
 		unsigned long private_value,
 		struct snd_pcm_soft_volume **info_ret);
 
+#endif
 
 #ifndef SND_PCM_ADD_VOLUME_CTL
 /* PCM Volume control API
