@@ -1816,7 +1816,7 @@ done:
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+#if IS_ENABLED(CONFIG_AUDIO_QGKI) && !defined(CONFIG_TARGET_PRODUCT_REDWOOD)
 static int msm_pcm_set_volume(struct msm_audio *prtd, uint32_t volume)
 {
 	int rc = 0;
