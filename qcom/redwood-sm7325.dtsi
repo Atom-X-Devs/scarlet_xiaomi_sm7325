@@ -13,27 +13,6 @@
 };
 
 /*
- * PM7325B device specific diff for Xiaomi Redwood platform
- */
-&pm7325b_gpios {
-	// Disable PM7325B GPIO_2_3 to fix inaccurate temp value
-
-	pm7325b_chg_skin_therm {
-		pm7325b_chg_skin_therm_default: pm7325b_chg_skin_therm_default {
-			pins = "gpio2";
-			bias-high-impedance;
-		};
-	};
-
-	pm7325b_pa_rfendc_therm {
-		pm7325b_pa_rfendc_therm_default: pm7325b_pa_rfendc_therm_default {
-			pins = "gpio3";
-			bias-high-impedance;
-		};
-	};
-};
-
-/*
  * PM8350C devices specific diff for Xiaomi Redwood platform
  */
 &L6C {
@@ -73,11 +52,6 @@
 };
 
 &pmk8350_vadc {
-	// Disable PM7325B GPIO_2_3 to fix inaccurate temp value
-	pinctrl-names = "default";
-	pinctrl-0 = <&pm7325b_chg_skin_therm_default>;
-	pinctrl-1 = <&pm7325b_pa_rfendc_therm_default>;
-
 	pm7325b_conn_therm {
 		reg = <PM7325B_ADC7_AMUX_THM4_100K_PU>;
 		label = "pm7325b_conn_therm";
