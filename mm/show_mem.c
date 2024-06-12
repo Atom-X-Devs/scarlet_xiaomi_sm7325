@@ -466,3 +466,4 @@ void __show_mem(unsigned int filter, const nodemask_t *nodemask,
 	}
 #endif
 }
+EXPORT_SYMBOL_GPL(__show_mem);
