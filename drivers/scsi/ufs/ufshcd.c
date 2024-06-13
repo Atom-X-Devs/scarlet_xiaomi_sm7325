@@ -7819,6 +7819,7 @@ reinit:
 		int err;
 
 		ufshcd_vops_device_reset(hba);
+		ufs_put_device_desc(hba);
 
 		/* Reset the host controller */
 		spin_lock_irqsave(hba->host->host_lock, flags);
