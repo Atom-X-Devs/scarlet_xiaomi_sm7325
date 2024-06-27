@@ -4501,7 +4501,7 @@ void wake_up_new_task(struct task_struct *p)
 #ifdef CONFIG_SPRD_ROTATION_TASK
 	p->last_enqueue_ts = sched_ktime_clock();
 #endif
-	activate_task(rq, p, ENQUEUE_NOCLOCK);
+	activate_task(rq, p, ENQUEUE_NOCLOCK | ENQUEUE_INITIAL);
 	trace_sched_wakeup_new(p);
 	check_preempt_curr(rq, p, wake_flags);
 #ifdef CONFIG_SMP
