@@ -1131,17 +1131,22 @@ static int fastrpc_mmap_find(struct fastrpc_file *fl, int fd,
 
 	if ((va + len) < va)
 		return -EFAULT;
-	hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
-		if (va >= map->va &&
-			va + len <= map->va + map->len &&
-			map->fd == fd) {
-			if (refs) {
-				if (map->refs + 1 == INT_MAX)
-					return -ETOOMANYREFS;
-				map->refs++;
+	if (mflags == ADSP_MMAP_HEAP_ADDR ||
+				 mflags == ADSP_MMAP_REMOTE_HEAP_ADDR) {
+		return -EFAULT;
+	} else {
+		hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
+			if (va >= map->va &&
+				va + len <= map->va + map->len &&
+				map->fd == fd) {
+				if (refs) {
+					if (map->refs + 1 == INT_MAX)
+						return -ETOOMANYREFS;
+					map->refs++;
+				}
+				match = map;
+				break;
 			}
-			match = map;
-			break;
 		}
 	}
 	if (match) {
