@@ -242,15 +242,15 @@ repeat:
 	return expanded;
 }
 
-static inline void __set_close_on_exec(unsigned int fd, struct fdtable *fdt)
+static inline void __set_close_on_exec(unsigned int fd, struct fdtable *fdt,
+				       bool set)
 {
-	__set_bit(fd, fdt->close_on_exec);
-}
-
-static inline void __clear_close_on_exec(unsigned int fd, struct fdtable *fdt)
-{
-	if (test_bit(fd, fdt->close_on_exec))
-		__clear_bit(fd, fdt->close_on_exec);
+	if (set) {
+		__set_bit(fd, fdt->close_on_exec);
+	} else {
+		if (test_bit(fd, fdt->close_on_exec))
+			__clear_bit(fd, fdt->close_on_exec);
+	}
 }
 
 static inline void __set_open_fd(unsigned int fd, struct fdtable *fdt)
@@ -535,10 +535,7 @@ repeat:
 		files->next_fd = fd + 1;
 
 	__set_open_fd(fd, fdt);
-	if (flags & O_CLOEXEC)
-		__set_close_on_exec(fd, fdt);
-	else
-		__clear_close_on_exec(fd, fdt);
+	__set_close_on_exec(fd, fdt, flags & O_CLOEXEC);
 	error = fd;
 #if 1
 	/* Sanity check */
@@ -1043,13 +1040,8 @@ void __f_unlock_pos(struct file *f)
 void set_close_on_exec(unsigned int fd, int flag)
 {
 	struct files_struct *files = current->files;
-	struct fdtable *fdt;
 	spin_lock(&files->file_lock);
-	fdt = files_fdtable(files);
-	if (flag)
-		__set_close_on_exec(fd, fdt);
-	else
-		__clear_close_on_exec(fd, fdt);
+	__set_close_on_exec(fd, files_fdtable(files), flag);
 	spin_unlock(&files->file_lock);
 }
 
@@ -1094,10 +1086,7 @@ __releases(&files->file_lock)
 	get_file(file);
 	rcu_assign_pointer(fdt->fd[fd], file);
 	__set_open_fd(fd, fdt);
-	if (flags & O_CLOEXEC)
-		__set_close_on_exec(fd, fdt);
-	else
-		__clear_close_on_exec(fd, fdt);
+	__set_close_on_exec(fd, fdt, flags & O_CLOEXEC);
 	spin_unlock(&files->file_lock);
 
 	if (tofree)
