@@ -62,6 +62,8 @@ extern unsigned int sysctl_sched_uclamp_util_max;
 extern unsigned int sysctl_sched_uclamp_util_min_rt_default;
 #endif
 
+extern unsigned int sysctl_sched_qos_default_rampup_multiplier;
+
 #ifdef CONFIG_CFS_BANDWIDTH
 extern unsigned int sysctl_sched_cfs_bandwidth_slice;
 #endif
@@ -86,6 +88,9 @@ extern int sysctl_sched_uclamp_handler(struct ctl_table *table, int write,
 				       void __user *buffer, size_t *lenp,
 				       loff_t *ppos);
 #endif
+
+extern int sysctl_sched_qos_handler(struct ctl_table *table, int write,
+				    void *buffer, size_t *lenp, loff_t *ppos);
 
 extern int sysctl_numa_balancing(struct ctl_table *table, int write,
 				 void __user *buffer, size_t *lenp,

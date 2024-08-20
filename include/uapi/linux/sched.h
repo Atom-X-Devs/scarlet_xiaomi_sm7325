@@ -75,6 +75,8 @@ struct clone_args {
 };
 
 enum sched_qos_type {
+	SCHED_QOS_RAMPUP_MULTIPLIER,
+	SCHED_QOS_MAX,
 };
 #endif
 

@@ -59,6 +59,8 @@ const_debug unsigned int sysctl_sched_nr_migrate = SCHED_NR_MIGRATE_BREAK;
  */
 unsigned int sysctl_sched_rt_period = 1000000;
 
+unsigned int sysctl_sched_qos_default_rampup_multiplier	= 1;
+
 __read_mostly int scheduler_running;
 
 #ifdef CONFIG_SCHED_CORE
@@ -2038,6 +2040,46 @@ static inline void uclamp_fork(struct task_struct *p) { }
 static inline void uclamp_post_fork(struct task_struct *p) { }
 static inline void init_uclamp(void) { }
 #endif /* CONFIG_UCLAMP_TASK */
+
+static void sched_qos_sync_sysctl(void)
+{
+	struct task_struct *g, *p;
+
+	for_each_process_thread(g, p) {
+		struct rq_flags rf;
+		struct rq *rq;
+
+		rq = task_rq_lock(p, &rf);
+		if (!test_bit(SCHED_QOS_RAMPUP_MULTIPLIER, p->sched_qos.user_defined))
+			p->sched_qos.rampup_multiplier = sysctl_sched_qos_default_rampup_multiplier;
+		task_rq_unlock(rq, p, &rf);
+	}
+}
+
+int sysctl_sched_qos_handler(struct ctl_table *table, int write,
+			     void *buffer, size_t *lenp, loff_t *ppos)
+{
+	unsigned int old_rampup_mult;
+	int result;
+
+	old_rampup_mult = sysctl_sched_qos_default_rampup_multiplier;
+
+	result = proc_dointvec(table, write, buffer, lenp, ppos);
+	if (result)
+		goto undo;
+	if (!write)
+		return 0;
+
+	if (old_rampup_mult != sysctl_sched_qos_default_rampup_multiplier) {
+		sched_qos_sync_sysctl();
+	}
+
+	return 0;
+
+undo:
+	sysctl_sched_qos_default_rampup_multiplier = old_rampup_mult;
+	return result;
+}
 
 static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 {
@@ -4113,6 +4155,21 @@ int wake_up_state(struct task_struct *p, unsigned int state)
 	return try_to_wake_up(p, state, 0);
 }
 
+static void sched_qos_fork(struct task_struct *p)
+{
+	/*
+	 * We always force reset sched_qos on fork. These sched_qos are treated
+	 * as finite resources to help improve quality of life. Inheriting them
+	 * by default can easily lead to a situation where the QoS hint become
+	 * meaningless because all tasks in the system have it.
+	 *
+	 * Every task must request the QoS explicitly if it needs it. No
+	 * accidental inheritance is allowed to keep the default behavior sane.
+	 */
+	bitmap_zero(p->sched_qos.user_defined, SCHED_QOS_MAX);
+	p->sched_qos.rampup_multiplier = sysctl_sched_qos_default_rampup_multiplier;
+}
+
 /*
  * Perform scheduler related setup for a newly forked process p.
  * p is forked by current.
@@ -4291,6 +4348,7 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	trace_android_rvh_prepare_prio_fork(p);
 
 	uclamp_fork(p);
+	sched_qos_fork(p);
 
 	/*
 	 * Revert to default priority/policy on fork if requested.
@@ -6994,6 +7052,35 @@ static bool check_same_owner(struct task_struct *p)
 	return match;
 }
 
+static inline int sched_qos_validate(struct task_struct *p,
+				     const struct sched_attr *attr)
+{
+	switch (attr->sched_qos_type) {
+	case SCHED_QOS_RAMPUP_MULTIPLIER:
+		if (attr->sched_qos_cookie)
+			return -EINVAL;
+		if (attr->sched_qos_value < 0)
+			return -EINVAL;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static void __setscheduler_sched_qos(struct task_struct *p,
+				     const struct sched_attr *attr)
+{
+	switch (attr->sched_qos_type) {
+	case SCHED_QOS_RAMPUP_MULTIPLIER:
+		set_bit(SCHED_QOS_RAMPUP_MULTIPLIER, p->sched_qos.user_defined);
+		p->sched_qos.rampup_multiplier = attr->sched_qos_value;
+	default:
+		break;
+	}
+}
+
 static int __sched_setscheduler(struct task_struct *p,
 				const struct sched_attr *attr,
 				bool user, bool pi)
@@ -7107,8 +7194,11 @@ recheck:
 			return retval;
 	}
 
-	if (attr->sched_flags & SCHED_FLAG_QOS)
-		return -EOPNOTSUPP;
+	if (attr->sched_flags & SCHED_FLAG_QOS) {
+		retval = sched_qos_validate(p, attr);
+		if (retval)
+			return retval;
+	}
 
 	/*
 	 * SCHED_DEADLINE bandwidth accounting relies on stable cpusets
@@ -7246,6 +7336,7 @@ change:
 		p->prio = newprio;
 	}
 	__setscheduler_uclamp(p, attr);
+	__setscheduler_sched_qos(p, attr);
 
 	if (queued) {
 		/*

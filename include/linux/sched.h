@@ -303,6 +303,11 @@ struct sched_info {
 #endif /* CONFIG_SCHED_INFO */
 };
 
+struct sched_qos {
+	DECLARE_BITMAP(user_defined, SCHED_QOS_MAX);
+	unsigned int rampup_multiplier;
+};
+
 /*
  * Integer metrics need fixed point arithmetic, e.g., sched/fair
  * has a few: load, load_avg, util_avg, freq, and capacity.
@@ -785,6 +790,8 @@ struct task_struct {
 #endif /* #ifdef CONFIG_TASKS_TRACE_RCU */
 
 	struct sched_info		sched_info;
+
+	struct sched_qos		sched_qos;
 
 	struct list_head		tasks;
 #ifdef CONFIG_SMP

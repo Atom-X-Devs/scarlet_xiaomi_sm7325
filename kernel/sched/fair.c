@@ -4483,7 +4483,9 @@ static inline void util_est_update(struct cfs_rq *cfs_rq,
 	if (!task_sleep) {
 		if (task_util(p) > task_util_dequeued(p)) {
 			ue.enqueued &= ~UTIL_AVG_UNCHANGED;
-			ue.enqueued = approximate_util_avg(ue.enqueued, p->se.delta_exec / 1000);
+			ue.enqueued = approximate_util_avg(ue.enqueued,
+							   (p->se.delta_exec / 1000) *
+							   p->sched_qos.rampup_multiplier);
 			goto done;
 		}
 		return;
@@ -4559,6 +4561,8 @@ static inline void util_est_update(struct cfs_rq *cfs_rq,
 	 * 0.25, thus making w=1/4 ( >>= UTIL_EST_WEIGHT_SHIFT)
 	 */
 	ue.ewma <<= UTIL_EST_WEIGHT_SHIFT;
+	if (p->sched_qos.rampup_multiplier)
+		last_ewma_diff /= p->sched_qos.rampup_multiplier;
 	ue.ewma  += last_ewma_diff;
 	ue.ewma >>= UTIL_EST_WEIGHT_SHIFT;
 done:
