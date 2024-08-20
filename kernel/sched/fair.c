@@ -79,11 +79,15 @@ int __weak arch_asym_cpu_priority(int cpu)
 }
 
 /*
- * The margin used when comparing utilization with CPU capacity.
- *
- * (default: ~20%)
+ * fits_capacity() must ensure that a task will not be 'stuck' on a CPU with
+ * lower capacity for too long. This the threshold is the util value at which
+ * if a task becomes always busy it could miss misfit migration load balance
+ * event. So we consider a task is misfit before it reaches this point.
  */
-#define fits_capacity(cap, max)	((cap) * 1280 < (max) * 1024)
+static inline bool fits_capacity(unsigned long util, int cpu)
+{
+	return util < cpu_rq(cpu)->fits_capacity_threshold;
+}
 
 /*
  * The margin used when comparing CPU capacities.
@@ -4827,13 +4831,12 @@ static inline int util_fits_cpu(unsigned long util,
 				int cpu)
 {
 	unsigned long capacity_orig, capacity_orig_thermal;
-	unsigned long capacity = capacity_of(cpu);
 	bool fits, uclamp_max_fits;
 
 	/*
 	 * Check if the real util fits without any uclamp boost/cap applied.
 	 */
-	fits = fits_capacity(util, capacity);
+	fits = fits_capacity(util, cpu);
 
 	if (!uclamp_is_used())
 		return fits;
@@ -9519,16 +9522,18 @@ static void update_cpu_capacity(struct sched_domain *sd, int cpu)
 	unsigned long capacity = arch_scale_cpu_capacity(cpu);
 	struct sched_group *sdg = sd->groups;
 	struct max_cpu_capacity *mcc;
+	struct rq *rq = cpu_rq(cpu);
 	unsigned long max_capacity;
 	int max_cap_cpu;
 	unsigned long flags;
+	u64 limit;
 
-	cpu_rq(cpu)->cpu_capacity_orig = capacity;
+	rq->cpu_capacity_orig = capacity;
 
 	capacity *= arch_scale_max_freq_capacity(sd, cpu);
 	capacity >>= SCHED_CAPACITY_SHIFT;
 
-	mcc = &cpu_rq(cpu)->rd->max_cpu_capacity;
+	mcc = &rq->rd->max_cpu_capacity;
 
 	raw_spin_lock_irqsave(&mcc->lock, flags);
 	max_capacity = mcc->val;
@@ -9553,7 +9558,27 @@ skip_unlock: __attribute__ ((unused));
 	if (!capacity)
 		capacity = 1;
 
-	cpu_rq(cpu)->cpu_capacity = capacity;
+	rq->cpu_capacity = capacity;
+
+	/*
+	 * Calculate the util at which the task must be considered a misfit.
+	 *
+	 * We must ensure that a task experiences the same ramp-up time to
+	 * reach max performance point of the system regardless of the CPU it
+	 * is running on (due to invariance, time will stretch and task will
+	 * take longer to achieve the same util value compared to a task
+	 * running on a big CPU) and a delay in misfit migration which depends
+	 * on TICK doesn't end up hurting it as it can happen after we would
+	 * have crossed this threshold.
+	 *
+	 * To ensure that invaraince is taken into account, we don't scale time
+	 * and use it as-is, approximate_util_avg() will then let us know the
+	 * our threshold.
+	 */
+	limit = approximate_runtime(capacity) * USEC_PER_MSEC;
+	limit -= TICK_USEC; /* sd->balance_interval is more accurate */
+	rq->fits_capacity_threshold = approximate_util_avg(0, limit);
+
 	sdg->sgc->capacity = capacity;
 	sdg->sgc->min_capacity = capacity;
 	sdg->sgc->max_capacity = capacity;

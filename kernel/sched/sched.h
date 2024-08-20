@@ -1058,6 +1058,7 @@ struct rq {
 
 	unsigned long		cpu_capacity;
 	unsigned long		cpu_capacity_orig;
+	unsigned long		fits_capacity_threshold;
 
 	struct balance_callback *balance_callback;
 
