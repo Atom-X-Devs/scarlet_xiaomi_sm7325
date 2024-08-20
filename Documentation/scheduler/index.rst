@@ -16,6 +16,7 @@ Linux Scheduler
     sched-nice-design
     sched-rt-group
     sched-stats
+    sched-qos
 
     text_files
 
