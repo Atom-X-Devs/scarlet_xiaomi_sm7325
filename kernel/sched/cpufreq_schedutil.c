@@ -288,10 +288,15 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
  * dvfs_update_delay of the cpufreq governor or min(curr.se.slice, TICK_US),
  * whichever is higher.
  *
+ * Also take into accounting how long tasks have been waiting in runnable but
+ * !running state. If it is high, it means we need higher DVFS headroom to
+ * reduce it.
+ *
  * XXX: Should we provide headroom when the util is decaying?
  */
 static inline unsigned long sugov_apply_dvfs_headroom(unsigned long util, int cpu)
 {
+	unsigned long update_headroom, waiting_headroom;
 	struct rq *rq = cpu_rq(cpu);
 	u64 delay;
 
@@ -305,7 +310,10 @@ static inline unsigned long sugov_apply_dvfs_headroom(unsigned long util, int cp
 		delay = TICK_USEC;
 	delay = max(delay, per_cpu(dvfs_update_delay, cpu));
 
-	return approximate_util_avg(util, delay);
+	update_headroom = approximate_util_avg(util, delay);
+	waiting_headroom = util + READ_ONCE(rq->cfs.avg.waiting_avg);
+
+	return max(update_headroom, waiting_headroom);
 }
 
 unsigned long sugov_effective_cpu_perf(int cpu, unsigned long actual,
