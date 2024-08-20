@@ -4499,6 +4499,14 @@ static inline void util_est_update(struct cfs_rq *cfs_rq,
 	ue = p->se.avg.util_est;
 
 	/*
+	 * rampup_multiplier = 0 indicates util_est is disabled.
+	 */
+	if (!p->sched_qos.rampup_multiplier) {
+		ue.enqueued = 0;
+		goto done;
+	}
+
+	/*
 	 * If a task is running, update util_est ignoring utilization
 	 * invariance so that if the task suddenly becomes busy we will rampup
 	 * quickly to settle down to our new util_avg.
