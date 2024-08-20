@@ -17,6 +17,7 @@
 #define IOWAIT_BOOST_MIN	(SCHED_CAPACITY_SCALE / 8)
 
 DEFINE_PER_CPU_READ_MOSTLY(unsigned long, response_time_mult);
+DEFINE_PER_CPU(unsigned long, last_update_util);
 
 struct sugov_tunables {
 	struct gov_attr_set	attr_set;
@@ -291,14 +292,18 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
  * Also take into accounting how long tasks have been waiting in runnable but
  * !running state. If it is high, it means we need higher DVFS headroom to
  * reduce it.
- *
- * XXX: Should we provide headroom when the util is decaying?
  */
 static inline unsigned long sugov_apply_dvfs_headroom(unsigned long util, int cpu)
 {
-	unsigned long update_headroom, waiting_headroom;
+	unsigned long update_headroom, waiting_headroom, prev_util;
 	struct rq *rq = cpu_rq(cpu);
 	u64 delay;
+
+	prev_util = per_cpu(last_update_util, cpu);
+	per_cpu(last_update_util, cpu) = util;
+
+	if (util < prev_util)
+		return util;
 
 	/*
 	 * What is the possible worst case scenario for updating util_avg, ctx
