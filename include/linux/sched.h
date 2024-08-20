@@ -739,6 +739,8 @@ struct task_struct {
 
 	struct sched_statistics         stats;
 
+	unsigned long			util_avg_dequeued;
+
 #ifdef CONFIG_PREEMPT_NOTIFIERS
 	/* List of struct preempt_notifier: */
 	struct hlist_head		preempt_notifiers;

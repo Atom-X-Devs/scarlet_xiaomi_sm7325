@@ -4398,6 +4398,11 @@ static inline unsigned long task_util(struct task_struct *p)
 	return READ_ONCE(p->se.avg.util_avg);
 }
 
+static inline unsigned long task_util_dequeued(struct task_struct *p)
+{
+	return READ_ONCE(p->util_avg_dequeued);
+}
+
 static inline unsigned long task_runnable(struct task_struct *p)
 {
 	return READ_ONCE(p->se.avg.runnable_avg);
@@ -4476,9 +4481,12 @@ static inline void util_est_update(struct cfs_rq *cfs_rq,
 	 * quickly to settle down to our new util_avg.
 	 */
 	if (!task_sleep) {
-		ue.enqueued &= ~UTIL_AVG_UNCHANGED;
-		ue.enqueued = approximate_util_avg(ue.enqueued, p->se.delta_exec / 1000);
-		goto done;
+		if (task_util(p) > task_util_dequeued(p)) {
+			ue.enqueued &= ~UTIL_AVG_UNCHANGED;
+			ue.enqueued = approximate_util_avg(ue.enqueued, p->se.delta_exec / 1000);
+			goto done;
+		}
+		return;
 	}
 
 	/*
@@ -4489,12 +4497,15 @@ static inline void util_est_update(struct cfs_rq *cfs_rq,
 		return;
 
 	last_enqueued_diff = ue.enqueued;
+	ue.enqueued = task_util(p);
+
+	if (!task_on_rq_migrating(p))
+		p->util_avg_dequeued = ue.enqueued;
 
 	/*
 	 * Reset EWMA on utilization increases, the moving average is used only
 	 * to smooth utilization decreases.
 	 */
-	ue.enqueued = task_util(p);
 	if (sched_feat(UTIL_EST_FASTUP)) {
 		if (ue.ewma < ue.enqueued) {
 			ue.ewma = ue.enqueued;
