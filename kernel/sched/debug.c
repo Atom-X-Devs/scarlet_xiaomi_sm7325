@@ -345,6 +345,7 @@ static void print_cfs_group_stats(struct seq_file *m, int cpu, struct task_group
 	P(se->avg.load_avg);
 	P(se->avg.util_avg);
 	P(se->avg.runnable_avg);
+	P(se->avg.waiting_avg);
 #endif
 
 #undef PN_SCHEDSTAT
@@ -498,6 +499,8 @@ void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 			cfs_rq->avg.load_avg);
 	SEQ_printf(m, "  .%-30s: %lu\n", "runnable_avg",
 			cfs_rq->avg.runnable_avg);
+	SEQ_printf(m, "  .%-30s: %lu\n", "waiting_avg",
+			cfs_rq->avg.waiting_avg);
 	SEQ_printf(m, "  .%-30s: %lu\n", "util_avg",
 			cfs_rq->avg.util_avg);
 	SEQ_printf(m, "  .%-30s: %u\n", "util_est_enqueued",
@@ -893,9 +896,11 @@ void proc_sched_show_task(struct task_struct *p, struct pid_namespace *ns,
 #ifdef CONFIG_SMP
 	P(se.avg.load_sum);
 	P(se.avg.runnable_sum);
+	P(se.avg.waiting_sum);
 	P(se.avg.util_sum);
 	P(se.avg.load_avg);
 	P(se.avg.runnable_avg);
+	P(se.avg.waiting_avg);
 	P(se.avg.util_avg);
 	P(se.avg.last_update_time);
 	P(se.avg.util_est.ewma);

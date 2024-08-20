@@ -4293,6 +4293,22 @@ static void detach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *s
 	trace_pelt_cfs_tp(cfs_rq);
 }
 
+static inline void add_waiting_avg(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	unsigned long waiting_avg;
+	waiting_avg = READ_ONCE(cfs_rq->avg.waiting_avg);
+	waiting_avg += READ_ONCE(se->avg.waiting_avg);
+	WRITE_ONCE(cfs_rq->avg.waiting_avg, waiting_avg);
+}
+
+static inline void sub_waiting_avg(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	unsigned long waiting_avg;
+	waiting_avg = READ_ONCE(cfs_rq->avg.waiting_avg);
+	waiting_avg -= min(waiting_avg, READ_ONCE(se->avg.waiting_avg));
+	WRITE_ONCE(cfs_rq->avg.waiting_avg, waiting_avg);
+}
+
 /*
  * Optional action to be done while updating the load average
  */
@@ -4311,8 +4327,15 @@ static inline void update_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *s
 	 * Track task load average for carrying it to new CPU after migrated, and
 	 * track group sched_entity load average for task_h_load calc in migration
 	 */
-	if (se->avg.last_update_time && !(flags & SKIP_AGE_LOAD))
+	if (se->avg.last_update_time && !(flags & SKIP_AGE_LOAD)) {
+		bool update_rq_waiting_avg = entity_is_task(se) && se_runnable(se);
+
+		if (update_rq_waiting_avg)
+			sub_waiting_avg(&rq_of(cfs_rq)->cfs, se);
 		__update_load_avg_se(now, cfs_rq, se);
+		if (update_rq_waiting_avg)
+			add_waiting_avg(&rq_of(cfs_rq)->cfs, se);
+	}
 
 	decayed  = update_cfs_rq_load_avg(now, cfs_rq);
 	decayed |= propagate_entity_load_avg(se);
@@ -4759,6 +4782,11 @@ static inline void
 attach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static inline void
 detach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
+
+static inline void
+add_waiting_avg(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
+static inline void
+sub_waiting_avg(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 
 static inline int newidle_balance(struct rq *rq, struct rq_flags *rf)
 {
@@ -6294,8 +6322,10 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 * Let's add the task's estimated utilization to the cfs_rq's
 	 * estimated utilization, before we update schedutil.
 	 */
-	if (!(p->se.sched_delayed && (task_on_rq_migrating(p) || (flags & ENQUEUE_RESTORE))))
+	if (!(p->se.sched_delayed && (task_on_rq_migrating(p) || (flags & ENQUEUE_RESTORE)))) {
 		util_est_enqueue(&rq->cfs, p);
+		add_waiting_avg(&rq->cfs, se);
+	}
 
 	if (flags & ENQUEUE_DELAYED) {
 		requeue_delayed_entity(se);
@@ -6526,8 +6556,10 @@ dequeue_throttle:
  */
 static bool dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 {
-	if (!(p->se.sched_delayed && (task_on_rq_migrating(p) || (flags & DEQUEUE_SAVE))))
+	if (!(p->se.sched_delayed && (task_on_rq_migrating(p) || (flags & DEQUEUE_SAVE)))) {
 		util_est_dequeue(&rq->cfs, p);
+		sub_waiting_avg(&rq->cfs, se);
+	}
 
 	util_est_update(&rq->cfs, p, flags & DEQUEUE_SLEEP);
 	if (dequeue_entities(rq, &p->se, flags) < 0)
