@@ -329,13 +329,13 @@ static void __iomem *map_prop_mem(const char *propname)
 	void __iomem *addr;
 
 	if (!np) {
-		pr_err("Unable to find DT property: %s\n", propname);
+		pr_debug("Unable to find DT property: %s\n", propname);
 		return NULL;
 	}
 
 	addr = of_iomap(np, 0);
 	if (!addr)
-		pr_err("Unable to map memory for DT property: %s\n", propname);
+		pr_debug("Unable to map memory for DT property: %s\n", propname);
 	return addr;
 }
 
@@ -368,7 +368,7 @@ static void check_pci_edl(struct device_node *np)
 
 	mem = of_iomap(np, 0);
 	if (!mem) {
-		pr_info("Unable to map memory for DT property: %s\n", np->name);
+		pr_debug("Unable to map memory for DT property: %s\n", np->name);
 		return;
 	}
 
