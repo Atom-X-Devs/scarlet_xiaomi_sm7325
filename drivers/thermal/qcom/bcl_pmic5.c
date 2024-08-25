@@ -819,7 +819,7 @@ static int bcl_probe(struct platform_device *pdev)
 	bcl_perph->ipc_log = ipc_log_context_create(IPC_LOGPAGES,
 							bcl_name, 0);
 	if (!bcl_perph->ipc_log)
-		pr_err("%s: unable to create IPC Logging for %s\n",
+		pr_debug("%s: unable to create IPC Logging for %s\n",
 					__func__, bcl_name);
 
 	return 0;

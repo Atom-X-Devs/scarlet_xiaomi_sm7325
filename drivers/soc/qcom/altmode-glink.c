@@ -739,7 +739,7 @@ static int altmode_probe(struct platform_device *pdev)
 
 	altmode_ipc_log = ipc_log_context_create(NUM_LOG_PAGES, "altmode", 0);
 	if (!altmode_ipc_log)
-		dev_warn(dev, "Error in creating ipc_log_context\n");
+		dev_dbg(dev, "Error in creating ipc_log_context\n");
 
 	altmode_notify_clients(amdev);
 

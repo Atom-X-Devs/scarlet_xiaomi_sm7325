@@ -606,7 +606,7 @@ static int ucsi_probe(struct platform_device *pdev)
 
 	ucsi_ipc_log = ipc_log_context_create(NUM_LOG_PAGES, "ucsi", 0);
 	if (!ucsi_ipc_log)
-		dev_warn(dev, "Error in creating ipc_log_context\n");
+		dev_dbg(dev, "Error in creating ipc_log_context\n");
 
 	rc = ucsi_setup(udev);
 	if (rc) {

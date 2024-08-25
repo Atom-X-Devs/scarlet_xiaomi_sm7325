@@ -3896,7 +3896,7 @@ static int gsi_set_inst_name(struct usb_function_instance *fi,
 	snprintf(gsi_inst_name, sizeof(gsi_inst_name), "gsi.%s", name);
 	ipc_log_ctxt = ipc_log_context_create(NUM_LOG_PAGES, gsi_inst_name, 0);
 	if (!ipc_log_ctxt)
-		pr_err("%s: Err allocating ipc_log_ctxt for prot:%s\n",
+		pr_debug("%s: Err allocating ipc_log_ctxt for prot:%s\n",
 						__func__, gsi_inst_name);
 	opts->gsi->ipc_log_ctxt = ipc_log_ctxt;
 
