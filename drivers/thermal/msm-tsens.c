@@ -433,7 +433,7 @@ static int tsens_tm_probe(struct platform_device *pdev)
 	tmdev->ipc_log0 = ipc_log_context_create(IPC_LOGPAGES,
 							tsens_name, 0);
 	if (!tmdev->ipc_log0)
-		pr_err("%s : unable to create IPC Logging 0 for tsens %pa\n",
+		pr_debug("%s : unable to create IPC Logging 0 for tsens %pa\n",
 					__func__, &tmdev->phys_addr_tm);
 
 	snprintf(tsens_name, sizeof(tsens_name), "tsens_%pa_1",
@@ -442,7 +442,7 @@ static int tsens_tm_probe(struct platform_device *pdev)
 	tmdev->ipc_log1 = ipc_log_context_create(IPC_LOGPAGES,
 							tsens_name, 0);
 	if (!tmdev->ipc_log1)
-		pr_err("%s : unable to create IPC Logging 1 for tsens %pa\n",
+		pr_debug("%s : unable to create IPC Logging 1 for tsens %pa\n",
 					__func__, &tmdev->phys_addr_tm);
 
 	snprintf(tsens_name, sizeof(tsens_name), "tsens_%pa_2",
@@ -451,7 +451,7 @@ static int tsens_tm_probe(struct platform_device *pdev)
 	tmdev->ipc_log2 = ipc_log_context_create(IPC_LOGPAGES,
 							tsens_name, 0);
 	if (!tmdev->ipc_log2)
-		pr_err("%s : unable to create IPC Logging 2 for tsens %pa\n",
+		pr_debug("%s : unable to create IPC Logging 2 for tsens %pa\n",
 					__func__, &tmdev->phys_addr_tm);
 
 	list_add_tail(&tmdev->list, &tsens_device_list);

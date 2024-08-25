@@ -2445,7 +2445,7 @@ static int __init rndis_ipa_init_module(void)
 	ipa_rndis_logbuf = ipc_log_context_create(IPA_RNDIS_IPC_LOG_PAGES,
 		"ipa_rndis", 0);
 	if (ipa_rndis_logbuf == NULL)
-		RNDIS_IPA_ERROR("failed to create IPC log, continue...\n");
+		RNDIS_IPA_DEBUG("failed to create IPC log, continue...\n");
 
 	pr_info("RNDIS_IPA module is loaded.\n");
 	return 0;

@@ -2118,7 +2118,7 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 	bam->ipc_log0 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							bam_name, 0);
 	if (!bam->ipc_log0)
-		SPS_ERR(sps, "unable to create IPC Log 0 for bam %pa\n",
+		SPS_DBG(sps, "unable to create IPC Log 0 for bam %pa\n",
 				&bam->props.phys_addr);
 
 	snprintf(bam_name, sizeof(bam_name), "sps_bam_%pa_1",
@@ -2126,7 +2126,7 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 	bam->ipc_log1 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							bam_name, 0);
 	if (!bam->ipc_log1)
-		SPS_ERR(sps, "unable to create IPC Log 1 for bam %pa\n",
+		SPS_DBG(sps, "unable to create IPC Log 1 for bam %pa\n",
 				&bam->props.phys_addr);
 
 	snprintf(bam_name, sizeof(bam_name), "sps_bam_%pa_2",
@@ -2134,7 +2134,7 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 	bam->ipc_log2 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							bam_name, 0);
 	if (!bam->ipc_log2)
-		SPS_ERR(sps, "unable to create IPC Log 2 for bam %pa\n",
+		SPS_DBG(sps, "unable to create IPC Log 2 for bam %pa\n",
 				&bam->props.phys_addr);
 
 	snprintf(bam_name, sizeof(bam_name), "sps_bam_%pa_3",
@@ -2142,7 +2142,7 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 	bam->ipc_log3 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							bam_name, 0);
 	if (!bam->ipc_log3)
-		SPS_ERR(sps, "unable to create IPC Log 3 for bam %pa\n",
+		SPS_DBG(sps, "unable to create IPC Log 3 for bam %pa\n",
 				&bam->props.phys_addr);
 
 	snprintf(bam_name, sizeof(bam_name), "sps_bam_%pa_4",
@@ -2150,7 +2150,7 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 	bam->ipc_log4 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							bam_name, 0);
 	if (!bam->ipc_log4)
-		SPS_ERR(sps, "unable to create IPC Log 4 for bam %pa\n",
+		SPS_DBG(sps, "unable to create IPC Log 4 for bam %pa\n",
 				&bam->props.phys_addr);
 
 	if (bam_props->ipc_loglevel)
@@ -2930,23 +2930,23 @@ static int __init sps_init(void)
 	sps->ipc_log0 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							"sps_ipc_log0", 0);
 	if (!sps->ipc_log0)
-		pr_err("Failed to create IPC log0\n");
+		pr_debug("Failed to create IPC log0\n");
 	sps->ipc_log1 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							"sps_ipc_log1", 0);
 	if (!sps->ipc_log1)
-		pr_err("Failed to create IPC log1\n");
+		pr_debug("Failed to create IPC log1\n");
 	sps->ipc_log2 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							"sps_ipc_log2", 0);
 	if (!sps->ipc_log2)
-		pr_err("Failed to create IPC log2\n");
+		pr_debug("Failed to create IPC log2\n");
 	sps->ipc_log3 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							"sps_ipc_log3", 0);
 	if (!sps->ipc_log3)
-		pr_err("Failed to create IPC log3\n");
+		pr_debug("Failed to create IPC log3\n");
 	sps->ipc_log4 = ipc_log_context_create(SPS_IPC_LOGPAGES *
 				SPS_IPC_REG_DUMP_FACTOR, "sps_ipc_log4", 0);
 	if (!sps->ipc_log4)
-		pr_err("Failed to create IPC log4\n");
+		pr_debug("Failed to create IPC log4\n");
 
 	ret = platform_driver_register(&msm_sps_driver);
 
