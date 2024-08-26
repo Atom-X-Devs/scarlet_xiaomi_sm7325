@@ -35,6 +35,9 @@
 #include <linux/of_gpio.h>
 #include <linux/regulator/consumer.h>
 #endif
+#ifdef CONFIG_DRM_PANEL
+#include <drm/drm_panel.h>
+#endif
 
 #define GOODIX_CORE_DRIVER_NAME			"goodix_ts"
 #define GOODIX_PEN_DRIVER_NAME			"goodix_ts,pen"
@@ -516,6 +519,9 @@ struct goodix_ts_core {
 	/* when this flag is true, driver should not clean the sync flag */
 	bool tools_ctrl_sync;
 
+#ifdef CONFIG_DRM_PANEL
+	struct notifier_block drm_notifier;
+#endif
 	struct notifier_block ts_notifier;
 	struct goodix_ts_esd ts_esd;
 	bool esd_initialized;

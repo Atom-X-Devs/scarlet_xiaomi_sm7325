@@ -1848,6 +1848,35 @@ static int goodix_ts_pm_resume(struct device *dev)
 }
 #endif
 
+#ifdef CONFIG_DRM_PANEL
+static struct drm_panel *active_panel;
+
+static int drm_notifier_callback(struct notifier_block *self, unsigned long event,
+				 void *data)
+{
+	struct goodix_ts_core *core_data = container_of(self, struct goodix_ts_core,
+							drm_notifier);
+	struct drm_panel_notifier *evdata = data;
+	int *blank = evdata->data;
+
+	switch (*blank) {
+	case DRM_PANEL_BLANK_POWERDOWN:
+	case DRM_PANEL_BLANK_LP:
+		if (event == DRM_PANEL_EARLY_EVENT_BLANK)
+			goodix_ts_suspend(core_data);
+		break;
+	case DRM_PANEL_BLANK_UNBLANK:
+		if (event == DRM_PANEL_EVENT_BLANK)
+			goodix_ts_resume(core_data);
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+#endif
+
 /**
  * goodix_generic_noti_callback - generic notifier callback
  *  for goodix touch notification event.
@@ -1904,6 +1933,17 @@ int goodix_ts_stage2_init(struct goodix_ts_core *cd)
 		goto exit;
 	}
 	ts_info("success register irq");
+
+#ifdef CONFIG_DRM_PANEL
+	cd->drm_notifier.notifier_call = drm_notifier_callback;
+	if (active_panel)
+		ret = drm_panel_notifier_register(active_panel, &cd->drm_notifier);
+	else
+		ret = -ENODEV;
+
+	if (ret)
+		ts_err("Failed to register DRM panel notifier, ret=%d\n", ret);
+#endif
 
 	/* create sysfs files */
 	goodix_ts_sysfs_init(cd);
@@ -2052,6 +2092,32 @@ static int goodix_start_later_init(struct goodix_ts_core *ts_core)
 	return 0;
 }
 
+#ifdef CONFIG_DRM_PANEL
+static int goodix_check_dt(struct device_node *np)
+{
+	int i;
+	int count;
+	struct device_node *node;
+	struct drm_panel *panel;
+
+	count = of_count_phandle_with_args(np, "qcom,display-panels", NULL);
+	if (count <= 0)
+		return 0;
+
+	for (i = 0; i < count; i++) {
+		node = of_parse_phandle(np, "qcom,display-panels", i);
+		panel = of_drm_find_panel(node);
+		of_node_put(node);
+		if (!IS_ERR(panel)) {
+			active_panel = panel;
+			return 0;
+		}
+	}
+
+	return PTR_ERR(panel);
+}
+#endif
+
 /**
  * goodix_ts_probe - called by kernel when Goodix touch
  *  platform driver is added.
@@ -2070,6 +2136,12 @@ static int goodix_ts_probe(struct platform_device *pdev)
 		core_module_prob_sate = CORE_MODULE_PROB_FAILED;
 		return -ENODEV;
 	}
+
+#ifdef CONFIG_DRM_PANEL
+	ret = goodix_check_dt(bus_interface->dev->of_node);
+	if (ret)
+		return (ret == -EPROBE_DEFER) ? ret : -ENODEV;
+#endif
 
 	core_data = devm_kzalloc(&pdev->dev,
 			sizeof(struct goodix_ts_core), GFP_KERNEL);
@@ -2159,6 +2231,10 @@ static int goodix_ts_remove(struct platform_device *pdev)
 		gesture_module_exit();
 		inspect_module_exit();
 		hw_ops->irq_enable(core_data, false);
+#ifdef CONFIG_DRM_PANEL
+	if (active_panel)
+		drm_panel_notifier_unregister(active_panel, &core_data->drm_notifier);
+#endif
 		core_module_prob_sate = CORE_MODULE_REMOVED;
 		if (atomic_read(&core_data->ts_esd.esd_on))
 			goodix_ts_esd_off(core_data);
