@@ -20,7 +20,9 @@
 #include <linux/power_supply.h>
 #include <linux/soc/qcom/pmic_glink.h>
 #include <linux/soc/qcom/battery_charger.h>
-#include <linux/soc/qcom/panel_event_notifier.h>
+#ifdef CONFIG_DRM_PANEL
+#include <drm/drm_panel.h>
+#endif
 #include "qti_typec_class.h"
 
 #define MSG_OWNER_BC			32778
@@ -235,7 +237,9 @@ struct battery_chg_dev {
 	struct dentry			*debugfs_dir;
 	/* extcon for VBUS/ID notification for USB for micro USB */
 	struct extcon_dev		*extcon;
-	void				*notifier_cookie;
+#ifdef CONFIG_DRM_PANEL
+	struct notifier_block		drm_notifier;
+#endif
 	u32				*thermal_levels;
 	const char			*wls_fw_name;
 	int				curr_thermal_level;
@@ -2001,78 +2005,56 @@ static int register_extcon_conn_type(struct battery_chg_dev *bcdev)
 	return rc;
 }
 
-static void panel_event_notifier_callback(enum panel_event_notifier_tag tag,
-			struct panel_event_notification *notification, void *data)
+#ifdef CONFIG_DRM_PANEL
+static struct drm_panel *active_panel;
+
+static int drm_check_dt(struct device_node *np)
 {
-	struct battery_chg_dev *bcdev = data;
-
-	if (!notification) {
-		pr_debug("Invalid panel notification\n");
-		return;
-	}
-
-	pr_debug("panel event received, type: %d\n", notification->notif_type);
-	switch (notification->notif_type) {
-	case DRM_PANEL_EVENT_BLANK:
-		battery_chg_notify_disable(bcdev);
-		break;
-	case DRM_PANEL_EVENT_UNBLANK:
-		battery_chg_notify_enable(bcdev);
-		break;
-	default:
-		pr_debug("Ignore panel event: %d\n", notification->notif_type);
-		break;
-	}
-}
-
-static int battery_chg_register_panel_notifier(struct battery_chg_dev *bcdev)
-{
-	struct device_node *np = bcdev->dev->of_node;
-	struct device_node *pnode;
-	struct drm_panel *panel, *active_panel = NULL;
-	void *cookie = NULL;
-	int i, count, rc;
+	int i;
+	int count;
+	struct device_node *node;
+	struct drm_panel *panel;
 
 	count = of_count_phandle_with_args(np, "qcom,display-panels", NULL);
 	if (count <= 0)
 		return 0;
 
 	for (i = 0; i < count; i++) {
-		pnode = of_parse_phandle(np, "qcom,display-panels", i);
-		if (!pnode)
-			return -ENODEV;
-
-		panel = of_drm_find_panel(pnode);
-		of_node_put(pnode);
+		node = of_parse_phandle(np, "qcom,display-panels", i);
+		panel = of_drm_find_panel(node);
+		of_node_put(node);
 		if (!IS_ERR(panel)) {
 			active_panel = panel;
-			break;
+			return 0;
 		}
 	}
 
-	if (!active_panel) {
-		rc = PTR_ERR(panel);
-		if (rc != -EPROBE_DEFER)
-			dev_err(bcdev->dev, "Failed to find active panel, rc=%d\n");
-		return rc;
-	}
-
-	cookie = panel_event_notifier_register(
-			PANEL_EVENT_NOTIFICATION_PRIMARY,
-			PANEL_EVENT_NOTIFIER_CLIENT_BATTERY_CHARGER,
-			active_panel,
-			panel_event_notifier_callback,
-			(void *)bcdev);
-	if (IS_ERR(cookie)) {
-		rc = PTR_ERR(cookie);
-		dev_err(bcdev->dev, "Failed to register panel event notifier, rc=%d\n", rc);
-		return rc;
-	}
-
-	pr_debug("register panel notifier successful\n");
-	bcdev->notifier_cookie = cookie;
-	return 0;
+	return PTR_ERR(panel);
 }
+
+static int battery_chg_notify(struct notifier_block *self, unsigned long event,
+			      void *data)
+{
+	struct battery_chg_dev *bcdev = container_of(self, struct battery_chg_dev,
+						     drm_notifier);
+	struct drm_panel_notifier *evdata = data;
+	int *blank = evdata->data;
+
+	switch (*blank) {
+	case DRM_PANEL_BLANK_POWERDOWN:
+		battery_chg_notify_disable(bcdev);
+		break;
+	case DRM_PANEL_BLANK_UNBLANK:
+		battery_chg_notify_enable(bcdev);
+		break;
+	default:
+		pr_debug("Ignore panel event: %d\n", *blank);
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+#endif
 
 static int battery_chg_probe(struct platform_device *pdev)
 {
@@ -2146,9 +2128,24 @@ static int battery_chg_probe(struct platform_device *pdev)
 		goto error;
 	}
 
-	rc = battery_chg_register_panel_notifier(bcdev);
-	if (rc < 0)
-		goto error;
+#ifdef CONFIG_DRM_PANEL
+	rc = drm_check_dt(bcdev->dev->of_node);
+	if (rc) {
+		pr_err("Failed to parse active panel\n");
+		return (rc == -EPROBE_DEFER) ? rc : -ENODEV;
+	}
+
+	bcdev->drm_notifier.notifier_call = battery_chg_notify;
+	if (active_panel) {
+		rc = drm_panel_notifier_register(active_panel, &bcdev->drm_notifier);
+		if (rc) {
+			pr_err("Failed to register DRM panel notifier, rc=%d\n", rc);
+			return rc;
+		} else {
+			pr_info("Registered DRM panel notifier successfully\n");
+		}
+	}
+#endif
 
 	bcdev->restrict_fcc_ua = DEFAULT_RESTRICT_FCC_UA;
 	platform_set_drvdata(pdev, bcdev);
@@ -2197,9 +2194,10 @@ static int battery_chg_remove(struct platform_device *pdev)
 {
 	struct battery_chg_dev *bcdev = platform_get_drvdata(pdev);
 	int rc;
-
-	if (bcdev->notifier_cookie)
-		panel_event_notifier_unregister(bcdev->notifier_cookie);
+#ifdef CONFIG_DRM_PANEL
+	if (active_panel)
+		drm_panel_notifier_unregister(active_panel, &bcdev->drm_notifier);
+#endif
 
 	device_init_wakeup(bcdev->dev, false);
 	debugfs_remove_recursive(bcdev->debugfs_dir);
