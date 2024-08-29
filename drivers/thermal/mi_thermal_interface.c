@@ -30,6 +30,12 @@
 #ifdef CONFIG_DRM_PANEL
 static struct drm_panel *active_panel;
 static struct notifier_block drm_notifier;
+
+struct drm_panel *get_panel(void)
+{
+	return active_panel;
+}
+EXPORT_SYMBOL(get_panel);
 #endif
 
 static struct mi_thermal_device {
