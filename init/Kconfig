@@ -468,7 +468,7 @@ config SCHED_THERMAL_PRESSURE
 	default y if ARM && ARM_CPU_TOPOLOGY
 	default y if ARM64
 	depends on SMP
-	depends on CPU_FREQ_THERMAL
+	depends on CPU_THERMAL
 	help
 	  Select this option to enable thermal pressure accounting in the
 	  scheduler. Thermal pressure is the value conveyed to the scheduler
