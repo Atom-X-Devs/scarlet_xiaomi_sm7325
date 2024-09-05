@@ -1655,6 +1655,7 @@ void sde_encoder_control_idle_pc(struct drm_encoder *drm_enc, bool enable)
 	SDE_EVT32(sde_enc->idle_pc_enabled);
 }
 
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 static void _sde_encoder_set_rc_state(struct sde_encoder_virt *sde_enc,
 				      enum sde_enc_rc_states rc_state)
 {
@@ -1677,6 +1678,7 @@ static void _sde_encoder_set_rc_state(struct sde_encoder_virt *sde_enc,
 		break;
 	}
 }
+#endif
 
 static void _sde_encoder_rc_restart_delayed(struct sde_encoder_virt *sde_enc,
 	u32 sw_event)
@@ -1793,7 +1795,11 @@ static int _sde_encoder_rc_kickoff(struct drm_encoder *drm_enc,
 	}
 	SDE_EVT32(DRMID(drm_enc), sw_event, sde_enc->rc_state,
 			SDE_ENC_RC_STATE_ON, SDE_EVTLOG_FUNC_CASE1);
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 	_sde_encoder_set_rc_state(sde_enc, SDE_ENC_RC_STATE_ON);
+#else
+	sde_enc->rc_state = SDE_ENC_RC_STATE_ON;
+#endif
 
 end:
 	/* avoid delayed off work if called from esd thread */
@@ -1836,7 +1842,11 @@ static int _sde_encoder_rc_pre_stop(struct drm_encoder *drm_enc,
 			SDE_ENC_RC_STATE_PRE_OFF,
 			SDE_EVTLOG_FUNC_CASE3);
 
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 	_sde_encoder_set_rc_state(sde_enc, SDE_ENC_RC_STATE_PRE_OFF);
+#else
+	sde_enc->rc_state = SDE_ENC_RC_STATE_PRE_OFF;
+#endif
 
 end:
 	mutex_unlock(&sde_enc->rc_lock);
@@ -1876,7 +1886,11 @@ static int _sde_encoder_rc_stop(struct drm_encoder *drm_enc,
 	SDE_EVT32(DRMID(drm_enc), sw_event, sde_enc->rc_state,
 			SDE_ENC_RC_STATE_OFF, SDE_EVTLOG_FUNC_CASE4);
 
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 	_sde_encoder_set_rc_state(sde_enc, SDE_ENC_RC_STATE_OFF);
+#else
+	sde_enc->rc_state = SDE_ENC_RC_STATE_OFF;
+#endif
 
 end:
 	mutex_unlock(&sde_enc->rc_lock);
@@ -1914,7 +1928,11 @@ static int _sde_encoder_rc_pre_modeset(struct drm_encoder *drm_enc,
 
 		SDE_EVT32(DRMID(drm_enc), sw_event, sde_enc->rc_state,
 			SDE_ENC_RC_STATE_ON, SDE_EVTLOG_FUNC_CASE5);
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 		_sde_encoder_set_rc_state(sde_enc, SDE_ENC_RC_STATE_ON);
+#else
+		sde_enc->rc_state = SDE_ENC_RC_STATE_ON;
+#endif
 	}
 
 	if (sde_encoder_has_dsc_hw_rev_2(sde_enc))
@@ -1932,7 +1950,11 @@ skip_wait:
 	SDE_EVT32(DRMID(drm_enc), sw_event, sde_enc->rc_state,
 		SDE_ENC_RC_STATE_MODESET, SDE_EVTLOG_FUNC_CASE5);
 
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 	_sde_encoder_set_rc_state(sde_enc, SDE_ENC_RC_STATE_MODESET);
+#else
+	sde_enc->rc_state = SDE_ENC_RC_STATE_MODESET;
+#endif
 	_sde_encoder_pm_qos_remove_request(drm_enc);
 
 end:
@@ -1968,7 +1990,11 @@ static int _sde_encoder_rc_post_modeset(struct drm_encoder *drm_enc,
 	SDE_EVT32(DRMID(drm_enc), sw_event, sde_enc->rc_state,
 			SDE_ENC_RC_STATE_ON, SDE_EVTLOG_FUNC_CASE6);
 
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 	_sde_encoder_set_rc_state(sde_enc, SDE_ENC_RC_STATE_ON);
+#else
+	sde_enc->rc_state = SDE_ENC_RC_STATE_ON;
+#endif
 	_sde_encoder_pm_qos_add_request(drm_enc);
 
 end:
@@ -2028,7 +2054,11 @@ static int _sde_encoder_rc_idle(struct drm_encoder *drm_enc,
 
 	SDE_EVT32(DRMID(drm_enc), sw_event, sde_enc->rc_state,
 			SDE_ENC_RC_STATE_IDLE, SDE_EVTLOG_FUNC_CASE7);
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 	_sde_encoder_set_rc_state(sde_enc, SDE_ENC_RC_STATE_IDLE);
+#else
+	sde_enc->rc_state = SDE_ENC_RC_STATE_IDLE;
+#endif
 
 end:
 	mutex_unlock(&sde_enc->rc_lock);
@@ -2106,7 +2136,11 @@ static int _sde_encoder_rc_early_wakeup(struct drm_encoder *drm_enc,
 				IDLE_POWERCOLLAPSE_IN_EARLY_WAKEUP));
 		idle_pc_duration = IDLE_POWERCOLLAPSE_IN_EARLY_WAKEUP;
 
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 		_sde_encoder_set_rc_state(sde_enc, SDE_ENC_RC_STATE_ON);
+#else
+		sde_enc->rc_state = SDE_ENC_RC_STATE_ON;
+#endif
 	}
 
 	SDE_EVT32(DRMID(drm_enc), sw_event, sde_enc->rc_state, SDE_ENC_RC_STATE_ON,
@@ -3914,7 +3948,11 @@ void sde_encoder_trigger_rsc_state_change(struct drm_encoder *drm_enc)
 	_sde_encoder_update_rsc_client(drm_enc, true);
 
 	SDE_EVT32(DRMID(drm_enc), sde_enc->rc_state, SDE_ENC_RC_STATE_ON);
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 	_sde_encoder_set_rc_state(sde_enc, SDE_ENC_RC_STATE_ON);
+#else
+	sde_enc->rc_state = SDE_ENC_RC_STATE_ON;
+#endif
 
 end:
 	mutex_unlock(&sde_enc->rc_lock);
