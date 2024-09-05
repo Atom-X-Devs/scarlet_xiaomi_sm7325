@@ -824,6 +824,7 @@ struct msm_drm_thread {
 	struct kthread_worker worker;
 };
 
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 struct msm_idle {
 	u32 timeout_ms;
 	u32 encoder_mask;
@@ -832,6 +833,7 @@ struct msm_idle {
 	spinlock_t lock;
 	struct delayed_work work;
 };
+#endif
 
 struct msm_drm_private {
 
@@ -949,7 +951,9 @@ struct msm_drm_private {
 	struct mutex vm_client_lock;
 	struct list_head vm_client_list;
 
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 	struct msm_idle idle;
+#endif
 };
 
 /* get struct msm_kms * from drm_device * */
@@ -1225,7 +1229,10 @@ static inline void __exit msm_mdp_unregister(void)
 }
 #endif /* CONFIG_DRM_MSM_MDP5 */
 
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 void msm_idle_set_state(struct drm_encoder *encoder, bool active);
+#endif
+
 #ifdef CONFIG_DEBUG_FS
 void msm_gem_describe(struct drm_gem_object *obj, struct seq_file *m);
 void msm_gem_describe_objects(struct list_head *list, struct seq_file *m);
