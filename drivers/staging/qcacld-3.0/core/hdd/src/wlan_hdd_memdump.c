@@ -207,7 +207,7 @@ static ssize_t hdd_driver_memdump_read(struct file *file, char __user *buf,
  * This structure initialize the file operation handle for memory
  * dump feature
  */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
 static const struct proc_ops driver_dump_fops = {
 	.proc_read = hdd_driver_memdump_read,
 };

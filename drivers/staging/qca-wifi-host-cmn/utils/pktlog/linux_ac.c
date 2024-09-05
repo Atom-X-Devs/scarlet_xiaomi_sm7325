@@ -76,7 +76,7 @@ static int pktlog_release(struct inode *i, struct file *f);
 static ssize_t pktlog_read(struct file *file, char *buf, size_t nbytes,
 			   loff_t *ppos);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
 static const struct proc_ops pktlog_fops = {
 	.proc_open = pktlog_open,
 	.proc_release = pktlog_release,
