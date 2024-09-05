@@ -39,7 +39,9 @@
 
 #include <linux/of_address.h>
 #include <linux/kthread.h>
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 #include <linux/workqueue.h>
+#endif
 #include <uapi/linux/sched/types.h>
 #include <drm/drm_of.h>
 #include <drm/drm_auth.h>
@@ -51,7 +53,9 @@
 #include "msm_mmu.h"
 #include "sde_wb.h"
 #include "sde_dbg.h"
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 #include "sde/sde_encoder.h"
+#endif
 
 /*
  * MSM driver version:
@@ -70,8 +74,10 @@
 
 #define LASTCLOSE_TIMEOUT_MS	500
 
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 #define IDLE_ENCODER_MASK_DEFAULT	2
 #define IDLE_TIMEOUT_MS_DEFAULT		(100 - IDLE_POWERCOLLAPSE_DURATION)
+#endif
 
 #define msm_wait_event_timeout(waitq, cond, timeout_ms, ret)		\
 	do {								\
@@ -721,6 +727,7 @@ static struct msm_kms *_msm_drm_component_init_helper(
 	return kms;
 }
 
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 static ssize_t idle_encoder_mask_store(struct device *device,
 			       struct device_attribute *attr,
 			       const char *buf, size_t count)
@@ -872,6 +879,7 @@ static void msm_idle_init(struct drm_device *ddev)
 	INIT_DELAYED_WORK(&idle->work, msm_idle_work);
 	spin_lock_init(&idle->lock);
 }
+#endif
 
 static int msm_drm_device_init(struct platform_device *pdev,
 		struct drm_driver *drv)
@@ -911,7 +919,9 @@ static int msm_drm_device_init(struct platform_device *pdev,
 		goto dbg_init_fail;
 	}
 
+#ifndef CONFIG_MACH_XIAOMI_REDWOOD
 	msm_idle_init(ddev);
+#endif
 
 	pm_runtime_enable(dev);
 
