@@ -27,6 +27,11 @@
 #define GOODIX_DEFAULT_CFG_NAME		"goodix_cfg_group.cfg"
 #define GOOIDX_INPUT_PHYS			"goodix_ts/input0"
 
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
+#define DISP_ID_DET (336 + 96)
+#define DISP_ID1_DET (336 + 68)
+#endif
+
 struct goodix_module goodix_modules;
 int core_module_prob_sate = CORE_MODULE_UNPROBED;
 
@@ -2880,6 +2885,22 @@ static struct platform_driver goodix_ts_driver = {
 static int __init goodix_ts_core_init(void)
 {
 	int ret;
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
+	int gpio_96, gpio_68;
+
+	gpio_direction_input(DISP_ID_DET);
+	gpio_direction_input(DISP_ID1_DET);
+
+	gpio_96 = gpio_get_value(DISP_ID_DET);
+	gpio_68 = gpio_get_value(DISP_ID1_DET);
+
+	if (!gpio_96 && gpio_68) {
+		ts_info("TP is Goodix, initializing..\n");
+	} else {
+		ts_info("TP is Focaltech, killing Goodix TP init..\n");
+		return -ENODEV;
+	}
+#endif
 
 	ts_info("Core layer init:%s", GOODIX_DRIVER_VERSION);
 #ifdef CONFIG_TOUCHSCREEN_GOODIX_BRL_SPI
