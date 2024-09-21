@@ -45,7 +45,7 @@
 #endif
 #include "focaltech_core.h"
 #ifdef FTS_XIAOMI_TOUCHFEATURE
-#include "../xiaomi/xiaomi_touch.h"
+#include "../../../techpack/touch/xiaomi/xiaomi_touch.h"
 #endif
 #include <linux/power_supply.h>
 
