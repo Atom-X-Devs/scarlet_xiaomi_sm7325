@@ -40,16 +40,8 @@
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
-#if defined(CONFIG_DRM)
-#if defined(CONFIG_DRM_PANEL)
+#ifdef CONFIG_DRM_PANEL
 #include <drm/drm_panel.h>
-#include "../../../gpu/drm/mediatek/mi_disp/mi_disp_notifier.h"
-#else
-#include <linux/msm_drm_notify.h>
-#endif
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-#include <linux/earlysuspend.h>
-#define FTS_SUSPEND_LEVEL 1 /* Early-suspend level */
 #endif
 #include "focaltech_core.h"
 #ifdef FTS_XIAOMI_TOUCHFEATURE
@@ -92,7 +84,6 @@ static int fts_palm_sensor_cmd(int value);
 static void fts_palm_mode_recovery(struct fts_ts_data *ts_data);
 static void fts_game_mode_recovery(struct fts_ts_data *ts_data);
 static int fts_get_charging_status(void);
-static int fts_change_fps(void *data);
 
 #define ORIENTATION_0_OR_180 0 /* anticlockwise 0 or 180 degrees */
 #define NORMAL_ORIENTATION_90 1 /* anticlockwise 90 degrees in normal */
@@ -2133,211 +2124,69 @@ static int fts_power_supply_callback(struct notifier_block *nb,
 	return 0;
 }
 
-#if defined(CONFIG_DRM)
-#if defined(CONFIG_DRM_PANEL)
-static int fts_change_fps(void *data)
-{
-	int ret = 0;
-	u8 value = 0;
+#ifdef CONFIG_DRM_PANEL
+static struct drm_panel *active_panel;
 
-	FTS_FUNC_ENTER();
-	/*Do hothing when suspended*/
-	if (fts_data->suspended == true)
+static int drm_check_dt(struct device_node *np)
+{
+	int i;
+	int count;
+	struct device_node *node;
+	struct drm_panel *panel;
+
+	count = of_count_phandle_with_args(np, "qcom,display-panels", NULL);
+	if (count <= 0)
 		return 0;
-	switch (fts_data->current_fps) {
-	case 30:
-		/*write 30 to register for reducing noise during 30Hz*/
-		value = 30;
-		ret = fts_write_reg(FTS_PANEL_CHANGE_FPS, value);
-		if (ret < 0) {
-			FTS_ERROR(
-				"panel change fps to %d, touch wite reg failed\n",
-				fts_data->current_fps);
-			return -EINVAL;
-		} else
-			FTS_DEBUG(
-				"panel change fps to %d, touch wite reg success, value = %d\n",
-				fts_data->current_fps, value);
-		break;
-	case 60:
-		/*write 60 to register for normal workiing*/
-		value = 60;
-		ret = fts_write_reg(FTS_PANEL_CHANGE_FPS, value);
-		if (ret < 0) {
-			FTS_ERROR(
-				"panel change fps to %d, touch wite reg failed\n",
-				fts_data->current_fps);
-			return -EINVAL;
-		} else
-			FTS_DEBUG(
-				"panel change fps to %d, touch wite reg success, value = %d\n",
-				fts_data->current_fps, value);
-		break;
-	case 90:
-		/*write 90 to register for normal workiing*/
-		value = 90;
-		ret = fts_write_reg(FTS_PANEL_CHANGE_FPS, value);
-		if (ret < 0) {
-			FTS_ERROR(
-				"panel change fps to %d, touch wite reg failed\n",
-				fts_data->current_fps);
-			return -EINVAL;
-		} else
-			FTS_DEBUG(
-				"panel change fps to %d, touch wite reg success, value = %d\n",
-				fts_data->current_fps, value);
-		break;
-	case 120:
-		/*write 120 to register for normal workiing*/
-		value = 120;
-		ret = fts_write_reg(FTS_PANEL_CHANGE_FPS, value);
-		if (ret < 0) {
-			FTS_ERROR(
-				"panel change fps to %d, touch wite reg failed\n",
-				fts_data->current_fps);
-			return -EINVAL;
-		} else
-			FTS_DEBUG(
-				"panel change fps to %d, touch wite reg success, value = %d\n",
-				fts_data->current_fps, value);
-		break;
-	default:
-		value = 0;
-		FTS_INFO("invalid fps = %d, touch wtite default value = %d\n",
-			 fts_data->current_fps, value);
-		ret = fts_write_reg(FTS_PANEL_CHANGE_FPS, value);
-		if (ret < 0) {
-			FTS_ERROR(
-				"panel change fps to %d, touch wite reg failed\n",
-				fts_data->current_fps);
-			return -EINVAL;
-		} else
-			FTS_DEBUG(
-				"panel change fps to %d, touch wite reg success, value = %d\n",
-				fts_data->current_fps, value);
+
+	for (i = 0; i < count; i++) {
+		node = of_parse_phandle(np, "qcom,display-panels", i);
+		panel = of_drm_find_panel(node);
+		of_node_put(node);
+		if (!IS_ERR(panel)) {
+			active_panel = panel;
+			return 0;
+		}
 	}
-	return 0;
+
+	return PTR_ERR(panel);
 }
 
 static int drm_notifier_callback(struct notifier_block *self,
 				 unsigned long event, void *data)
 {
-	struct mi_disp_notifier *evdata = data;
-	int blank;
-	struct fts_ts_data *fts_data =
-		container_of(self, struct fts_ts_data, fb_notif);
-	struct task_struct *fps_thread;
+	struct fts_ts_data *fts_data = container_of(self, struct fts_ts_data,
+						    drm_notifier);
+	struct drm_panel_notifier *evdata = data;
+	int *blank = evdata->data;
 
-	FTS_FUNC_ENTER();
-
-	if (evdata && evdata->data && fts_data) {
-		blank = *(int *)(evdata->data);
-		FTS_INFO("notifier tp event:%d, code:%d.", event, blank);
-
-		if (event == MI_DISP_DPMS_EVENT &&
-		    (blank == MI_DISP_DPMS_POWERDOWN ||
-		     blank == MI_DISP_DPMS_LP1 || blank == MI_DISP_DPMS_LP2)) {
-			FTS_INFO("FTS do suspend work by event %s\n",
-				 blank == MI_DISP_DPMS_POWERDOWN ?
-					 "power down" :
-					 "LP");
-			if (blank == MI_DISP_DPMS_POWERDOWN &&
-			    fts_data->finger_in_fod) {
-				FTS_INFO("%s : fod_status = %d\n", __func__,
-					 fts_data->fod_status);
-				if (fts_data->fod_status != -1 &&
-				    fts_data->fod_status != 100) {
-					FTS_INFO("set fod finger skip true\n");
-					fts_data->fod_finger_skip = true;
-				}
-			}
+	switch (*blank) {
+	case DRM_PANEL_BLANK_POWERDOWN:
+		if (fts_data->finger_in_fod &&
+		    fts_data->fod_status != -1 &&
+		    fts_data->fod_status != 100)
+			fts_data->fod_finger_skip = true;
+	case DRM_PANEL_BLANK_LP:
+		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
 			flush_workqueue(fts_data->ts_workqueue);
 			queue_work(fts_data->ts_workqueue,
 				   &fts_data->suspend_work);
-		} else if (event == MI_DISP_DPMS_EVENT &&
-			   blank == MI_DISP_DPMS_ON) {
-			FTS_INFO("FTS do resume work\n");
+		}
+		break;
+	case DRM_PANEL_BLANK_UNBLANK:
+		if (event == DRM_PANEL_EVENT_BLANK) {
 			flush_workqueue(fts_data->ts_workqueue);
 			queue_work(fts_data->ts_workqueue,
 				   &fts_data->resume_work);
-		} else if (event == MI_DISP_CHANGE_FPS) {
-			if (fts_data->current_fps != blank) {
-				fts_data->current_fps = blank;
-				fps_thread = kthread_run(fts_change_fps, NULL,
-							 "change_fps_thread");
-				if (IS_ERR_OR_NULL(fps_thread)) {
-					FTS_ERROR(
-						"Fail to create kthread: change_fps_thread\n");
-					return -EFAULT;
-				}
-			}
 		}
-	}
-	return 0;
-}
-#else
-static int drm_notifier_callback(struct notifier_block *self,
-				 unsigned long event, void *data)
-{
-	struct mi_disp_notifier *evdata = data;
-	int *blank = NULL;
-	struct fts_ts_data *ts_data =
-		container_of(self, struct fts_ts_data, fb_notif);
-
-	if (!evdata) {
-		FTS_ERROR("evdata is null");
-		return 0;
-	}
-
-	if (!((event == MSM_DRM_EARLY_EVENT_BLANK) ||
-	      (event == MSM_DRM_EVENT_BLANK))) {
-		FTS_INFO("event(%lu) do not need process\n", event);
-		return 0;
-	}
-
-	blank = evdata->data;
-	FTS_INFO("DRM event:%lu,blank:%d", event, *blank);
-	switch (*blank) {
-	case MSM_DRM_BLANK_UNBLANK:
-		if (event == MSM_DRM_EARLY_EVENT_BLANK)
-			FTS_INFO("resume: event = %lu, not care\n", event);
-		else if (event == MSM_DRM_EVENT_BLANK)
-			queue_work(fts_data->ts_workqueue,
-				   &fts_data->resume_work);
-		break;
-	case MSM_DRM_BLANK_POWERDOWN:
-		if (event == MSM_DRM_EARLY_EVENT_BLANK) {
-			cancel_work_sync(&fts_data->resume_work);
-			fts_ts_suspend(ts_data->dev);
-		} else if (event == MSM_DRM_EVENT_BLANK)
-			FTS_INFO("suspend: event = %lu, not care\n", event);
 		break;
 	default:
-		FTS_INFO("DRM BLANK(%d) do not need process\n", *blank);
 		break;
 	}
 
-	return 0;
+	return NOTIFY_DONE;
 }
 #endif
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-static void fts_ts_early_suspend(struct early_suspend *handler)
-{
-	struct fts_ts_data *ts_data =
-		container_of(handler, struct fts_ts_data, early_suspend);
 
-	cancel_work_sync(&fts_data->resume_work);
-	fts_ts_suspend(ts_data->dev);
-}
-
-static void fts_ts_late_resume(struct early_suspend *handler)
-{
-	struct fts_ts_data *ts_data =
-		container_of(handler, struct fts_ts_data, early_suspend);
-
-	queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
-}
-#endif
 #ifdef FTS_TOUCHSCREEN_FOD
 static ssize_t fts_fod_test_store(struct device *dev,
 				  struct device_attribute *attr,
@@ -3076,6 +2925,13 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 		if (ret)
 			FTS_ERROR("device-tree parse fail");
 
+#ifdef CONFIG_DRM_PANEL
+		ret = drm_check_dt(ts_data->dev->of_node);
+		if (ret) {
+			FTS_ERROR("Failed to parse active panel\n");
+			return (ret == -EPROBE_DEFER) ? ret : -ENODEV;
+		}
+#endif
 	} else {
 		if (ts_data->dev->platform_data)
 			memcpy(ts_data->pdata, ts_data->dev->platform_data,
@@ -3249,30 +3105,16 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 		ts_data->power_supply_notifier.notifier_call =
 			fts_power_supply_callback;
 	}
-#if defined(CONFIG_DRM)
-	ts_data->fb_notif.notifier_call = drm_notifier_callback;
-	ret = mi_disp_register_client(&ts_data->fb_notif);
-	if (ret)
-		FTS_ERROR("[DRM]Unable to register fb_notifier: %d", ret);
-#if defined(CONFIG_DRM_PANEL)
-		/*
-	 * if (active_panel) {
-	 *	ret = drm_panel_notifier_register(active_panel, &ts_data->fb_notif);
-	 *	if (ret)
-	 *		FTS_ERROR("[DRM]drm_panel_notifier_register fail: %d\n", ret);
-	 * }
-	 */
-#else
-	ret = msm_drm_register_client(&ts_data->fb_notif);
-	if (ret)
-		FTS_ERROR("[DRM]Unable to register fb_notifier: %d\n", ret);
-#endif
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-	ts_data->early_suspend.level =
-		EARLY_SUSPEND_LEVEL_BLANK_SCREEN + FTS_SUSPEND_LEVEL;
-	ts_data->early_suspend.suspend = fts_ts_early_suspend;
-	ts_data->early_suspend.resume = fts_ts_late_resume;
-	register_early_suspend(&ts_data->early_suspend);
+
+#ifdef CONFIG_DRM_PANEL
+	ts_data->drm_notifier.notifier_call = drm_notifier_callback;
+	if (active_panel) {
+		ret = drm_panel_notifier_register(active_panel,
+						  &ts_data->drm_notifier);
+		if (ret)
+			FTS_ERROR("Failed to register DRM panel notifier, ret=%d\n",
+				  ret);
+	}
 #endif
 	ts_data->charger_status = -1;
 	fts_init_xiaomi_touchfeature(ts_data);
@@ -3348,12 +3190,10 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
 	if (ts_data->ts_workqueue)
 		destroy_workqueue(ts_data->ts_workqueue);
 
-#if defined(CONFIG_DRM)
-	if (mi_disp_unregister_client(&ts_data->fb_notif))
-		FTS_ERROR(
-			"[MI_DISP]Error occurred while unregistering fb_notifier.");
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-	unregister_early_suspend(&ts_data->early_suspend);
+#ifdef CONFIG_DRM_PANEL
+	if (active_panel)
+		drm_panel_notifier_unregister(active_panel,
+					      &ts_data->drm_notifier);
 #endif
 
 	if (gpio_is_valid(ts_data->pdata->avdd_gpio))
