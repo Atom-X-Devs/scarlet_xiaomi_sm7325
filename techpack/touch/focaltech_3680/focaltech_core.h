@@ -278,10 +278,8 @@ struct fts_ts_data {
 	struct mutex fod_mutex;
 	bool point_id_changed;
 #endif
-#if defined(CONFIG_FB) || defined(CONFIG_DRM)
-	struct notifier_block fb_notif;
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-	struct early_suspend early_suspend;
+#ifdef CONFIG_DRM_PANEL
+	struct notifier_block drm_notifier;
 #endif
 	struct mutex cmd_update_mutex;
 	int palm_sensor_switch;
@@ -294,7 +292,6 @@ struct fts_ts_data {
 	bool is_expert_mode;
 	u8 gesture_cmd;
 	bool gesture_cmd_delay;
-	int current_fps;
 };
 
 enum GESTURE_MODE_TYPE {
