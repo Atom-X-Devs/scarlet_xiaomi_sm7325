@@ -21,6 +21,12 @@ endif
 ifeq ($(CONFIG_ARCH_LAHAINA), y)
 include $(srctree)/techpack/audio/config/lahainaauto.conf
 endif
+ifeq ($(CONFIG_MACH_XIAOMI_REDWOOD), y)
+include $(srctree)/techpack/audio/config/redwoodaudio.conf
+endif
+ifeq ($(CONFIG_MACH_XIAOMI_LISA), y)
+include $(srctree)/techpack/audio/config/lisaaudio.conf
+endif
 ifeq ($(CONFIG_ARCH_HOLI), y)
 include $(srctree)/techpack/audio/config/holiauto.conf
 endif
@@ -69,6 +75,14 @@ endif
 ifeq ($(CONFIG_ARCH_LAHAINA), y)
 LINUXINCLUDE    += \
                 -include $(srctree)/techpack/audio/config/lahainaautoconf.h
+endif
+ifeq ($(CONFIG_MACH_XIAOMI_REDWOOD), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio/config/redwoodaudioconf.h
+endif
+ifeq ($(CONFIG_MACH_XIAOMI_LISA), y)
+LINUXINCLUDE    += \
+                -include $(srctree)/techpack/audio/config/lisaaudioconf.h
 endif
 ifeq ($(CONFIG_ARCH_HOLI), y)
 LINUXINCLUDE    += \

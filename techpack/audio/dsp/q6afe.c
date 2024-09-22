@@ -21,6 +21,11 @@
 #include <linux/ratelimit.h>
 #include <dsp/msm-audio-event-notify.h>
 #include <ipc/apr_tal.h>
+/* for mius start */
+#ifdef CONFIG_MIUS_PROXIMITY
+#include <dsp/apr_mius.h>
+#endif
+/* for mius end */
 #include "adsp_err.h"
 #include "q6afecal-hwdep.h"
 
@@ -490,6 +495,11 @@ static int q6afe_load_avcs_modules(int num_modules, u16 port_id,
 						AMDB_MODULE_TYPE_DEPACKETIZER;
 				pm[i]->payload->load_unload_info[0].id1 =
 					AVS_MODULE_ID_DEPACKETIZER_COP_V1;
+
+#ifdef CONFIG_MACH_XIAOMI
+				if (format_id == ENC_CODEC_TYPE_LHDC)
+					goto load_unload;
+#endif
 
 				if (format_id == ENC_CODEC_TYPE_LDAC) {
 					pm[i]->payload->load_unload_info[0].id1 =
@@ -1266,6 +1276,13 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 			wake_up(&this_afe.wait[data->token]);
 		else
 			return -EINVAL;
+#ifdef CONFIG_MIUS_PROXIMITY
+	} else if (data->opcode == MI_ULTRASOUND_OPCODE) {
+		if (data->payload != NULL) {
+			mius_process_apr_payload(data->payload);
+		} else
+			pr_err("[EXPORT_SYMBOLLUS]: payload ptr is Invalid");
+#endif
 	} else if (data->opcode == AFE_EVENT_MBHC_DETECTION_SW_WA) {
 		msm_aud_evt_notifier_call_chain(SWR_WAKE_IRQ_EVENT, NULL);
 	} else if (data->opcode ==
@@ -1339,6 +1356,17 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 			case AFE_PORT_DATA_CMD_RT_PROXY_PORT_READ_V2:
 				port_id = data->src_port;
 				break;
+#ifdef CONFIG_MACH_XIAOMI
+			case AFE_PORT_SEND_DATA_CMD:
+				pr_debug("%s: AFE_PORT_SEND_DATA_CMD cmd 0x%x\n",
+					__func__, payload[1]);
+				atomic_set(&this_afe.state, 0);
+				if (afe_token_is_valid(data->token))
+					wake_up(&this_afe.wait[data->token]);
+				else
+					return -EINVAL;
+				break;
+#endif
 			case AFE_CMD_ADD_TOPOLOGIES:
 				atomic_set(&this_afe.state, 0);
 				if (afe_token_is_valid(data->token))
@@ -1382,6 +1410,10 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 				wake_up(&this_afe.lpass_core_hw_wait);
 				break;
 			case AFE_SVC_CMD_EVENT_CFG:
+#ifdef CONFIG_MACH_XIAOMI
+				if (payload[1] == ADSP_EALREADY)
+					payload[1] = 0;
+#endif
 				atomic_set(&this_afe.state, payload[1]);
 				wake_up(&this_afe.wait_wakeup);
 				break;
@@ -2947,6 +2979,18 @@ static void afe_send_cal_spv4_tx(int port_id)
 
 }
 
+#ifdef CONFIG_MIUS_PROXIMITY
+afe_mi_ultrasound_state_t mius_afe = {
+	.ptr_apr = &this_afe.apr,
+	.ptr_status = &this_afe.status,
+	.ptr_state = &this_afe.state,
+	.ptr_wait = this_afe.wait,
+	.ptr_afe_apr_lock= &this_afe.afe_apr_lock,
+	.timeout_ms = TIMEOUT_MS,
+};
+EXPORT_SYMBOL(mius_afe);
+#endif
+
 static void afe_send_cal_spkr_prot_tx(int port_id)
 {
 	union afe_spkr_prot_config afe_spk_config;
@@ -4118,6 +4162,7 @@ int aw_send_afe_cal_apr(uint32_t param_id, void *buf, int cmd_size, bool write)
 				aw_cal->map_data.map_size,
 				&(aw_cal->cal_data.paddr),
 				&len, &(aw_cal->cal_data.kvaddr));
+
 		if (result < 0) {
 			pr_err("%s: allocate buffer failed! ret = %d\n",
 				__func__, result);
@@ -5987,6 +6032,9 @@ static int q6afe_send_enc_config(u16 port_id,
 	if (format != ASM_MEDIA_FMT_SBC && format != ASM_MEDIA_FMT_AAC_V2 &&
 		format != ASM_MEDIA_FMT_APTX && format != ASM_MEDIA_FMT_APTX_HD &&
 		format != ASM_MEDIA_FMT_CELT && format != ASM_MEDIA_FMT_LDAC &&
+#ifdef CONFIG_MACH_XIAOMI
+		format != ASM_MEDIA_FMT_LHDC &&
+#endif
 		format != ASM_MEDIA_FMT_APTX_ADAPTIVE &&
 		format != ASM_MEDIA_FMT_APTX_AD_SPEECH &&
 		format != ASM_MEDIA_FMT_LC3) {
@@ -6242,6 +6290,10 @@ static int q6afe_send_enc_config(u16 port_id,
 
 	if ((format == ASM_MEDIA_FMT_LDAC &&
 	     cfg->ldac_config.abr_config.is_abr_enabled) ||
+#ifdef CONFIG_MACH_XIAOMI
+	     (format == ASM_MEDIA_FMT_LHDC &&
+	     cfg->lhdc_config.abr_config.is_abr_enabled) ||
+#endif
 	     format == ASM_MEDIA_FMT_APTX_ADAPTIVE ||
 	     format == ASM_MEDIA_FMT_APTX_AD_SPEECH ||
 		 format == ASM_MEDIA_FMT_LC3) {
@@ -6252,8 +6304,17 @@ static int q6afe_send_enc_config(u16 port_id,
 			param_hdr.param_id = AFE_ENCODER_PARAM_ID_BIT_RATE_LEVEL_MAP;
 			param_hdr.param_size =
 				sizeof(struct afe_enc_level_to_bitrate_map_param_t);
+#ifndef CONFIG_MACH_XIAOMI
 			map_param.mapping_table =
 				cfg->ldac_config.abr_config.mapping_info;
+#else
+			if (format == ASM_MEDIA_FMT_LHDC)
+				map_param.mapping_table =
+					cfg->lhdc_config.abr_config.mapping_info;
+			else
+				map_param.mapping_table =
+					cfg->ldac_config.abr_config.mapping_info;
+#endif
 			ret = q6afe_pack_and_set_param_in_band(port_id,
 							q6audio_get_port_index(port_id),
 							param_hdr,
@@ -6277,6 +6338,11 @@ static int q6afe_send_enc_config(u16 port_id,
 		else if (format == ASM_MEDIA_FMT_APTX_AD_SPEECH)
 			imc_info_param.imc_info =
 			cfg->aptx_ad_speech_config.imc_info;
+#ifdef CONFIG_MACH_XIAOMI
+		else if (format == ASM_MEDIA_FMT_LHDC)
+			imc_info_param.imc_info =
+			cfg->lhdc_config.abr_config.imc_info;
+#endif
 		else if (format == ASM_MEDIA_FMT_LC3)
 			imc_info_param.imc_info =
 			cfg->lc3_enc_config.imc_info;
@@ -6302,6 +6368,11 @@ static int q6afe_send_enc_config(u16 port_id,
 	if (format == ASM_MEDIA_FMT_LDAC)
 		media_type.sample_rate =
 			cfg->ldac_config.custom_config.sample_rate;
+#ifdef CONFIG_MACH_XIAOMI
+	else if (format == ASM_MEDIA_FMT_LHDC)
+		media_type.sample_rate =
+			cfg->lhdc_config.custom_config.sample_rate;
+#endif
 	else if (format == ASM_MEDIA_FMT_APTX_ADAPTIVE)
 		media_type.sample_rate =
 			cfg->aptx_ad_config.custom_cfg.sample_rate;
@@ -6814,6 +6885,9 @@ static int __afe_port_start(u16 port_id, union afe_port_config *afe_config,
 				 * Only loading de-packetizer module.
 				 */
 				if (codec_format == ENC_CODEC_TYPE_LDAC ||
+#ifdef CONFIG_MACH_XIAOMI
+					codec_format == ENC_CODEC_TYPE_LHDC ||
+#endif
 					codec_format == ASM_MEDIA_FMT_APTX_ADAPTIVE ||
 					codec_format == ASM_MEDIA_FMT_LC3)
 					ret = q6afe_load_avcs_modules(1, port_id,
@@ -8787,6 +8861,58 @@ int afe_unregister_get_events(u16 port_id)
 	return ret;
 }
 EXPORT_SYMBOL(afe_unregister_get_events);
+
+#ifdef CONFIG_MACH_XIAOMI
+int afe_send_data(phys_addr_t buf_addr_p,
+		u32 mem_map_handle, int bytes)
+{
+	int ret = 0;
+	int index;
+	struct afe_port_data_cmd_rt_proxy_port_write_v2 afecmd_wr;
+
+	if (this_afe.apr == NULL) {
+		pr_err("%s: register to AFE is not done\n", __func__);
+		ret = -ENODEV;
+		return ret;
+	}
+	pr_debug("%s: buf_addr_p = 0x%pK bytes = %d\n", __func__,
+						&buf_addr_p, bytes);
+
+	afecmd_wr.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
+				APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
+	afecmd_wr.hdr.pkt_size = sizeof(afecmd_wr);
+	afecmd_wr.hdr.src_port = 0;
+	afecmd_wr.hdr.dest_port = 0;
+	afecmd_wr.hdr.token = 0;
+	afecmd_wr.hdr.opcode = AFE_PORT_SEND_DATA_CMD;
+	afecmd_wr.port_id = IDX_RSVD_2;
+	afecmd_wr.buffer_address_lsw = lower_32_bits(buf_addr_p);
+	afecmd_wr.buffer_address_msw = msm_audio_populate_upper_32_bits(buf_addr_p);
+	afecmd_wr.mem_map_handle = mem_map_handle;
+	afecmd_wr.available_bytes = bytes;
+	afecmd_wr.reserved = 0;
+
+	/*
+	 * Do not call afe_apr_send_pkt() here as it acquires
+	 * a mutex lock inside and this function gets called in
+	 * interrupt context leading to scheduler crash
+	 */
+	index = afecmd_wr.hdr.token = IDX_RSVD_2;
+
+	atomic_set(&this_afe.status, 0);
+	ret = afe_apr_send_pkt(&afecmd_wr, &this_afe.wait[index]);
+	if (ret < 0) {
+		pr_err("%s: AFE rtproxy write to port 0x%x failed %d\n",
+			__func__, afecmd_wr.port_id, ret);
+		ret = -EINVAL;
+	}
+
+	return ret;
+
+}
+EXPORT_SYMBOL(afe_send_data);
+#endif
+
 
 /**
  * afe_rt_proxy_port_write -
