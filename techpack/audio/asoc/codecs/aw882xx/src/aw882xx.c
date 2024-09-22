@@ -272,6 +272,7 @@ static int aw882xx_startup(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+#ifdef DEBUG
 static int aw882xx_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 {
 	/*struct aw882xx *aw882xx = aw_snd_soc_codec_get_drvdata(dai->codec);*/
@@ -281,6 +282,12 @@ static int aw882xx_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 
 	return 0;
 }
+#else
+static inline int aw882xx_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
+{
+	return 0;
+}
+#endif
 
 static int aw882xx_set_dai_sysclk(struct snd_soc_dai *dai,
 	int clk_id, unsigned int freq, int dir)
@@ -295,6 +302,7 @@ static int aw882xx_set_dai_sysclk(struct snd_soc_dai *dai,
 	return 0;
 }
 
+#ifdef DEBUG
 static int aw882xx_hw_params(struct snd_pcm_substream *substream,
 			struct snd_pcm_hw_params *params,
 			struct snd_soc_dai *dai)
@@ -315,6 +323,14 @@ static int aw882xx_hw_params(struct snd_pcm_substream *substream,
 
 	return 0;
 }
+#else
+static inline int aw882xx_hw_params(struct snd_pcm_substream *substream,
+			struct snd_pcm_hw_params *params,
+			struct snd_soc_dai *dai)
+{
+	return 0;
+}
+#endif
 
 static void aw882xx_shutdown(struct snd_pcm_substream *substream,
 	struct snd_soc_dai *dai)
@@ -1366,14 +1382,17 @@ static int aw882xx_set_copp_en(struct snd_kcontrol *kcontrol,
 static int aw882xx_get_copp_en(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
+#ifdef DEBUG
 	aw_snd_soc_codec_t *codec =
 		aw_componet_codec_ops.kcontrol_codec(kcontrol);
 	struct aw882xx *aw882xx =
 		aw_componet_codec_ops.codec_get_drvdata(codec);
 
+	aw_dev_dbg(aw882xx->dev, "done nothing");
+#endif
+
 	ucontrol->value.integer.value[0] = g_algo_copp_en;
 
-	aw_dev_dbg(aw882xx->dev, "done nothing");
 	return 0;
 }
 
