@@ -271,6 +271,9 @@ ifeq ($(KERNEL_BUILD), 1)
 	obj-y	+= bolero/
 	obj-y	+= wsa883x/
 	obj-y	+= rouleur/
+ifdef CONFIG_SND_SOC_AW882XX
+	obj-y	+= aw882xx/
+endif
 endif
 # Module information used by KBuild framework
 obj-$(CONFIG_WCD9XXX_CODEC_CORE) += wcd_core_dlkm.o
