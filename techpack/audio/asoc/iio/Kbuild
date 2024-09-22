@@ -1,0 +1,29 @@
+ifeq ($(MODNAME),)
+	KERNEL_BUILD := 1
+else
+	KERNEL_BUILD := 0
+endif
+
+ifeq ($(KERNEL_BUILD), 1)
+	AUDIO_BLD_DIR := $(shell pwd)/kernel/msm-5.4
+	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
+endif
+
+ifeq ($(KERNEL_BUILD), 0)
+	ifeq ($(CONFIG_ARCH_LAHAINA), y)
+		include $(AUDIO_ROOT)/config/lahainaauto.conf
+		export
+		INCS    +=  -include $(AUDIO_ROOT)/config/lahainaautoconf.h
+	endif
+endif
+
+# for miui sensorhal
+ifdef CONFIG_MIUS_IIO
+	MIUS_IIO_OBJS += us_prox.o
+	MIUS_IIO_OBJS += kefifo_buf.o
+endif
+
+INCS += $(AUDIO_BLD_DIR)/drivers/iio
+
+obj-$(CONFIG_MIUS_IIO) += us_prox_iio.o
+us_prox_iio-y := $(MIUS_IIO_OBJS)

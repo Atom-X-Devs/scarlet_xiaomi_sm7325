@@ -668,6 +668,9 @@ enum {
 	EXT_EC_REF_SLIM_1_TX,
 	EXT_EC_REF_PRI_TDM_TX,
 	EXT_EC_REF_SEC_TDM_TX,
+#ifdef CONFIG_MACH_XIAOMI
+	EXT_EC_REF_TERT_TDM_TX,
+#endif
 	EXT_EC_REF_SENARY_MI2S_TX,
 };
 
@@ -752,6 +755,9 @@ struct msm_pcm_stream_app_type_cfg {
 	uint32_t copp_token;
 	int bit_width;
 	int copp_perf_mode;
+#ifdef CONFIG_MACH_XIAOMI
+	int channel;
+#endif
 };
 
 struct msm_pcm_channel_mixer_v2 {
@@ -854,6 +860,8 @@ int snd_pcm_add_soft_volume_ctls(struct snd_pcm *pcm, int stream,
 		const struct snd_pcm_soft_vol_usr_elem *soft_vol_params,
 		unsigned long private_value,
 		struct snd_pcm_soft_volume **info_ret);
+
+
 #ifndef SND_PCM_ADD_VOLUME_CTL
 /* PCM Volume control API
  */
