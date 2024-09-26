@@ -10,7 +10,7 @@
 #include <linux/rq_stats.h>
 
 #define MAX_LONG_SIZE 24
-#define DEFAULT_DEF_TIMER_JIFFIES 5
+#define DEFAULT_DEF_TIMER_JIFFIES 500
 
 struct rq_data rq_info;
 struct workqueue_struct *rq_wq;
