@@ -2949,6 +2949,9 @@ EXPORT_SYMBOL(unmap_mapping_range);
  * We return with the mmap_sem locked or unlocked in the same cases
  * as does filemap_fault().
  */
+/* Wait for the slot to free up, or give up after a timeout. */
+static DECLARE_WAIT_QUEUE_HEAD(swapcache_wq);
+
 vm_fault_t do_swap_page(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
@@ -2995,8 +2998,12 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 
 			/* Keep the slot from being reused until PTE validation. */
 			if (swapcache_prepare(entry)) {
+				DECLARE_WAITQUEUE(wait, current);
+
 				delayacct_clear_flag(DELAYACCT_PF_SWAPIN);
+				add_wait_queue(&swapcache_wq, &wait);
 				schedule_timeout_uninterruptible(1);
+				remove_wait_queue(&swapcache_wq, &wait);
 				goto out;
 			}
 			need_clear_cache = true;
@@ -3156,8 +3163,10 @@ unlock:
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
 out:
 	/* Drop the direct-swapin reservation after releasing the PTL. */
-	if (need_clear_cache)
+	if (need_clear_cache) {
 		swapcache_clear(entry);
+		wake_up(&swapcache_wq);
+	}
 	return ret;
 out_nomap:
 	mem_cgroup_cancel_charge(page, memcg, false);
@@ -3171,8 +3180,10 @@ out_release:
 		put_page(swapcache);
 	}
 	/* Drop the direct-swapin reservation after releasing the PTL. */
-	if (need_clear_cache)
+	if (need_clear_cache) {
 		swapcache_clear(entry);
+		wake_up(&swapcache_wq);
+	}
 	return ret;
 }
 
