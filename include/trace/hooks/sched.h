@@ -352,6 +352,11 @@ DECLARE_RESTRICTED_HOOK(android_rvh_task_fits_cpu,
 		 unsigned long uclamp_max, int cpu, bool *fits, bool *done),
 	TP_ARGS(tsk, util, uclamp_min, uclamp_max, cpu, fits, done), 1);
 
+DECLARE_RESTRICTED_HOOK(android_rvh_check_preempt_wakeup_fair,
+	TP_PROTO(struct rq *rq, struct task_struct *p, bool *preempt, bool *nopreempt,
+		 int wake_flags, struct sched_entity *se, struct sched_entity *pse),
+	TP_ARGS(rq, p, preempt, nopreempt, wake_flags, se, pse), 1);
+
 /* macro versions of hooks are no longer required */
 
 #endif /* _TRACE_HOOK_SCHED_H */

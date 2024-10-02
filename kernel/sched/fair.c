@@ -10210,6 +10210,7 @@ static void wakeup_preempt_fair(struct rq *rq, struct task_struct *p, int wake_f
 	struct task_struct *donor = rq->donor;
 	struct sched_entity *nse, *se = &donor->se, *pse = &p->se;
 	struct cfs_rq *cfs_rq = &rq->cfs;
+	bool preempt = false, ignore = false;
 	int cse_is_idle, pse_is_idle;
 
 	/*
@@ -10276,6 +10277,13 @@ static void wakeup_preempt_fair(struct rq *rq, struct task_struct *p, int wake_f
 	 * EEVDF to forcibly queue an ineligible task.
 	 */
 	if (pse->sched_delayed)
+		goto update;
+
+	trace_android_rvh_check_preempt_wakeup_fair(rq, p, &preempt, &ignore,
+						    wake_flags, se, pse);
+	if (preempt)
+		goto preempt;
+	if (ignore)
 		goto update;
 
 	/*
