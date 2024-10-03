@@ -774,11 +774,12 @@ static void record_times(struct psi_group_cpu *groupc, u64 now)
 }
 
 static void psi_group_change(struct psi_group *group, int cpu,
-			     unsigned int clear, unsigned int set, u64 now,
+			     unsigned int clear, unsigned int set,
 			     bool wake_clock)
 {
 	struct psi_group_cpu *groupc;
 	u32 state_mask = 0;
+	u32 now;
 	unsigned int t, m;
 	enum psi_states s;
 
@@ -793,6 +794,7 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	 * change requested through the @clear and @set bits.
 	 */
 	write_seqcount_begin(&groupc->seq);
+	now = cpu_clock(cpu);
 
 	record_times(groupc, now);
 
@@ -888,14 +890,12 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 	struct psi_group *group;
 	bool wake_clock = true;
 	void *iter = NULL;
-	u64 now;
 
 	if (!task->pid)
 		return;
 
 	psi_flags_change(task, clear, set);
 
-	now = cpu_clock(cpu);
 	/*
 	 * Periodic aggregation shuts off if there is a period of no
 	 * task changes, so we wake it back up if necessary. However,
@@ -908,7 +908,7 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 		wake_clock = false;
 
 	while ((group = iterate_groups(task, &iter)))
-		psi_group_change(group, cpu, clear, set, now, wake_clock);
+		psi_group_change(group, cpu, clear, set, wake_clock);
 }
 
 void psi_task_switch(struct task_struct *prev, struct task_struct *next,
@@ -917,7 +917,6 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 	struct psi_group *group, *common = NULL;
 	int cpu = task_cpu(prev);
 	void *iter;
-	u64 now = cpu_clock(cpu);
 
 	if (next->pid) {
 		bool identical_state;
@@ -939,7 +938,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 				break;
 			}
 
-			psi_group_change(group, cpu, 0, TSK_ONCPU, now, true);
+			psi_group_change(group, cpu, 0, TSK_ONCPU, true);
 		}
 	}
 
@@ -964,7 +963,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 
 		iter = NULL;
 		while ((group = iterate_groups(prev, &iter)) && group != common)
-			psi_group_change(group, cpu, clear, set, now, true);
+			psi_group_change(group, cpu, clear, set, true);
 
 		/*
 		 * TSK_ONCPU is handled up to the common ancestor. If we're tasked
@@ -973,7 +972,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		if (sleep) {
 			clear &= ~TSK_ONCPU;
 			for (; group; group = iterate_groups(prev, &iter))
-				psi_group_change(group, cpu, clear, set, now, true);
+				psi_group_change(group, cpu, clear, set, true);
 		}
 	}
 }
