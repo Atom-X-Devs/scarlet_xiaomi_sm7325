@@ -1957,7 +1957,6 @@ extern void flush_smp_call_function_from_idle(void);
 static inline void flush_smp_call_function_from_idle(void) { }
 #endif
 
-#include "stats.h"
 #include "autogroup.h"
 
 #ifdef CONFIG_CGROUP_SCHED
@@ -2781,6 +2780,8 @@ extern void nohz_run_idle_balance(int cpu);
 #else
 static inline void nohz_run_idle_balance(int cpu) { }
 #endif
+
+#include "stats.h"
 
 #ifdef CONFIG_SMP
 static inline
