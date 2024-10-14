@@ -86,23 +86,27 @@ __schedstats_from_se(struct sched_entity *se)
  * go through migration requeues. In this case, *sleeping* states need
  * to be transferred.
  */
-static inline void psi_enqueue(struct task_struct *p, bool migrate)
+static inline void psi_enqueue(struct task_struct *p, int flags)
 {
 	int clear = 0, set = 0;
 
 	if (static_branch_likely(&psi_disabled))
 		return;
 
+	/* Same runqueue, nothing changed for psi */
+	if (flags & ENQUEUE_RESTORE)
+		return;
+
 	if (p->se.sched_delayed) {
 		/* CPU migration of "sleeping" task */
-		SCHED_WARN_ON(!migrate || p->sched_psi_wake_requeue);
+		SCHED_WARN_ON(!(flags & ENQUEUE_MIGRATED) || p->sched_psi_wake_requeue);
 		if (p->in_memstall)
 			set |= TSK_MEMSTALL;
 		if (p->in_iowait)
 			set |= TSK_IOWAIT;
 		if (p->sched_psi_wake_requeue)
 			p->sched_psi_wake_requeue = 0;
-	} else if (migrate) {
+	} else if (flags & ENQUEUE_MIGRATED) {
 		/* CPU migration of runnable task */
 		set = TSK_RUNNING;
 		if (p->in_memstall)
@@ -119,11 +123,24 @@ static inline void psi_enqueue(struct task_struct *p, bool migrate)
 	psi_task_change(p, clear, set);
 }
 
-static inline void psi_dequeue(struct task_struct *p, bool migrate)
+static inline void psi_dequeue(struct task_struct *p, int flags)
 {
 	int clear = TSK_RUNNING;
 
 	if (static_branch_likely(&psi_disabled))
+		return;
+
+	/* Same runqueue, nothing changed for psi */
+	if (flags & DEQUEUE_SAVE)
+		return;
+
+	/*
+	 * A voluntary sleep is a dequeue followed by a task switch. To
+	 * avoid walking all ancestors twice, psi_task_switch() handles
+	 * TSK_RUNNING and TSK_IOWAIT for us when it moves TSK_ONCPU.
+	 * Do nothing here.
+	 */
+	if (flags & DEQUEUE_SLEEP)
 		return;
 
 	if (p->in_memstall)
@@ -133,15 +150,7 @@ static inline void psi_dequeue(struct task_struct *p, bool migrate)
 	 * When migrating a task to another CPU, clear all psi
 	 * state. The enqueue callback above will work it out.
 	 */
-	if (migrate)
-		psi_task_change(p, clear, 0);
-
-	/*
-	 * A voluntary sleep is a dequeue followed by a task switch. To
-	 * avoid walking all ancestors twice, psi_task_switch() handles
-	 * TSK_RUNNING and TSK_IOWAIT for us when it moves TSK_ONCPU.
-	 * Do nothing here.
-	 */
+	psi_task_change(p, clear, 0);
 }
 
 static inline void psi_ttwu_dequeue(struct task_struct *p)
