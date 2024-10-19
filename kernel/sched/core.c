@@ -1978,7 +1978,7 @@ static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 /*
  * Must only return false when DEQUEUE_SLEEP.
  */
-static inline bool dequeue_task(struct rq *rq, struct task_struct *p, int flags)
+inline bool dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 {
 	if (sched_core_enabled(rq))
 		sched_core_dequeue(rq, p, flags);
