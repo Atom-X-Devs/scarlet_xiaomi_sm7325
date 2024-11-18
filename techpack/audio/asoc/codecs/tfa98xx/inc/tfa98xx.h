@@ -14,6 +14,9 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/list.h>
+#ifdef CONFIG_MACH_XIAOMI
+#include <linux/miscdevice.h>
+#endif
 
 #include "tfa_device.h"
 #include "tfa_container.h"
@@ -35,7 +38,11 @@
 #define TFA98XX_FLAG_TDM_DEVICE         (1 << 8)
 #define TFA98XX_FLAG_ADAPT_NOISE_MODE   (1 << 9)
 
+#ifdef CONFIG_MACH_XIAOMI
+#define TFA98XX_NUM_RATES		10
+#else
 #define TFA98XX_NUM_RATES		9
+#endif
 
 /* DSP init status */
 enum tfa98xx_dsp_init_state {
@@ -53,6 +60,43 @@ enum tfa98xx_dsp_fw_state {
        TFA98XX_DSP_FW_FAIL,
        TFA98XX_DSP_FW_OK,
 };
+
+#ifdef CONFIG_MACH_XIAOMI
+enum tfa98xx_misc_device_id {
+	MISC_DEVICE_TFA98XX_REG,
+	MISC_DEVICE_TFA98XX_RW,
+	MISC_DEVICE_TFA98XX_RPC,
+	MISC_DEVICE_TFA98XX_PROFILE,
+	MISC_DEVICE_TFA98XX_IOCTL,
+	MISC_DEVICE_MAX
+};
+
+struct tfa98xx_miscdevice_info {
+	char devicename[255];
+	struct file_operations operations;
+};
+
+enum TFA_DEVICE_MUTE {
+	TFA98XX_DEVICE_MUTE_OFF = 0,
+	TFA98XX_DEVICE_MUTE_ON,
+};
+
+enum {
+	IOCTL_CMD_GET_MEMTRACK_DATA = 0,
+	IOCTL_CMD_GET_CNT_VERSION,
+};
+
+enum {
+	TFA_KCONTROL_VALUE_DISABLED = 0,
+	TFA_KCONTROL_VALUE_ENABLED
+};
+
+struct livedata_cfg {
+	int address;
+	int track;
+	int scaler;
+};
+#endif
 
 struct tfa98xx_firmware {
 	void			*base;
@@ -111,6 +155,9 @@ struct tfa98xx {
 	int reset_gpio;
 	int power_gpio;
 	int irq_gpio;
+#ifdef CONFIG_MACH_XIAOMI
+	int spk_sw_gpio;
+#endif
 	enum tfa_reset_polarity reset_polarity; 
 	struct list_head list;
 	struct tfa_device *tfa;
@@ -125,6 +172,24 @@ struct tfa98xx {
 	unsigned int flags;
 	bool set_mtp_cal;
 	uint16_t cal_data;
+
+#ifdef CONFIG_MACH_XIAOMI
+	enum TFA_DEVICE_MUTE tfa_mute_mode;
+
+	struct device_node *spk_id_gpio_p;
+
+	struct miscdevice tfa98xx_reg;
+	struct miscdevice tfa98xx_rw;
+	struct miscdevice tfa98xx_rpc;
+	struct miscdevice tfa98xx_profile;
+	struct miscdevice tfa98xx_control;
+#endif
 };
+
+#ifdef CONFIG_MACH_XIAOMI
+/*for furture, we will move it to DTS to mark left and right channel*/
+#define TFA_LEFT_DEVICE_ADDRESS   (0x34)
+#define TFA_RIGHT_DEVICE_ADDRESS  (0x35)
+#endif
 
 #endif /* __TFA98XX_INC__ */

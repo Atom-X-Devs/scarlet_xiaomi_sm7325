@@ -21,9 +21,6 @@
 #include <linux/crc32.h>
 #include <linux/ftrace.h>
 
-#define _ASSERT(e)
-#define PRINT_ASSERT(e)if ((e)) printk(KERN_ERR "PrintAssert:%s (%s:%d) error code:%d\n",__FUNCTION__,__FILE__,__LINE__, e)
-
 #if defined(CONFIG_TRACING) && defined(DEBUG)
 	#define tfa98xx_trace_printk(...) trace_printk(__VA_ARGS__)
 #else
