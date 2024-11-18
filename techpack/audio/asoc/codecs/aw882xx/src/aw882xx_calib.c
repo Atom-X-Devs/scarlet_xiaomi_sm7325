@@ -54,7 +54,13 @@ static DEFINE_MUTEX(g_cali_lock);
 
 #ifdef AW_CALI_STORE_EXAMPLE
  /*write cali to persist file example*/
+#ifndef CONFIG_MACH_XIAOMI
 #define AWINIC_CALI_FILE  "/mnt/vendor/persist/factory/audio/aw_cali.bin"
+#else
+#define AWINIC_CALI_FILE_WRITE  "/data/vendor/cit/aw_cali.bin"
+#define AWINIC_CALI_FILE_READ  "/mnt/vendor/persist/audio/aw_cali.bin"
+#endif
+
 #define AW_INT_DEC_DIGIT 10
 
 static void aw_fs_read(struct file *file, char *buf, size_t count, loff_t *pos)
@@ -84,12 +90,21 @@ static int aw_cali_write_cali_re_to_file(int32_t cali_re, int channel)
 	mm_segment_t fs;
 #endif
 
+#ifndef CONFIG_MACH_XIAOMI
 	fp = filp_open(AWINIC_CALI_FILE, O_RDWR | O_CREAT, 0644);
 	if (IS_ERR(fp)) {
 		aw_pr_err("channel:%d open %s failed, error=%ld",
 		channel, AWINIC_CALI_FILE, PTR_ERR(fp));
 		return -EINVAL;
 	}
+#else
+	fp = filp_open(AWINIC_CALI_FILE_WRITE, O_RDWR | O_CREAT, 0644);
+	if (IS_ERR(fp)) {
+		aw_pr_err("channel:%d open %s failed, error=%ld",
+		channel, AWINIC_CALI_FILE_WRITE, PTR_ERR(fp));
+		return -EINVAL;
+	}
+#endif
 
 	pos = AW_INT_DEC_DIGIT * channel;
 
@@ -133,12 +148,21 @@ static int aw_cali_get_read_cali_re(int32_t *cali_re, int channel)
 
 	char *re_buf = NULL;
 
+#ifndef CONFIG_MACH_XIAOMI
 	fp = filp_open(AWINIC_CALI_FILE, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		aw_pr_err("channel:%d open %s failed, error=%ld",
 			channel, AWINIC_CALI_FILE, PTR_ERR(fp));
 		return -EINVAL;
 	}
+#else
+	fp = filp_open(AWINIC_CALI_FILE_READ, O_RDONLY, 0);
+	if (IS_ERR(fp)) {
+		aw_pr_err("channel:%d open %s failed, error=%ld",
+			channel, AWINIC_CALI_FILE_READ, PTR_ERR(fp));
+		return -EINVAL;
+	}
+#endif
 
 	pos = AW_INT_DEC_DIGIT * channel;
 
