@@ -1417,6 +1417,10 @@ static unsigned int tfa98xx_sr_from_field(unsigned int field)
 		return 44100;
 	case 8:
 		return 48000;
+#ifdef CONFIG_MACH_XIAOMI
+	case 9:
+		return 96000;
+#endif
 	default:
 		return 0;
 	}
@@ -1924,6 +1928,12 @@ enum Tfa98xx_Error tfaContWriteProfile(struct tfa_device *tfa, int prof_idx, int
 	}
 
 	if ((prof->group != previous_prof->group || prof->group == 0) && (tfa->tfa_family == 2)) {
+#ifdef CONFIG_MACH_XIAOMI
+		if (tfa->is_probus_device) {
+			TFA_SET_BF_VOLATILE(tfa, AMPE, 1);
+			return err;
+		}
+#endif
 		if (TFA_GET_BF(tfa, REFCKSEL) == 0) {
 			/* set SBSL to go to operation mode */
 			TFA_SET_BF_VOLATILE(tfa, SBSL, 1);
