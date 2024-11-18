@@ -29,6 +29,9 @@
 #include <linux/input.h>
 #include "config.h"
 #include "tfa98xx.h"
+#ifdef CONFIG_MACH_XIAOMI
+#include "tfa_dsp_fw.h"
+#endif
 #include "tfa.h"
 
  /* required for enum tfa9912_irq */
@@ -40,7 +43,12 @@
 #define I2C_RETRY_DELAY 5 /* ms */
 
  /* Supported rates and data formats */
+#ifdef CONFIG_MACH_XIAOMI
+#define TFA98XX_RATES SNDRV_PCM_RATE_8000_96000
+#else
 #define TFA98XX_RATES SNDRV_PCM_RATE_8000_48000
+#endif
+
 #define TFA98XX_FORMATS	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
 
 #define TF98XX_MAX_DSP_START_TRY_COUNT	10
@@ -111,6 +119,9 @@ static const struct tfa98xx_rate rate_to_fssel[] = {
 	{ 32000, 6 },
 	{ 44100, 7 },
 	{ 48000, 8 },
+#ifdef CONFIG_MACH_XIAOMI
+	{ 96000, 9 },
+#endif
 };
 
 static inline char *tfa_cont_profile_name(struct tfa98xx *tfa98xx, int prof_idx)
@@ -143,7 +154,9 @@ static enum tfa_error tfa98xx_tfa_start(struct tfa98xx *tfa98xx, int next_profil
 	ktime_t start_time, stop_time;
 	u64 delta_time;
 
-	start_time = ktime_get_boottime();
+	if (trace_level & 8)
+		start_time = ktime_get_boottime();
+
 	err = tfa_dev_start(tfa98xx->tfa, next_profile, vstep);
 
 	if (trace_level & 8) {
@@ -313,6 +326,15 @@ static void tfa98xx_inputdev_unregister(struct tfa98xx *tfa98xx)
 {
 	__tfa98xx_inputdev_check_register(tfa98xx, true);
 }
+
+#ifdef TFA_NON_DSP_SOLUTION
+extern int send_tfa_cal_apr(void *buf, int cmd_size, bool bRead);
+#else
+int send_tfa_cal_apr(void *buf, int cmd_size, bool bRead)
+{
+	return 0;
+}
+#endif
 
 #ifdef CONFIG_DEBUG_FS
 /* OTC reporting
@@ -697,7 +719,14 @@ static ssize_t tfa98xx_dbgfs_rpc_read(struct file *file,
 	}
 
 	mutex_lock(&tfa98xx->dsp_lock);
+#ifdef CONFIG_MACH_XIAOMI
+	if (tfa98xx->tfa->is_probus_device)
+		error = send_tfa_cal_apr(buffer, count, true);
+	else
+		error = tfa_dsp_msg_read(tfa98xx->tfa, count, buffer);
+#else
 	error = tfa_dsp_msg_read(tfa98xx->tfa, count, buffer);
+#endif
 	mutex_unlock(&tfa98xx->dsp_lock);
 	if (error != Tfa98xx_Error_Ok) {
 		pr_debug("[0x%x] tfa_dsp_msg_read error: %d\n", tfa98xx->i2c->addr, error);
@@ -740,10 +769,31 @@ static ssize_t tfa98xx_dbgfs_rpc_send(struct file *file,
 	}
 	msg_file->size = count;
 
-	if (copy_from_user(msg_file->data, user_buf, count))
+	if (copy_from_user(msg_file->data, user_buf, count)) {
+		kfree(msg_file);
 		return -EFAULT;
+	}
+
+#ifdef CONFIG_MACH_XIAOMI
+	if (tfa98xx->tfa->is_probus_device) {
+		mutex_lock(&tfa98xx->dsp_lock);
+		error = send_tfa_cal_apr(msg_file->data, msg_file->size, false);
+		if (error != Tfa98xx_Error_Ok) {
+			pr_debug("[0x%x] dsp_msg error: %d\n",
+				 tfa98xx->i2c->addr, error);
+			err = -EIO;
+		}
+		mutex_unlock(&tfa98xx->dsp_lock);
+		mdelay(2);
+		kfree(msg_file);
+
+		return err ? err : count;
+
+	}
+#endif
 
 	mutex_lock(&tfa98xx->dsp_lock);
+
 	if ((msg_file->data[0] == 'M') && (msg_file->data[1] == 'G')) {
 		error = tfaContWriteFile(tfa98xx->tfa, msg_file, 0, 0); /* int vstep_idx, int vstep_msg_idx both 0 */
 		if (error != Tfa98xx_Error_Ok) {
@@ -961,6 +1011,23 @@ static int get_profile_id_for_sr(int id, unsigned int rate)
 	/* profile not found */
 	return -1;
 }
+
+#ifdef CONFIG_MACH_XIAOMI
+static int get_profile_id_by_name(char *profile, int len)
+{
+	struct tfa98xx_baseprofile *bprof;
+	int prof_index = -1;
+
+	list_for_each_entry(bprof, &profile_list, list) {
+		if (strncmp(profile, bprof->basename, len) == 0) {
+			prof_index = bprof->item_id;
+			break;
+		}
+	}
+
+	return prof_index;
+}
+#endif
 
 /* check if this profile is a calibration profile */
 static int is_calibration_profile(char *profile)
@@ -1194,6 +1261,17 @@ static int tfa98xx_set_profile(struct snd_kcontrol *kcontrol,
 		tfa98xx->profile = prof_idx;
 		tfa98xx->vstep = tfa98xx->prof_vsteps[prof_idx];
 
+#ifdef CONFIG_MACH_XIAOMI
+		/* Flag DSP as invalidated as the profile change may invalidate the
+		 * current DSP configuration. That way, further stream start can
+		 * trigger a tfa_dev_start.
+		 */
+		if (tfa98xx->tfa->is_probus_device) {
+			tfa98xx->dsp_init = TFA98XX_DSP_INIT_INVALIDATED;
+			continue;
+		}
+#endif
+
 		/* Don't call tfa_dev_start() if there is no clock. */
 		mutex_lock(&tfa98xx->dsp_lock);
 		tfa98xx_dsp_system_stable(tfa98xx->tfa, &ready);
@@ -1317,6 +1395,55 @@ static int tfa98xx_set_stop_ctl(struct snd_kcontrol *kcontrol,
 	return 1;
 }
 
+#ifdef CONFIG_MACH_XIAOMI
+static int tfa98xx_info_PAmute(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_info *uinfo)
+{
+	mutex_lock(&tfa98xx_mutex);
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = tfa98xx_device_count;
+	uinfo->value.integer.min = TFA98XX_DEVICE_MUTE_OFF;
+	uinfo->value.integer.max = TFA98XX_DEVICE_MUTE_ON;
+	mutex_unlock(&tfa98xx_mutex);
+
+	return 0;
+}
+
+static int tfa98xx_get_PAmute(struct snd_kcontrol *kcontrol,
+			      struct snd_ctl_elem_value *ucontrol)
+{
+	struct tfa98xx *tfa98xx = NULL;
+
+	mutex_lock(&tfa98xx_mutex);
+	list_for_each_entry (tfa98xx, &tfa98xx_device_list, list) {
+		ucontrol->value.integer.value[tfa98xx->tfa->dev_idx] =
+			tfa98xx->tfa_mute_mode;
+	}
+	mutex_unlock(&tfa98xx_mutex);
+
+	return 0;
+}
+
+static int tfa98xx_set_PAmute(struct snd_kcontrol *kcontrol,
+			      struct snd_ctl_elem_value *ucontrol)
+{
+	struct tfa98xx *tfa98xx = NULL;
+
+	mutex_lock(&tfa98xx_mutex);
+	list_for_each_entry (tfa98xx, &tfa98xx_device_list, list) {
+		if (ucontrol->value.integer.value[tfa98xx->tfa->dev_idx] !=
+		    TFA98XX_DEVICE_MUTE_OFF) {
+			tfa98xx->tfa_mute_mode = TFA98XX_DEVICE_MUTE_ON;
+		} else {
+			tfa98xx->tfa_mute_mode = TFA98XX_DEVICE_MUTE_OFF;
+		}
+	}
+	mutex_unlock(&tfa98xx_mutex);
+
+	return 1;
+}
+#endif
+
 static int tfa98xx_info_cal_ctl(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_info *uinfo)
 {
@@ -1372,10 +1499,111 @@ static int tfa98xx_get_cal_ctl(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+#ifdef TFA_NON_DSP_SOLUTION
+static atomic_t g_algo_bypass;
+static atomic_t g_algo_mute;
+static atomic_t g_Tx_enable;
+extern int send_tfa_cal_set_bypass(void *buf, int cmd_size);
+extern int send_tfa_cal_set_tx_enable(void *buf, int cmd_size);
+extern int send_tfa_cal_in_band(void *buf, int cmd_size);
+
+/*************bypass control***************/
+static int tfa98xx_send_mute_cmd(int mute)
+{
+	u8 cmd[9] = { 0x00, 0x81, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+	if (mute != 0) {
+		cmd[5] = TFA_KCONTROL_VALUE_ENABLED; //mute left channel
+		cmd[8] = TFA_KCONTROL_VALUE_ENABLED; //mute right channel
+	}
+
+	return send_tfa_cal_in_band(&cmd[0], sizeof(cmd));
+}
+
+static int tfa987x_algo_get_status(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = atomic_read(&g_algo_bypass);
+	return 0;
+}
+
+static int tfa987x_algo_set_status(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	u8 buff[56] = { 0 };
+	u8 *ptr = buff;
+
+	((int32_t *)buff)[0] = ucontrol->value.integer.value[0];
+	atomic_set(&g_algo_bypass, ((int32_t *)buff)[0]);
+
+	return send_tfa_cal_set_bypass(ptr, 4);
+}
+
+static int tfa987x_algo_set_mute(struct snd_kcontrol *kcontrol,
+				 struct snd_ctl_elem_value *ucontrol)
+{
+	atomic_set(&g_algo_mute, ucontrol->value.integer.value[0]);
+	return tfa98xx_send_mute_cmd(ucontrol->value.integer.value[0]);
+}
+
+static int tfa987x_algo_get_mute(struct snd_kcontrol *kcontrol,
+				 struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = atomic_read(&g_algo_mute);
+	return 0;
+}
+
+static int tfa987x_algo_set_tx_enable(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	u8 buff[56] = { 0 };
+	u8 *ptr = buff;
+
+	((int32_t *)buff)[0] = ucontrol->value.integer.value[0];
+	atomic_set(&g_Tx_enable, ((int32_t *)buff)[0]);
+
+	return send_tfa_cal_set_tx_enable(ptr, 4);
+}
+
+static int tfa987x_algo_get_tx_status(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = atomic_read(&g_Tx_enable);
+
+	return 0;
+}
+
+static const char *tfa987x_algo_text[] = { "ENABLED", "DISABLED" };
+static const char *tfa987x_tx_text[] = { "DISABLE", "ENABLE" };
+static const char *tfa987x_algo_mute_text[] = { "DISABLED", "ENABLED" };
+
+static const struct soc_enum tfa987x_algo_enum[] = {
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(tfa987x_algo_text), tfa987x_algo_text)
+};
+
+static const struct soc_enum tfa987x_algo_mute_enum[] = {
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(tfa987x_algo_mute_text), tfa987x_algo_mute_text)
+};
+
+static const struct soc_enum tfa987x_tx_enum[] = {
+	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(tfa987x_tx_text), tfa987x_tx_text)
+};
+
+const struct snd_kcontrol_new tfa987x_algo_controls[] = {
+	SOC_ENUM_EXT("TFA987X_ALGO_STATUS", tfa987x_algo_enum[0],
+		     tfa987x_algo_get_status, tfa987x_algo_set_status),
+	SOC_ENUM_EXT("TFA987X_ALGO_MUTE", tfa987x_algo_mute_enum[0],
+		     tfa987x_algo_get_mute, tfa987x_algo_set_mute),
+	SOC_ENUM_EXT("TFA987X_TX_ENABLE", tfa987x_tx_enum[0],
+		     tfa987x_algo_get_tx_status, tfa987x_algo_set_tx_enable)
+};
+#endif
+
 static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 {
 	int prof, nprof, mix_index = 0;
-	int  nr_controls = 0, id = 0;
+	int nr_controls = 0, id = 0;
+	int ret = 0;
 	char *name;
 	struct tfa98xx_baseprofile *bprofile;
 
@@ -1396,6 +1624,12 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 			nr_controls++; /* Playback Volume control */
 	}
 
+#ifdef CONFIG_MACH_XIAOMI
+	/* xiaomi's requirement */
+	if (tfa98xx->tfa->tfa_family == 2)
+		nr_controls++; /* SmartPA Mute control */
+#endif
+
 	tfa98xx_controls = devm_kzalloc(tfa98xx->codec->dev,
 			nr_controls * sizeof(tfa98xx_controls[0]), GFP_KERNEL);
 
@@ -1415,6 +1649,19 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 	tfa98xx_controls[mix_index].put = tfa98xx_set_profile;
 	// tfa98xx_controls[mix_index].private_value = profs; /* save number of profiles */
 	mix_index++;
+
+#ifdef CONFIG_MACH_XIAOMI
+	/* xiaomi's requirement */
+	/* add new mixer control item 'SmartPA Mute' for MAX2 device. */
+	if (tfa98xx->tfa->tfa_family == 2) {
+		tfa98xx_controls[mix_index].name = "SmartPA Mute";
+		tfa98xx_controls[mix_index].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+		tfa98xx_controls[mix_index].info = tfa98xx_info_PAmute;
+		tfa98xx_controls[mix_index].get = tfa98xx_get_PAmute;
+		tfa98xx_controls[mix_index].put = tfa98xx_set_PAmute;
+		mix_index++;
+	}
+#endif
 
 	/* create mixer items for each profile that has volume */
 	for (prof = 0; prof < nprof; prof++) {
@@ -1497,8 +1744,21 @@ static int tfa98xx_create_controls(struct tfa98xx *tfa98xx)
 		mix_index++;
 	}
 
-	return snd_soc_add_component_controls(tfa98xx->codec,
+	ret = snd_soc_add_component_controls(tfa98xx->codec,
 		tfa98xx_controls, mix_index);
+
+
+#ifdef TFA_NON_DSP_SOLUTION
+	ret = snd_soc_add_component_controls(tfa98xx->codec,
+	    tfa987x_algo_controls, ARRAY_SIZE(tfa987x_algo_controls));
+
+	/* reset kcontrol flag once power down tfa device. */
+	atomic_set(&g_algo_bypass, TFA_KCONTROL_VALUE_DISABLED);
+	atomic_set(&g_algo_mute, TFA_KCONTROL_VALUE_DISABLED);
+	atomic_set(&g_Tx_enable, TFA_KCONTROL_VALUE_ENABLED);
+#endif
+
+	return ret;
 }
 
 static void *tfa98xx_devm_kstrdup(struct device *dev, char *buf)
@@ -1527,12 +1787,15 @@ static int tfa98xx_append_i2c_address(struct device *dev,
 
 	if (dai_drv && num_dai > 0) {
 		for (i = 0; i < num_dai; i++) {
+			memset(buf, 0x00, sizeof(buf));
 			snprintf(buf, 50, "%s-%x-%x", dai_drv[i].name, i2cbus, addr);
 			dai_drv[i].name = tfa98xx_devm_kstrdup(dev, buf);
 
+			memset(buf, 0x00, sizeof(buf));
 			snprintf(buf, 50, "%s-%x-%x", dai_drv[i].playback.stream_name, i2cbus, addr);
 			dai_drv[i].playback.stream_name = tfa98xx_devm_kstrdup(dev, buf);
 
+			memset(buf, 0x00, sizeof(buf));
 			snprintf(buf, 50, "%s-%x-%x", dai_drv[i].capture.stream_name, i2cbus, addr);
 			dai_drv[i].capture.stream_name = tfa98xx_devm_kstrdup(dev, buf);
 		}
@@ -1971,6 +2234,7 @@ static void tfa98xx_interrupt_enable(struct tfa98xx *tfa98xx, bool enable)
 		tfa98xx_interrupt_enable_tfa2(tfa98xx, enable);
 }
 
+#ifndef CONFIG_MACH_XIAOMI
 /* Firmware management */
 static void tfa98xx_container_loaded(const struct firmware *cont, void *context)
 {
@@ -2113,7 +2377,158 @@ static int tfa98xx_load_container(struct tfa98xx *tfa98xx)
 		fw_name, tfa98xx->dev, GFP_KERNEL,
 		tfa98xx, tfa98xx_container_loaded);
 }
+#else
+/* Firmware management */
+static void tfa98xx_container_loaded(const struct firmware *cont, void *context)
+{
+	TfaContainer_t *container;
+	struct tfa98xx *tfa98xx = context;
+	enum tfa_error tfa_err;
+	int container_size;
+	int ret;
 
+	tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_FAIL;
+
+	if (!cont) {
+		pr_err("Failed to read %s\n", fw_name);
+		return;
+	}
+
+	pr_debug("loaded %s - size: %zu\n", fw_name, cont->size);
+
+	if (tfa98xx_container == NULL) {
+		container = kzalloc(cont->size, GFP_KERNEL);
+		if (container == NULL) {
+			pr_err("Error allocating memory\n");
+			return;
+		}
+
+		container_size = cont->size;
+		memcpy(container, cont->data, container_size);
+
+		pr_debug("%.2s%.2s\n", container->version, container->subversion);
+		pr_debug("%.8s\n", container->customer);
+		pr_debug("%.8s\n", container->application);
+		pr_debug("%.8s\n", container->type);
+		pr_debug("%d ndev\n", container->ndev);
+		pr_debug("%d nprof\n", container->nprof);
+
+		tfa_err = tfa_load_cnt(container, container_size);
+		if (tfa_err != tfa_error_ok) {
+			kfree(container);
+			dev_err(tfa98xx->dev, "Cannot load container file, aborting\n");
+			return;
+		}
+		tfa98xx_container = container;
+	} else {
+		pr_debug("container file already loaded...\n");
+		container = tfa98xx_container;
+	}
+
+	tfa98xx->tfa->cnt = container;
+
+	/*
+	 * i2c transaction limited to 64k
+	 * (Documentation/i2c/writing-clients)
+	*/
+	tfa98xx->tfa->buffer_size = 65536;
+
+	if (tfa_dev_probe(tfa98xx->i2c->addr, tfa98xx->tfa) != 0) {
+		dev_err(tfa98xx->dev, "Failed to probe TFA98xx @ 0x%.2x\n", tfa98xx->i2c->addr);
+		return;
+	}
+
+	tfa98xx->tfa->dev_idx = tfa_cont_get_idx(tfa98xx->tfa);
+	if (tfa98xx->tfa->dev_idx < 0) {
+		dev_err(tfa98xx->dev, "Failed to find TFA98xx @ 0x%.2x in container file\n", tfa98xx->i2c->addr);
+		return;
+	}
+
+	/* Enable debug traces */
+	tfa98xx->tfa->verbose = trace_level & 1;
+
+	/* prefix is the application name from the cnt */
+	tfa_cnt_get_app_name(tfa98xx->tfa, tfa98xx->fw.name);
+
+	/* set default profile/vstep */
+	tfa98xx->profile = 0;
+	tfa98xx->vstep = 0;
+
+	/* Override default profile if requested */
+	if (strcmp(dflt_prof_name, "")) {
+		unsigned int i;
+		int nprof = tfa_cnt_get_dev_nprof(tfa98xx->tfa);
+		for (i = 0; i < nprof; i++) {
+			if (strcmp(tfa_cont_profile_name(tfa98xx, i),
+				dflt_prof_name) == 0) {
+				tfa98xx->profile = i;
+				dev_info(tfa98xx->dev, "changing default profile to %s (%d)\n",
+					dflt_prof_name, tfa98xx->profile);
+				break;
+			}
+		}
+		if (i >= nprof)
+			dev_info(tfa98xx->dev, "Default profile override failed (%s profile not found)\n",
+				dflt_prof_name);
+	}
+
+	tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_OK;
+	pr_debug("Firmware init complete\n");
+
+	if (no_start != 0)
+		return;
+
+	/* Only controls for master device */
+	if (tfa98xx->tfa->dev_idx == 0)
+		tfa98xx_create_controls(tfa98xx);
+
+	tfa98xx_inputdev_check_register(tfa98xx);
+
+	if (tfa_is_cold(tfa98xx->tfa) == 0) {
+		pr_debug("Warning: device 0x%.2x is still warm\n", tfa98xx->i2c->addr);
+		tfa_reset(tfa98xx->tfa);
+	}
+
+	if (tfa98xx->flags & TFA98XX_FLAG_TDM_DEVICE)
+		return;
+
+	/* Preload settings using internal clock on TFA2 */
+	if ((tfa98xx->tfa->tfa_family == 2) && (tfa98xx->tfa->is_probus_device == 0)) {
+		mutex_lock(&tfa98xx->dsp_lock);
+
+		ret = tfa98xx_tfa_start(tfa98xx, tfa98xx->profile, tfa98xx->vstep);
+		if (ret == Tfa98xx_Error_Not_Supported)
+			tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_FAIL;
+
+		/* we should be power-down device when parameter is loaded. */
+		tfa_dev_stop(tfa98xx->tfa);
+		tfa98xx->dsp_init = TFA98XX_DSP_INIT_STOPPED;
+
+		mutex_unlock(&tfa98xx->dsp_lock);
+	}		
+	tfa98xx_interrupt_enable(tfa98xx, true);
+}
+
+static int tfa98xx_load_container(struct tfa98xx *tfa98xx)
+{
+	const struct firmware *firmware;
+	int rc = 0;
+
+	tfa98xx->dsp_fw_state = TFA98XX_DSP_FW_PENDING;
+
+	mutex_lock(&tfa98xx_mutex);
+	rc = request_firmware(&firmware, fw_name, tfa98xx->dev);
+	if (rc < 0) {
+		mutex_unlock(&tfa98xx_mutex);
+		return rc;
+	}
+	tfa98xx_container_loaded(firmware, tfa98xx);
+	release_firmware(firmware);
+	mutex_unlock(&tfa98xx_mutex);
+
+	return rc;
+}
+#endif
 
 static void tfa98xx_tapdet(struct tfa98xx *tfa98xx)
 {
@@ -2158,16 +2573,19 @@ static void tfa98xx_tapdet_work(struct work_struct *work)
 
 static void tfa98xx_nmode_update_work(struct work_struct *work)
 {
+#ifndef CONFIG_MACH_XIAOMI
 	struct tfa98xx *tfa98xx = container_of(work, struct tfa98xx, nmodeupdate_work.work);
 
 	mutex_lock(&tfa98xx->dsp_lock);	
 	tfa_adapt_noisemode(tfa98xx->tfa);
 	mutex_unlock(&tfa98xx->dsp_lock);
 	queue_delayed_work(tfa98xx->tfa98xx_wq, &tfa98xx->nmodeupdate_work,5 * HZ);
+#endif
 }
 
 static void tfa98xx_monitor(struct work_struct *work)
 {
+#ifndef CONFIG_MACH_XIAOMI
 	struct tfa98xx *tfa98xx;
 	enum Tfa98xx_Error error = Tfa98xx_Error_Ok;
 
@@ -2188,6 +2606,7 @@ static void tfa98xx_monitor(struct work_struct *work)
 
 	/* reschedule */
 	queue_delayed_work(tfa98xx->tfa98xx_wq, &tfa98xx->monitor_work, 5 * HZ);
+#endif
 }
 
 static void tfa98xx_dsp_init(struct tfa98xx *tfa98xx)
@@ -2303,6 +2722,17 @@ static void tfa98xx_interrupt(struct work_struct *work)
 {
 	struct tfa98xx *tfa98xx = container_of(work, struct tfa98xx, interrupt_work.work);
 
+#ifdef CONFIG_MACH_XIAOMI
+	if ((tfa98xx->rev == 0x73) || (tfa98xx->rev == 0x74)) {
+		mutex_lock(&tfa98xx->dsp_lock);
+		tfa987x_irq_handle(tfa98xx->tfa);
+		tfa987x_irq_clear(tfa98xx->tfa, tfa9874_irq_all); /* clear interrupt */
+		tfa987x_irq_unmask(tfa98xx->tfa); /* restore interrupt */
+		mutex_unlock(&tfa98xx->dsp_lock);
+		return;
+	}
+#endif
+
 	if (tfa98xx->flags & TFA98XX_FLAG_TAPDET_AVAILABLE) {
 		/* check for tap interrupt */
 		if (tfa_irq_get(tfa98xx->tfa, tfa9912_irq_sttapdet)) {
@@ -2339,8 +2769,10 @@ static int tfa98xx_startup(struct snd_pcm_substream *substream,
 	unsigned int sr;
 	int len, prof, nprof, idx = 0;
 	char *basename;
+#ifndef CONFIG_MACH_XIAOMI
 	u64 formats;
 	int err;
+#endif
 
 	/*
 	 * Support CODEC to CODEC links,
@@ -2352,6 +2784,7 @@ static int tfa98xx_startup(struct snd_pcm_substream *substream,
 	if (pcm_no_constraint != 0)
 		return 0;
 
+#ifndef CONFIG_MACH_XIAOMI
 	switch (pcm_sample_format) {
     case 0:
     	formats = SNDRV_PCM_FMTBIT_S16_LE;
@@ -2371,6 +2804,7 @@ static int tfa98xx_startup(struct snd_pcm_substream *substream,
 		SNDRV_PCM_HW_PARAM_FORMAT, formats);
 	if (err < 0)
 		return err;
+#endif
 
 	if (no_start != 0)
 		return 0;
@@ -2414,8 +2848,12 @@ static int tfa98xx_startup(struct snd_pcm_substream *substream,
 
 	kfree(basename);
 
+#ifndef CONFIG_MACH_XIAOMI
 	return snd_pcm_hw_constraint_list(substream->runtime, 0, SNDRV_PCM_HW_PARAM_RATE,
 		&tfa98xx->rate_constraint);
+#else
+	return 0;
+#endif
 }
 
 static int tfa98xx_set_dai_sysclk(struct snd_soc_dai *codec_dai,
@@ -2520,6 +2958,81 @@ static int tfa98xx_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+#ifdef TFA_NON_DSP_SOLUTION
+static uint8_t bytes[10] = { 0 };
+enum Tfa98xx_Error tfa98xx_adsp_send_calib_values(void)
+{
+	struct tfa98xx *tfa98xx;
+	int ret = 0;
+	int value = 0, dsp_cal_value = 0;
+
+	/* if the calibration value was sent to host DSP, we clear flag only (stereo case). */
+	if ((tfa98xx_device_count > 1) && (tfa98xx_device_count == bytes[0])) {
+		pr_debug("The calibration value was sent to host DSP.\n");
+		bytes[0] = 0;
+		return Tfa98xx_Error_Ok;
+	}
+
+	/* read calibrated impendance from all devices. */
+	list_for_each_entry (tfa98xx, &tfa98xx_device_list, list) {
+		struct tfa_device *tfa = tfa98xx->tfa;
+
+		if (TFA_GET_BF(tfa, MTPEX) == 1) {
+			value = tfa_dev_mtp_get(tfa, TFA_MTP_RE25);
+			dsp_cal_value = (value * 65536) / 1000;
+
+			if (tfa98xx_device_count == 2) {
+				/*stereo case*/
+				/* we should makesure left device calibration value into primary channel,
+				 * and right device calibration value into secondary channel.
+				 */
+				switch (tfa98xx->i2c->addr) {
+				case TFA_LEFT_DEVICE_ADDRESS:
+					bytes[4] = (uint8_t)((dsp_cal_value >> 16) & 0xff);
+					bytes[5] = (uint8_t)((dsp_cal_value >> 8) & 0xff);
+					bytes[6] = (uint8_t)(dsp_cal_value & 0xff);
+					break;
+				case TFA_RIGHT_DEVICE_ADDRESS:
+					bytes[7] = (uint8_t)((dsp_cal_value >> 16) & 0xff);
+					bytes[8] = (uint8_t)((dsp_cal_value >> 8) & 0xff);
+					bytes[9] = (uint8_t)(dsp_cal_value & 0xff);
+					break;
+				}
+			} else {
+				/*mono case*/
+				bytes[4] = (uint8_t)((dsp_cal_value >> 16) & 0xff);
+				bytes[5] = (uint8_t)((dsp_cal_value >> 8) & 0xff);
+				bytes[6] = (uint8_t)(dsp_cal_value & 0xff);
+
+				memcpy(&bytes[7], &bytes[4], sizeof(char) * 3);
+			}
+
+			bytes[0] += 1;
+		}
+	}
+
+	/* we will send it to host DSP algorithm once calibraion value loaded from all device. */
+	if (tfa98xx_device_count == bytes[0]) {
+		bytes[1] = 0x00;
+		bytes[2] = 0x81;
+		bytes[3] = 0x05;
+
+		ret = send_tfa_cal_in_band(&bytes[1], sizeof(bytes) - 1);
+		msleep(10);
+
+		/* for mono case, we should clear flag here. */
+		if (tfa98xx_device_count == 1)
+			bytes[0] = 0;
+
+	} else {
+		pr_err("load calibration data from device failed.\n");
+		ret = Tfa98xx_Error_Bad_Parameter;
+	}
+
+	return ret;
+}
+#endif
+
 static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
 {
 	struct snd_soc_component *codec = dai->component;
@@ -2531,6 +3044,18 @@ static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
 		pr_debug("no_start parameter set no tfa_dev_start or tfa_dev_stop, returning\n");
 		return 0;
 	}
+
+#ifdef CONFIG_MACH_XIAOMI
+	if (TFA98XX_DEVICE_MUTE_ON == tfa98xx->tfa_mute_mode)
+		return 0;
+#endif
+
+#ifdef TFA_NON_DSP_SOLUTION
+	/* reset kcontrol flag once power down tfa device. */
+	atomic_set(&g_algo_bypass, TFA_KCONTROL_VALUE_DISABLED);
+	atomic_set(&g_algo_mute, TFA_KCONTROL_VALUE_DISABLED);
+	atomic_set(&g_Tx_enable, TFA_KCONTROL_VALUE_ENABLED);
+#endif
 
 	if (mute) {
 		/* stop DSP only when both playback and capture streams
@@ -2545,7 +3070,21 @@ static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
 			return 0;
 
 		mutex_lock(&tfa98xx_mutex);
+#ifdef TFA_NON_DSP_SOLUTION
+		if ((strcmp(tfa_cont_profile_name(tfa98xx, tfa98xx_mixer_profile), "handset") != 0)
+			&& !(strstr(tfaContProfileName(tfa98xx->tfa->cnt,
+					tfa98xx->tfa->dev_idx, tfa98xx_mixer_profile), ".standby") != NULL)) {
+			tfa98xx_send_mute_cmd(TFA_KCONTROL_VALUE_ENABLED);
+			msleep(60);
+		}
+#endif
 		tfa98xx_sync_count = 0;
+#if defined(CONFIG_MACH_XIAOMI)
+		if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
+			if (gpio_is_valid(tfa98xx->spk_sw_gpio))
+				gpio_direction_output(tfa98xx->spk_sw_gpio, 0);
+		}
+#endif
 		mutex_unlock(&tfa98xx_mutex);
 
 		cancel_delayed_work_sync(&tfa98xx->monitor_work);
@@ -2562,14 +3101,35 @@ static int tfa98xx_mute(struct snd_soc_dai *dai, int mute, int stream)
         if (tfa98xx->flags & TFA98XX_FLAG_ADAPT_NOISE_MODE)
         	cancel_delayed_work_sync(&tfa98xx->nmodeupdate_work);
 	} else {
-		if (stream == SNDRV_PCM_STREAM_PLAYBACK)
+		if (stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			tfa98xx->pstream = 1;
-		else
+#if defined(CONFIG_MACH_XIAOMI)
+			if (gpio_is_valid(tfa98xx->spk_sw_gpio)) {
+				if (strcmp(tfa_cont_profile_name(tfa98xx, tfa98xx_mixer_profile), "handset") == 0)
+					gpio_direction_output(tfa98xx->spk_sw_gpio, 1);
+				else
+					gpio_direction_output(tfa98xx->spk_sw_gpio, 0);
+			}
+#endif
+#ifdef TFA_NON_DSP_SOLUTION
+			if (tfa98xx->tfa->is_probus_device &&
+			    (strcmp(tfa_cont_profile_name(tfa98xx, tfa98xx_mixer_profile), "handset") != 0) &&
+			    !(strstr(tfaContProfileName(tfa98xx->tfa->cnt,
+			    		tfa98xx->tfa->dev_idx, tfa98xx_mixer_profile), ".standby") != NULL)) {
+				tfa98xx_adsp_send_calib_values();
+			}
+#endif
+		} else
 			tfa98xx->cstream = 1;
 
 		/* Start DSP */
+#ifndef CONFIG_MACH_XIAOMI
 		if (tfa98xx->dsp_init != TFA98XX_DSP_INIT_PENDING)
 			queue_delayed_work(tfa98xx->tfa98xx_wq,	&tfa98xx->init_work, 0);
+#else
+		if (tfa98xx->dsp_init != TFA98XX_DSP_INIT_PENDING)
+			tfa98xx_dsp_init(tfa98xx);
+#endif
 
 		if (tfa98xx->flags & TFA98XX_FLAG_ADAPT_NOISE_MODE)
 		 	queue_delayed_work(tfa98xx->tfa98xx_wq, &tfa98xx->nmodeupdate_work,	0);	
@@ -2606,15 +3166,20 @@ static struct snd_soc_dai_driver tfa98xx_dai[] = {
 			 .formats = TFA98XX_FORMATS,
 		 },
 		.ops = &tfa98xx_dai_ops,
+#ifndef CONFIG_MACH_XIAOMI
 		.symmetric_rates = 1,
 		.symmetric_channels = 1,
 		.symmetric_samplebits = 1,
+#endif
 	},
 };
 
 static int tfa98xx_probe(struct snd_soc_component *codec)
 {
 	struct tfa98xx *tfa98xx = snd_soc_component_get_drvdata(codec);
+#ifdef CONFIG_MACH_XIAOMI
+	struct snd_soc_dapm_context *dapm = snd_soc_component_get_dapm(codec);
+#endif
 	int ret;
 
 	pr_debug("\n");
@@ -2636,6 +3201,19 @@ static int tfa98xx_probe(struct snd_soc_component *codec)
 	ret = tfa98xx_load_container(tfa98xx);
 	pr_debug("Container loading requested: %d\n", ret);
 	tfa98xx_add_widgets(tfa98xx);
+
+#ifdef CONFIG_MACH_XIAOMI
+	snd_soc_dapm_ignore_suspend(dapm, "AIF IN");
+	snd_soc_dapm_ignore_suspend(dapm, "AIF OUT");
+	snd_soc_dapm_ignore_suspend(dapm, "OUTL");
+	snd_soc_dapm_ignore_suspend(dapm, "AEC Loopback");
+	snd_soc_dapm_ignore_suspend(dapm, "DMIC1");
+	snd_soc_dapm_ignore_suspend(dapm, "DMIC2");
+	snd_soc_dapm_ignore_suspend(dapm, "DMIC3");
+	snd_soc_dapm_ignore_suspend(dapm, "DMIC4");
+	snd_soc_dapm_ignore_suspend(dapm, "AIF Playback-1-34");
+	snd_soc_dapm_ignore_suspend(dapm, "AIF Capture-1-34");
+#endif
 
 	dev_info(codec->dev, "tfa98xx codec registered (%s)",
 		tfa98xx->fw.name);
@@ -2698,6 +3276,7 @@ static const struct regmap_config tfa98xx_regmap = {
 	.cache_type = REGCACHE_NONE,
 };
 
+#ifndef CONFIG_MACH_XIAOMI
 static void tfa98xx_irq_tfa2(struct tfa98xx *tfa98xx)
 {
 	pr_info("\n");
@@ -2720,15 +3299,22 @@ static irqreturn_t tfa98xx_irq(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
+#endif
 
 static int tfa98xx_ext_reset(struct tfa98xx *tfa98xx)
 {
+#ifdef CONFIG_MACH_XIAOMI
+	#define EXT_DELAY 10
+#else
+	#define EXT_DELAY 1
+#endif
+
 	if (tfa98xx && gpio_is_valid(tfa98xx->reset_gpio)) {
 		int reset = tfa98xx->reset_polarity;
 		gpio_set_value_cansleep(tfa98xx->reset_gpio, reset);
-		mdelay(1);
+		mdelay(EXT_DELAY);
 		gpio_set_value_cansleep(tfa98xx->reset_gpio, !reset);
-		mdelay(1);
+		mdelay(EXT_DELAY);
 	}
 	return 0;
 }
@@ -2744,13 +3330,19 @@ static int tfa98xx_parse_dt(struct device *dev, struct tfa98xx *tfa98xx,
 	tfa98xx->irq_gpio = of_get_named_gpio(np, "irq-gpio", 0);
 	if (tfa98xx->irq_gpio < 0)
 		dev_dbg(dev, "No IRQ GPIO provided.\n");
+
+#ifdef CONFIG_MACH_XIAOMI
+	tfa98xx->spk_sw_gpio = of_get_named_gpio(np, "spk-sw-gpio", 0);
+	if (tfa98xx->spk_sw_gpio < 0)
+		dev_dbg(dev, "No spk_sw_gpio GPIO provided\n");
+#endif
+
 	ret = of_property_read_u32(np,"reset-polarity",&value);
-	if(ret< 0)
-	{
-         tfa98xx->reset_polarity = HIGH;
-        }else {
-	 tfa98xx->reset_polarity = (value == 0) ? LOW : HIGH;
-        } 
+	if(ret < 0)
+		tfa98xx->reset_polarity = HIGH;
+	else
+		tfa98xx->reset_polarity = (value == 0) ? LOW : HIGH;
+
 	dev_dbg(dev, "reset-polarity:%d\n",tfa98xx->reset_polarity);
 	return 0;
 }
@@ -2866,13 +3458,537 @@ static struct bin_attribute dev_attr_reg = {
 	.write = tfa98xx_reg_write,
 };
 
+
+#ifdef CONFIG_MACH_XIAOMI
+static uint16_t gCurrentAddress = 0;
+static ssize_t tfa98xx_misc_device_profile_write(struct file *file,
+						 const char __user *user_buf,
+						 size_t count, loff_t *ppos)
+{
+	struct tfa98xx *tfa98xx = NULL;
+	char name[100] = { 0 };
+	int ret = 0;
+	int profileID = 0;
+
+	memset(name, 0x00, sizeof(name));
+	ret = copy_from_user(name, user_buf, count);
+
+	/* search profile name and return ID. */
+	profileID = get_profile_id_by_name(name, strlen(name));
+	if (profileID < 0) {
+		pr_err("didn't find profile from list.\n");
+		return 0;
+	}
+
+	tfa98xx_mixer_profile = profileID;
+	/* update profile id for all TFA devices. */
+	list_for_each_entry (tfa98xx, &tfa98xx_device_list, list) {
+		int prof_idx = get_profile_id_for_sr(profileID, tfa98xx->rate);
+		if (prof_idx < 0) {
+			pr_err("sample rate [%d] not supported for this profile(%d).\n",
+				tfa98xx->rate, profileID);
+			return 0;
+		}
+
+		tfa98xx->profile = prof_idx;
+		tfa98xx->vstep = tfa98xx->prof_vsteps[prof_idx];
+		pr_info("update profile index (%d:%d) succeeded\n",	profileID, prof_idx);
+	}
+
+	return count;
+}
+
+static ssize_t tfa98xx_misc_device_reg_write(struct file *file,
+					     const char __user *user_buf,
+					     size_t count, loff_t *ppos)
+{
+	struct tfa98xx *tfa98xx = NULL;
+	u8 address[2] = { 0, 0 };
+	int ret = 0;
+
+	if (count != 2) {
+		pr_err("invalid register address\n");
+		return -EINVAL;
+	}
+
+	ret = copy_from_user(address, user_buf, count);
+	if (ret) {
+		pr_err("copy data from user space failed.\n");
+	}
+
+	gCurrentAddress = (uint16_t)address[0]; /* device address */
+	list_for_each_entry (tfa98xx, &tfa98xx_device_list, list)
+		if (gCurrentAddress == tfa98xx->i2c->addr)
+			break;
+
+	tfa98xx->reg = address[1]; /* sub address */
+	pr_info("gCurrentAddress=0x%x tfa98xx->reg=0x%x\n", gCurrentAddress, tfa98xx->reg);
+
+	return count;
+}
+
+static ssize_t tfa98xx_misc_device_rw_read(struct file *file,
+					   char __user *user_buf, size_t count,
+					   loff_t *ppos)
+{
+	struct tfa98xx *tfa98xx = NULL;
+	struct i2c_msg msgs[] = {
+		{
+			.addr = 0,
+			.flags = 0,
+			.len = 1,
+			.buf = NULL,
+		},
+		{
+			.addr = 0,
+			.flags = I2C_M_RD,
+			.len = count,
+			.buf = NULL,
+		},
+	};
+
+	u8 *data;
+	int ret;
+	int retries = I2C_RETRIES;
+
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+		if (gCurrentAddress == tfa98xx->i2c->addr) {
+			msgs[0].addr = tfa98xx->i2c->addr;
+			msgs[0].buf = &tfa98xx->reg;
+			msgs[1].addr = tfa98xx->i2c->addr;
+			break;
+		}
+	}
+
+	data = kmalloc(count + 1, GFP_KERNEL);
+	if (data == NULL) {
+		pr_debug("can not allocate memory\n");
+		return -ENOMEM;
+	}
+
+	msgs[1].buf = data;
+
+retry:
+	ret = i2c_transfer(tfa98xx->i2c->adapter, msgs, ARRAY_SIZE(msgs));
+	if (ret < 0) {
+		if (retries) {
+			retries--;
+			msleep(I2C_RETRY_DELAY);
+			goto retry;
+		}
+	} else if (ret > 1) {
+		int ret_cpy = copy_to_user(user_buf, data, count);
+		if (ret_cpy) {
+			pr_err("copy to user space failed.\n");
+			ret = -EIO;
+		} else
+			ret = count;
+	}
+
+	kfree(data);
+	return ret;
+}
+
+static ssize_t tfa98xx_misc_device_rw_write(struct file *file,
+					    const char __user *user_buf,
+					    size_t count, loff_t *ppos)
+{
+	struct tfa98xx *tfa98xx = NULL;
+	u8 *data;
+	int ret, retries = I2C_RETRIES;
+
+	data = kmalloc(count + 1, GFP_KERNEL);
+	if (data == NULL) {
+		pr_debug("can not allocate memory\n");
+		return -ENOMEM;
+	}
+
+	list_for_each_entry(tfa98xx, &tfa98xx_device_list, list)
+		if (gCurrentAddress == tfa98xx->i2c->addr)
+			break;
+
+	data[0] = tfa98xx->reg;
+	if (copy_from_user(&data[1], user_buf, count))
+		pr_err("copy to user space failed.\n");
+
+retry:
+	ret = i2c_master_send(tfa98xx->i2c, data, count + 1);
+	if (ret < 0) {
+		pr_warn("i2c error, retries left: %d\n", retries);
+		if (retries) {
+			retries--;
+			msleep(I2C_RETRY_DELAY);
+			goto retry;
+		}
+	}
+
+	kfree(data);
+	return ((ret > 1) ? count : -EIO);
+}
+
+static int tfa98xx_misc_device_rpc_open(struct inode *inode, struct file *file)
+{
+	struct tfa98xx *tfa98xx =
+		container_of(file->private_data, struct tfa98xx, tfa98xx_rpc);
+
+	if (tfa98xx) {
+		file->private_data = tfa98xx;
+		return 0;
+	} else {
+		file->private_data = NULL;
+		return -EINVAL;
+	}
+}
+
+static ssize_t tfa98xx_misc_device_rpc_read(struct file *file,
+					    char __user *user_buf, size_t count,
+					    loff_t *ppos)
+{
+	struct tfa98xx *tfa98xx = file->private_data;
+	uint8_t *buffer = NULL;
+	int ret = 0;
+
+	buffer = kmalloc(count, GFP_KERNEL);
+	if (buffer == NULL) {
+		pr_err("can not allocate memory\n");
+		return -ENOMEM;
+	}
+
+	mutex_lock(&tfa98xx->dsp_lock);
+
+	ret = send_tfa_cal_apr(buffer, count, true);
+
+	mutex_unlock(&tfa98xx->dsp_lock);
+
+	if (ret) {
+		pr_err("dsp_msg_read error: %d\n", ret);
+		kfree(buffer);
+		return -EFAULT;
+	}
+
+	ret = copy_to_user(user_buf, buffer, count);
+	kfree(buffer);
+	if (ret)
+		return -EFAULT;
+
+	*ppos += count;
+	return count;
+}
+
+static ssize_t tfa98xx_misc_device_rpc_write(struct file *file,
+					     const char __user *user_buf,
+					     size_t count, loff_t *ppos)
+{
+	struct tfa98xx *tfa98xx = file->private_data;
+	uint8_t *buffer;
+	int err = 0;
+
+	if (count == 0)
+		return 0;
+
+	/* msg_file.name is not used */
+	buffer = kmalloc(count, GFP_KERNEL);
+	if (buffer == NULL) {
+		pr_err("can not allocate memory\n");
+		return -ENOMEM;
+	}
+
+	if (copy_from_user(buffer, user_buf, count)) {
+		kfree(buffer);
+		pr_err("copy_from_user failed!!\n");
+		return -EFAULT;
+	}
+	mutex_lock(&tfa98xx->dsp_lock);
+
+	err = send_tfa_cal_apr(buffer, count, false);
+	if (err) {
+		pr_err("dsp_msg error: %d\n", err);
+	}
+
+	mdelay(2);
+
+	mutex_unlock(&tfa98xx->dsp_lock);
+
+	kfree(buffer);
+
+	return err ? err : count;
+}
+
+static long tfa98xx_misc_device_control_ioctl(struct file *file,
+					      unsigned int cmd, unsigned long arg)
+{
+	struct tfa98xx *tfa98xx = NULL;
+	int result = 0;
+
+	if (!arg) {
+		pr_err("arg is NULL!\n");
+		return -EINVAL;
+	}
+
+	switch (cmd) {
+	case IOCTL_CMD_GET_MEMTRACK_DATA: {
+		list_for_each_entry(tfa98xx, &tfa98xx_device_list, list) {
+			if (tfa98xx->tfa->is_probus_device) {
+				void *pUserData = (void *)arg;
+				int livedata[6];
+				int error = 0;
+				uint8_t memtrack[] = {
+					0x00, 0x80, 0x0b, 0x00,
+					0x00, 0x06, 0x22, 0x00,
+					0x00, 0x22, 0x00, 0x01, /* Re0 */
+					0x22, 0x00, 0x04, 0x22,
+					0x00, 0x05, /* Speaker Temperature */
+					0x22, 0x00, 0x13, 0x22,
+					0x00, 0x14 /* F0 */
+				};
+				uint8_t data[21] = { 0 };
+
+				mutex_lock(&tfa98xx->dsp_lock);
+				/* send livedata configuration. */
+				error = send_tfa_cal_apr(memtrack, sizeof(memtrack), false);
+				if (error) {
+					mutex_unlock(&tfa98xx->dsp_lock);
+					return Tfa98xx_Error_Bad_Parameter;
+				}
+				mdelay(2);
+
+				/* send query command */
+				data[0] = 0x00;
+				data[1] = 0x80;
+				data[2] = 0x8b;
+				error = send_tfa_cal_apr(data, sizeof(data), false);
+				if (error) {
+					mutex_unlock(&tfa98xx->dsp_lock);
+					return Tfa98xx_Error_Bad_Parameter;
+				}
+				mdelay(5);
+
+				/* read livedata from host DSP. */
+				error = send_tfa_cal_apr(data, sizeof(data), true);
+				if (error) {
+					mutex_unlock(&tfa98xx->dsp_lock);
+					return Tfa98xx_Error_Bad_Parameter;
+				}
+				mdelay(5);
+
+				/* primary */
+				/* Re0: should be dividing 65536 in userspace */
+				livedata[0] =
+					(data[3] << 16) + (data[4] << 8) + data[5];
+				/* Temperature: should be dividing 16384 in userspace */
+				livedata[1] =
+					((data[9] << 16) + (data[10] << 8) + data[11]); 
+				/* F0 */
+				livedata[2] =
+					(data[15] << 16) + (data[16] << 8) + data[17];
+
+				/* secondary */
+				/* Re0: should be dividing 65536 in userspace */
+				livedata[3] =
+					(data[6] << 16) + (data[7] << 8) + data[8]; 
+				/* Temperature: should be dividing 16384 in userspace */
+				livedata[4] =
+					((data[12] << 16) + (data[13] << 8) + data[14]);
+				/* F0 */
+				livedata[5] =
+					(data[18] << 16) + (data[19] << 8) + data[20];
+
+				if (tfa98xx_device_count == 1) {
+					result = copy_to_user((void __user *)pUserData,
+						&livedata[0], sizeof(int) * 3);
+				} else {
+					result = copy_to_user((void __user *)pUserData,
+						&livedata[0], sizeof(int) * 6);
+				}
+				if (result) {
+					pr_err("copy to user space failed(%d).\n", result);
+					result = -EINVAL;
+				}
+				mutex_unlock(&tfa98xx->dsp_lock);
+				break;
+			}
+		}
+		break;
+	}
+	case IOCTL_CMD_GET_CNT_VERSION: {
+		void *pUserData = (void *)arg;
+
+		if (tfa98xx_container == NULL) {
+			pr_err("get cnt version failed.\n");
+			result = -EINVAL;
+			break;
+		}
+
+		result = copy_to_user((void __user *)pUserData,
+				      tfa98xx_container->type, strlen(tfa98xx_container->type));
+		if (!result)
+			result = strlen(tfa98xx_container->type);
+		else
+			pr_err("copy to user space failed(%d).\n", result);
+
+		break;
+	}
+	default:
+		result = -EINVAL;
+		pr_err("un-supported command. (%d)\n", cmd);
+		break;
+	}
+
+	pr_info("exit  result=%d\n", result);
+	return result;
+}
+
+#ifdef CONFIG_COMPAT
+static long tfa98xx_misc_device_control_compat_ioctl(struct file *file,
+						     unsigned int cmd, unsigned long arg)
+{
+	if (!arg) {
+		pr_err("%s No data send to driver!\n", __func__);
+		return -EINVAL;
+	}
+
+	return tfa98xx_misc_device_control_ioctl(file, cmd, arg);
+}
+#endif
+
+static const struct tfa98xx_miscdevice_info miscdevice_info[MISC_DEVICE_MAX] = {
+	{
+		.devicename = "tfa_reg",
+		.operations.owner = THIS_MODULE,
+		.operations.write = tfa98xx_misc_device_reg_write,
+	},
+	{
+		.devicename = "tfa_rw",
+		.operations.owner = THIS_MODULE,
+		.operations.read = tfa98xx_misc_device_rw_read,
+		.operations.write = tfa98xx_misc_device_rw_write,
+	},
+	{
+		.devicename = "tfa_rpc",
+		.operations.owner = THIS_MODULE,
+		.operations.open = tfa98xx_misc_device_rpc_open,
+		.operations.read = tfa98xx_misc_device_rpc_read,
+		.operations.write = tfa98xx_misc_device_rpc_write,
+	},
+	{
+		.devicename = "tfa_profile",
+		.operations.owner = THIS_MODULE,
+		.operations.write = tfa98xx_misc_device_profile_write,
+	},
+	{
+		.devicename = "tfa_control",
+		.operations.owner = THIS_MODULE,
+		.operations.unlocked_ioctl = tfa98xx_misc_device_control_ioctl,
+#ifdef CONFIG_COMPAT
+		.operations.compat_ioctl = tfa98xx_misc_device_control_compat_ioctl,
+#endif
+	},
+};
+
+int tfa98xx_init_misc_device(struct tfa98xx *tfa98xx)
+{
+	int ret = 0;
+
+	if (NULL == tfa98xx) {
+		pr_err("tfa98xx is NULL.\n");
+		return -EINVAL;
+	}
+
+	pr_info("I2C bus=0x%x  address=0x%x\n", tfa98xx->i2c->adapter->nr, tfa98xx->i2c->addr);
+	/* create device node "tfa_reg" for write sub address. */
+	tfa98xx->tfa98xx_reg.minor = MISC_DYNAMIC_MINOR;
+	tfa98xx->tfa98xx_reg.name =
+		miscdevice_info[MISC_DEVICE_TFA98XX_REG].devicename;
+	tfa98xx->tfa98xx_reg.fops =
+		&miscdevice_info[MISC_DEVICE_TFA98XX_REG].operations;
+
+	ret = misc_register(&tfa98xx->tfa98xx_reg);
+	if (ret) {
+		pr_err("tfa98xx_init_misc_device: register misc device [%s] failed\n",
+		       tfa98xx->tfa98xx_reg.name);
+	}
+
+	/* create device node "tfa_rw" for read/write i2c device. */
+	tfa98xx->tfa98xx_rw.minor = MISC_DYNAMIC_MINOR;
+	tfa98xx->tfa98xx_rw.name =
+		miscdevice_info[MISC_DEVICE_TFA98XX_RW].devicename;
+	tfa98xx->tfa98xx_rw.fops =
+		&miscdevice_info[MISC_DEVICE_TFA98XX_RW].operations;
+
+	ret = misc_register(&tfa98xx->tfa98xx_rw);
+	if (ret) {
+		pr_err("tfa98xx_init_misc_device: register misc device [%s] failed\n",
+		       tfa98xx->tfa98xx_rw.name);
+	}
+
+	/* create device node "tfa_rpc" for switching profile. */
+	tfa98xx->tfa98xx_rpc.minor = MISC_DYNAMIC_MINOR;
+	tfa98xx->tfa98xx_rpc.name =
+		miscdevice_info[MISC_DEVICE_TFA98XX_RPC].devicename;
+	tfa98xx->tfa98xx_rpc.fops =
+		&miscdevice_info[MISC_DEVICE_TFA98XX_RPC].operations;
+
+	ret = misc_register(&tfa98xx->tfa98xx_rpc);
+	if (ret) {
+		pr_err("tfa98xx_init_misc_device: register misc device [%s] failed\n",
+		       tfa98xx->tfa98xx_rpc.name);
+	}
+
+	/* create device node "tfa_profile" for switching profile. */
+	tfa98xx->tfa98xx_profile.minor = MISC_DYNAMIC_MINOR;
+	tfa98xx->tfa98xx_profile.name =
+		miscdevice_info[MISC_DEVICE_TFA98XX_PROFILE].devicename;
+	tfa98xx->tfa98xx_profile.fops =
+		&miscdevice_info[MISC_DEVICE_TFA98XX_PROFILE].operations;
+
+	ret = misc_register(&tfa98xx->tfa98xx_profile);
+	if (ret) {
+		pr_err("tfa98xx_init_misc_device: register misc device [%s] failed\n",
+		       tfa98xx->tfa98xx_profile.name);
+	}
+
+	/* create device node "tfa_control" for IO control. */
+	tfa98xx->tfa98xx_control.minor = MISC_DYNAMIC_MINOR;
+	tfa98xx->tfa98xx_control.name =
+		miscdevice_info[MISC_DEVICE_TFA98XX_IOCTL].devicename;
+	tfa98xx->tfa98xx_control.fops =
+		&miscdevice_info[MISC_DEVICE_TFA98XX_IOCTL].operations;
+
+	ret = misc_register(&tfa98xx->tfa98xx_control);
+	if (ret) {
+		pr_err("tfa98xx_init_misc_device: register misc device [%s] failed\n",
+		       tfa98xx->tfa98xx_control.name);
+	} else
+		pr_info("register misc device successed.\n");
+
+	return ret;
+}
+
+void tfa98xx_remove_misc_device(struct tfa98xx *tfa98xx)
+{
+	if (tfa98xx == NULL) {
+		pr_err("tfa98xx is NULL.\n");
+		return;
+	}
+
+	misc_deregister(&tfa98xx->tfa98xx_reg);
+	misc_deregister(&tfa98xx->tfa98xx_rw);
+	misc_deregister(&tfa98xx->tfa98xx_rpc);
+	misc_deregister(&tfa98xx->tfa98xx_profile);
+	misc_deregister(&tfa98xx->tfa98xx_control);
+	return;
+}
+#endif
+
 static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 	const struct i2c_device_id *id)
 {
 	struct snd_soc_dai_driver *dai;
 	struct tfa98xx *tfa98xx;
 	struct device_node *np = i2c->dev.of_node;
+#ifndef CONFIG_MACH_XIAOMI
 	int irq_flags;
+#endif
 	unsigned int reg;
 	int ret;
 
@@ -2892,6 +4008,11 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 	tfa98xx->dsp_init = TFA98XX_DSP_INIT_STOPPED;
 	tfa98xx->rate = 48000; /* init to the default sample rate (48kHz) */
 	tfa98xx->tfa = NULL;
+
+#ifdef CONFIG_MACH_XIAOMI
+	/* the mute mode is disabled by default. */
+	tfa98xx->tfa_mute_mode = TFA98XX_DEVICE_MUTE_OFF;
+#endif
 
 	tfa98xx->regmap = devm_regmap_init_i2c(i2c, &tfa98xx_regmap);
 	if (IS_ERR(tfa98xx->regmap)) {
@@ -2935,8 +4056,21 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 			return ret;
 	}
 
+
+#ifdef CONFIG_MACH_XIAOMI
+	if (gpio_is_valid(tfa98xx->spk_sw_gpio)) {
+		ret = devm_gpio_request_one(&i2c->dev, tfa98xx->spk_sw_gpio,
+			GPIOF_OUT_INIT_LOW, "TFA98XX_SPK_SW");
+		if (ret)
+			return ret;
+	}
+
+	if (tfa98xx_device_count == 0)
+		tfa98xx_ext_reset(tfa98xx);
+#else
 	/* Power up! */
 	tfa98xx_ext_reset(tfa98xx);
+#endif
 
 	if ((no_start == 0) && (no_reset == 0)) {
 		ret = regmap_read(tfa98xx->regmap, 0x03, &reg);
@@ -2995,6 +4129,9 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 			pr_info("TFA9894 detected\n");
 			tfa98xx->flags |= TFA98XX_FLAG_MULTI_MIC_INPUTS;
 			tfa98xx->flags |= TFA98XX_FLAG_TDM_DEVICE;
+#ifdef CONFIG_MACH_XIAOMI
+			tfa98xx->flags |= TFA98XX_FLAG_SKIP_INTERRUPTS;
+#endif
 			break;
 		case 0x80: /* tfa9890 */
 		case 0x81: /* tfa9890 */
@@ -3059,6 +4196,7 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 		return ret;
 	}
 
+#ifndef CONFIG_MACH_XIAOMI
 	if (gpio_is_valid(tfa98xx->irq_gpio) &&
 		!(tfa98xx->flags & TFA98XX_FLAG_SKIP_INTERRUPTS)) {
 		/* register irq handler */
@@ -3078,7 +4216,7 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 		/* disable feature support if gpio was invalid */
 		tfa98xx->flags |= TFA98XX_FLAG_SKIP_INTERRUPTS;
 	}
-
+#endif
 #ifdef CONFIG_DEBUG_FS
 	if (no_start == 0)
 		tfa98xx_debug_init(tfa98xx, i2c);
@@ -3090,6 +4228,11 @@ static int tfa98xx_i2c_probe(struct i2c_client *i2c,
 	ret = device_create_bin_file(&i2c->dev, &dev_attr_reg);
 	if (ret)
 		dev_info(&i2c->dev, "error creating sysfs files\n");
+
+#ifdef CONFIG_MACH_XIAOMI
+	if (tfa98xx_device_count == 0)
+		tfa98xx_init_misc_device(tfa98xx);
+#endif
 
 	pr_info("%s Probe completed successfully!\n", __func__);
 
@@ -3122,12 +4265,19 @@ static int tfa98xx_i2c_remove(struct i2c_client *i2c)
 #ifdef CONFIG_DEBUG_FS
 	tfa98xx_debug_remove(tfa98xx);
 #endif
+#ifdef CONFIG_MACH_XIAOMI
+	tfa98xx_remove_misc_device(tfa98xx);
+#endif
 
 	snd_soc_unregister_component(&i2c->dev);
 	if (gpio_is_valid(tfa98xx->irq_gpio))
 		devm_gpio_free(&i2c->dev, tfa98xx->irq_gpio);
 	if (gpio_is_valid(tfa98xx->reset_gpio))
 		devm_gpio_free(&i2c->dev, tfa98xx->reset_gpio);
+#ifdef CONFIG_MACH_XIAOMI
+	if (gpio_is_valid(tfa98xx->spk_sw_gpio))
+		devm_gpio_free(&i2c->dev, tfa98xx->spk_sw_gpio);
+#endif
 
 	mutex_lock(&tfa98xx_mutex);
 	list_del(&tfa98xx->list);

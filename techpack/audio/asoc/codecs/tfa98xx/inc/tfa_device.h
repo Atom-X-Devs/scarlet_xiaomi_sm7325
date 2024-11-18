@@ -311,5 +311,14 @@ int tfa_irq_unmask(struct tfa_device *tfa);
 //cnt read
 //debug?
 
+#ifdef CONFIG_MACH_XIAOMI
+/* IRQ handle for tfa987x device */
+int tfa987x_irq_enable(struct tfa_device *tfa, int bit, int status);
+void tfa987x_irq_mask(struct tfa_device *tfa);
+void tfa987x_irq_unmask(struct tfa_device *tfa);
+int tfa987x_irq_clear(struct tfa_device *tfa, int bit);
+int tfa987x_irq_handle(struct tfa_device *tfa);
+#endif
+
 #endif /* __TFA_DEVICE_H__ */
 
