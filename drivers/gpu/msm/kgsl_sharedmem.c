@@ -1181,8 +1181,7 @@ static int kgsl_system_alloc_pages(u64 size, struct page ***pages,
 		return -ENOMEM;
 
 	for (i = 0; i < npages; i++) {
-		gfp_t gfp = __GFP_ZERO | __GFP_HIGHMEM |
-			GFP_KERNEL | __GFP_NORETRY;
+		gfp_t gfp = __GFP_ZERO | __GFP_HIGHMEM | GFP_KERNEL;
 
 		local[i] = alloc_pages(gfp, get_order(PAGE_SIZE));
 		if (!local[i]) {
