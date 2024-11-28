@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/devfreq_cooling.h>
@@ -34,7 +34,7 @@ static struct kgsl_midframe_info {
 
 static void do_devfreq_suspend(struct work_struct *work);
 static void do_devfreq_resume(struct work_struct *work);
-static void do_devfreq_notify(struct work_struct *work);
+static void do_devfreq_notify(struct kthread_work *work);
 
 /*
  * These variables are used to keep the latest data
@@ -147,24 +147,25 @@ void kgsl_pwrscale_update_stats(struct kgsl_device *device)
 void kgsl_pwrscale_update(struct kgsl_device *device)
 {
 	ktime_t t;
+	struct kgsl_pwrscale *pwrscale = &device->pwrscale;
 
 	if (WARN_ON(!mutex_is_locked(&device->mutex)))
 		return;
 
-	if (!device->pwrscale.enabled)
+	if (!pwrscale->enabled)
 		return;
 
 	t = ktime_get();
-	if (ktime_compare(t, device->pwrscale.next_governor_call) < 0)
+	if (ktime_compare(t, pwrscale->next_governor_call) < 0)
 		return;
 
-	device->pwrscale.next_governor_call = ktime_add_us(t,
+	pwrscale->next_governor_call = ktime_add_us(t,
 			KGSL_GOVERNOR_CALL_INTERVAL);
 
 	/* to call srcu_notifier_call_chain() from a kernel thread */
 	if (device->state != KGSL_STATE_SLUMBER)
-		queue_work(device->pwrscale.devfreq_wq,
-			&device->pwrscale.devfreq_notify_ws);
+		kthread_queue_work(pwrscale->devfreq_notify_worker,
+					&pwrscale->devfreq_notify_work);
 
 	kgsl_pwrscale_midframe_timer_restart(device);
 }
@@ -769,6 +770,7 @@ static void pwrscale_of_ca_aware(struct kgsl_device *device)
 int kgsl_pwrscale_init(struct kgsl_device *device, struct platform_device *pdev,
 		const char *governor)
 {
+	struct sched_param sched_param = { .sched_priority = MAX_RT_PRIO / 2 };
 	struct kgsl_pwrscale *pwrscale = &device->pwrscale;
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	struct devfreq *devfreq;
@@ -860,6 +862,13 @@ int kgsl_pwrscale_init(struct kgsl_device *device, struct platform_device *pdev,
 		return -ENOMEM;
 	}
 
+	pwrscale->devfreq_notify_worker = kthread_create_worker(0, "kgsl_devfreq_notifier");
+	if (IS_ERR(pwrscale->devfreq_notify_worker)) {
+		ret = PTR_ERR(pwrscale->devfreq_notify_worker);
+		dev_err(device->dev, "Failed to create devfreq notify worker ret: %d\n", ret);
+		return ret;
+	}
+
 	ret = msm_adreno_tz_init();
 	if (ret) {
 		dev_err(device->dev, "Failed to add adreno tz governor: %d\n", ret);
@@ -891,7 +900,9 @@ int kgsl_pwrscale_init(struct kgsl_device *device, struct platform_device *pdev,
 
 	INIT_WORK(&pwrscale->devfreq_suspend_ws, do_devfreq_suspend);
 	INIT_WORK(&pwrscale->devfreq_resume_ws, do_devfreq_resume);
-	INIT_WORK(&pwrscale->devfreq_notify_ws, do_devfreq_notify);
+	kthread_init_work(&pwrscale->devfreq_notify_work, do_devfreq_notify);
+	sched_setscheduler_nocheck(pwrscale->devfreq_notify_worker->task, SCHED_FIFO,
+				   &sched_param);
 	if (kgsl_midframe)
 		INIT_WORK(&kgsl_midframe->timer_check_ws,
 				kgsl_pwrscale_midframe_timer_check);
@@ -937,6 +948,9 @@ void kgsl_pwrscale_close(struct kgsl_device *device)
 
 	kgsl_pwrscale_midframe_timer_cancel(device);
 
+	if (!IS_ERR_OR_NULL(pwrscale->devfreq_notify_worker))
+		kthread_destroy_worker(pwrscale->devfreq_notify_worker);
+
 	if (pwrscale->devfreq_wq) {
 		flush_workqueue(pwrscale->devfreq_wq);
 		destroy_workqueue(pwrscale->devfreq_wq);
@@ -970,10 +984,10 @@ static void do_devfreq_resume(struct work_struct *work)
 	devfreq_resume_device(devfreq);
 }
 
-static void do_devfreq_notify(struct work_struct *work)
+static void do_devfreq_notify(struct kthread_work *work)
 {
 	struct kgsl_pwrscale *pwrscale = container_of(work,
-			struct kgsl_pwrscale, devfreq_notify_ws);
+			struct kgsl_pwrscale, devfreq_notify_work);
 	struct devfreq *devfreq = pwrscale->devfreqptr;
 
 	srcu_notifier_call_chain(&pwrscale->nh,
