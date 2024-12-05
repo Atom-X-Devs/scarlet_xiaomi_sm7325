@@ -4596,21 +4596,8 @@ static ssize_t fg_vendor_show(struct class *c,
 	return scnprintf(buf, PAGE_SIZE, "%d\n", pst->prop[XM_PROP_FG_VENDOR_ID]);
 }
 static CLASS_ATTR_RO(fg_vendor);
-#endif
 
-static struct attribute *battery_class_attrs[] = {
-	&class_attr_soh.attr,
-	&class_attr_resistance.attr,
-	&class_attr_moisture_detection_status.attr,
-	&class_attr_moisture_detection_en.attr,
-	&class_attr_wireless_boost_en.attr,
-	&class_attr_fake_soc.attr,
-	&class_attr_wireless_fw_update.attr,
-	&class_attr_wireless_fw_force_update.attr,
-	&class_attr_wireless_fw_version.attr,
-	&class_attr_wireless_fw_crc.attr,
-	&class_attr_ship_mode_en.attr,
-#ifdef CONFIG_MACH_XIAOMI
+static struct attribute *xiaomi_battery_class_attrs[] = {
 	&class_attr_real_type.attr,
 	&class_attr_resistance_id.attr,
 	&class_attr_verify_digest.attr,
@@ -4652,12 +4639,6 @@ static struct attribute *battery_class_attrs[] = {
 	&class_attr_adapter_svid.attr,
 	&class_attr_pd_verifed.attr,
 	&class_attr_pdo2.attr,
-#endif
-	&class_attr_restrict_chg.attr,
-	&class_attr_restrict_cur.attr,
-	&class_attr_usb_real_type.attr,
-	&class_attr_usb_typec_compliant.attr,
-#ifdef CONFIG_MACH_XIAOMI
 	&class_attr_fastchg_mode.attr,
 	&class_attr_apdo_max.attr,
 	&class_attr_thermal_remove.attr,
@@ -4711,7 +4692,83 @@ static struct attribute *battery_class_attrs[] = {
 	&class_attr_cell1_volt.attr,
 	&class_attr_cell2_volt.attr,
 	&class_attr_fg_vendor.attr,
-#endif
+	NULL,
+};
+
+static const struct attribute_group xiaomi_battery_class_group = {
+	.attrs = xiaomi_battery_class_attrs,
+};
+
+static struct attribute *battery_class_attrs[] = {
+	&class_attr_soh.attr,
+	&class_attr_resistance.attr,
+	&class_attr_moisture_detection_status.attr,
+	&class_attr_moisture_detection_en.attr,
+	&class_attr_wireless_boost_en.attr,
+	&class_attr_fake_soc.attr,
+	&class_attr_wireless_fw_update.attr,
+	&class_attr_wireless_fw_force_update.attr,
+	&class_attr_wireless_fw_version.attr,
+	&class_attr_wireless_fw_crc.attr,
+	&class_attr_ship_mode_en.attr,
+	&class_attr_restrict_chg.attr,
+	&class_attr_restrict_cur.attr,
+	&class_attr_usb_real_type.attr,
+	&class_attr_usb_typec_compliant.attr,
+	NULL,
+};
+
+static const struct attribute_group battery_class_group = {
+	.attrs = battery_class_attrs,
+};
+
+static const struct attribute_group *battery_class_groups[] = {
+	&battery_class_group,
+	&xiaomi_battery_class_group,
+	NULL,
+};
+
+static struct attribute *battery_class_no_wls_attrs[] = {
+	&class_attr_soh.attr,
+	&class_attr_resistance.attr,
+	&class_attr_moisture_detection_status.attr,
+	&class_attr_moisture_detection_en.attr,
+	&class_attr_fake_soc.attr,
+	&class_attr_ship_mode_en.attr,
+	&class_attr_restrict_chg.attr,
+	&class_attr_restrict_cur.attr,
+	&class_attr_usb_real_type.attr,
+	&class_attr_usb_typec_compliant.attr,
+	NULL,
+};
+
+static const struct attribute_group battery_class_no_wls_group = {
+	.attrs = battery_class_no_wls_attrs,
+};
+
+static const struct attribute_group *battery_class_no_wls_groups[] = {
+	&battery_class_no_wls_group,
+	&xiaomi_battery_class_group,
+	NULL,
+};
+#else
+
+static struct attribute *battery_class_attrs[] = {
+	&class_attr_soh.attr,
+	&class_attr_resistance.attr,
+	&class_attr_moisture_detection_status.attr,
+	&class_attr_moisture_detection_en.attr,
+	&class_attr_wireless_boost_en.attr,
+	&class_attr_fake_soc.attr,
+	&class_attr_wireless_fw_update.attr,
+	&class_attr_wireless_fw_force_update.attr,
+	&class_attr_wireless_fw_version.attr,
+	&class_attr_wireless_fw_crc.attr,
+	&class_attr_ship_mode_en.attr,
+	&class_attr_restrict_chg.attr,
+	&class_attr_restrict_cur.attr,
+	&class_attr_usb_real_type.attr,
+	&class_attr_usb_typec_compliant.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(battery_class);
@@ -4730,6 +4787,7 @@ static struct attribute *battery_class_no_wls_attrs[] = {
 	NULL,
 };
 ATTRIBUTE_GROUPS(battery_class_no_wls);
+#endif
 
 #ifdef CONFIG_DEBUG_FS
 static void battery_chg_add_debugfs(struct battery_chg_dev *bcdev)
