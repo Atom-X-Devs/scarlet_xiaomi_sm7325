@@ -331,61 +331,61 @@
 		/*CLICK*/
 		wf_0 {
 			awinic,effect-id = <0>;
-			awinic,wf-play-rate-us = <20000>;
+			awinic,wf-play-rate-us = <19000>;
 		};
 
 		/*DOUBLE CLICK*/
 		wf_1 {
 			awinic,effect-id = <1>;
-			awinic,wf-play-rate-us = <20000>;
+			awinic,wf-play-rate-us = <19000>;
 		};
 
 		/*TICK*/
 		wf_2 {
 			awinic,effect-id = <2>;
-			awinic,wf-play-rate-us = <20000>;
+			awinic,wf-play-rate-us = <19000>;
 		};
 
 		/*THUD*/
 		wf_3 {
 			awinic,effect-id = <3>;
-			awinic,wf-play-rate-us = <20000>;
+			awinic,wf-play-rate-us = <19000>;
 		};
 
 		/*POP*/
 		wf_4 {
 			awinic,effect-id = <4>;
-			awinic,wf-play-rate-us = <28000>;
+			awinic,wf-play-rate-us = <27000>;
 		};
 
 		/*HEAVY CLICK*/
 		wf_5 {
 			awinic,effect-id = <5>;
-			awinic,wf-play-rate-us = <20000>;
+			awinic,wf-play-rate-us = <19000>;
 		};
 
 		/*ID 6*/
 		wf_6 {
 			awinic,effect-id = <6>;
-			awinic,wf-play-rate-us = <20000>;
+			awinic,wf-play-rate-us = <19000>;
 		};
 
 		/*ID 7*/
 		wf_7 {
 			awinic,effect-id = <7>;
-			awinic,wf-play-rate-us = <20000>;
+			awinic,wf-play-rate-us = <19000>;
 		};
 
 		/*ID 8*/
 		wf_8 {
 			awinic,effect-id = <8>;
-			awinic,wf-play-rate-us = <20000>;
+			awinic,wf-play-rate-us = <19000>;
 		};
 
 		/*ID 9*/
 		wf_9 {
 			awinic,effect-id = <9>;
-			awinic,wf-play-rate-us = <20000>;
+			awinic,wf-play-rate-us = <19000>;
 		};
 	};
 };
