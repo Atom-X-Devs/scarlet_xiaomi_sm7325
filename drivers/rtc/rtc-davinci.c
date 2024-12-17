@@ -516,7 +516,7 @@ static int __init davinci_rtc_probe(struct platform_device *pdev)
 
 	rtcss_write(davinci_rtc, PRTCSS_RTC_CCTRL_CAEN, PRTCSS_RTC_CCTRL);
 
-	device_init_wakeup(&pdev->dev, 0);
+	device_init_wakeup(&pdev->dev, false);
 
 	return 0;
 }
@@ -525,7 +525,7 @@ static int __exit davinci_rtc_remove(struct platform_device *pdev)
 {
 	struct davinci_rtc *davinci_rtc = platform_get_drvdata(pdev);
 
-	device_init_wakeup(&pdev->dev, 0);
+	device_init_wakeup(&pdev->dev, false);
 
 	rtcif_write(davinci_rtc, 0, PRTCIF_INTEN);
 

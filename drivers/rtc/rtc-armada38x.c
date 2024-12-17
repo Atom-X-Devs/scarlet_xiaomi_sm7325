@@ -544,7 +544,7 @@ static __init int armada38x_rtc_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, rtc);
 
 	if (rtc->irq != -1) {
-		device_init_wakeup(&pdev->dev, 1);
+		device_init_wakeup(&pdev->dev, true);
 		rtc->rtc_dev->ops = &armada38x_rtc_ops;
 	} else {
 		/*

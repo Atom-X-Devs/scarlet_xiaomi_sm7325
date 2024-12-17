@@ -1252,7 +1252,7 @@ static void cmos_wake_setup(struct device *dev)
 	dev->platform_data = &acpi_rtc_info;
 
 	/* RTC always wakes from S1/S2/S3, and often S4/STD */
-	device_init_wakeup(dev, 1);
+	device_init_wakeup(dev, true);
 }
 
 static void cmos_check_acpi_rtc_status(struct device *dev,

@@ -321,7 +321,7 @@ static int mpc5121_rtc_probe(struct platform_device *op)
 		return -ENOSYS;
 	}
 
-	device_init_wakeup(&op->dev, 1);
+	device_init_wakeup(&op->dev, true);
 
 	platform_set_drvdata(op, rtc);
 
