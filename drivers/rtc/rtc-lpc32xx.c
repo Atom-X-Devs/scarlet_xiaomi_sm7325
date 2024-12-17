@@ -259,7 +259,7 @@ static int lpc32xx_rtc_probe(struct platform_device *pdev)
 			dev_warn(&pdev->dev, "Can't request interrupt.\n");
 			rtc->irq = -1;
 		} else {
-			device_init_wakeup(&pdev->dev, 1);
+			device_init_wakeup(&pdev->dev, true);
 		}
 	}
 
@@ -271,7 +271,7 @@ static int lpc32xx_rtc_remove(struct platform_device *pdev)
 	struct lpc32xx_rtc *rtc = platform_get_drvdata(pdev);
 
 	if (rtc->irq >= 0)
-		device_init_wakeup(&pdev->dev, 0);
+		device_init_wakeup(&pdev->dev, false);
 
 	return 0;
 }

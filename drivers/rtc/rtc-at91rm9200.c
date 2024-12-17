@@ -423,7 +423,7 @@ static int __init at91_rtc_probe(struct platform_device *pdev)
 	 * being wake-capable; if it didn't, do that here.
 	 */
 	if (!device_can_wakeup(&pdev->dev))
-		device_init_wakeup(&pdev->dev, 1);
+		device_init_wakeup(&pdev->dev, true);
 
 	rtc->ops = &at91_rtc_ops;
 	rtc->range_min = RTC_TIMESTAMP_BEGIN_1900;

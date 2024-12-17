@@ -720,7 +720,7 @@ static int sun6i_rtc_probe(struct platform_device *pdev)
 
 	clk_prepare_enable(chip->losc);
 
-	device_init_wakeup(&pdev->dev, 1);
+	device_init_wakeup(&pdev->dev, true);
 
 	chip->rtc = devm_rtc_device_register(&pdev->dev, "rtc-sun6i",
 					     &sun6i_rtc_ops, THIS_MODULE);

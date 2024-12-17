@@ -792,7 +792,7 @@ static int s5m_rtc_probe(struct platform_device *pdev)
 
 	ret = s5m8767_rtc_init_reg(info);
 
-	device_init_wakeup(&pdev->dev, 1);
+	device_init_wakeup(&pdev->dev, true);
 
 	info->rtc_dev = devm_rtc_device_register(&pdev->dev, "s5m-rtc",
 						 &s5m_rtc_ops, THIS_MODULE);

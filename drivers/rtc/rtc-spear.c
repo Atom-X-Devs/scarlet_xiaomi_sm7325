@@ -397,7 +397,7 @@ static int spear_rtc_probe(struct platform_device *pdev)
 	config->rtc->uie_unsupported = 1;
 
 	if (!device_can_wakeup(&pdev->dev))
-		device_init_wakeup(&pdev->dev, 1);
+		device_init_wakeup(&pdev->dev, true);
 
 	return 0;
 
@@ -413,7 +413,7 @@ static int spear_rtc_remove(struct platform_device *pdev)
 
 	spear_rtc_disable_interrupt(config);
 	clk_disable_unprepare(config->clk);
-	device_init_wakeup(&pdev->dev, 0);
+	device_init_wakeup(&pdev->dev, false);
 
 	return 0;
 }

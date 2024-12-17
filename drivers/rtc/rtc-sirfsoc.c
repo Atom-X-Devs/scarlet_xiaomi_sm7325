@@ -309,7 +309,7 @@ static int sirfsoc_rtc_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, rtcdrv);
 
 	/* Register rtc alarm as a wakeup source */
-	device_init_wakeup(&pdev->dev, 1);
+	device_init_wakeup(&pdev->dev, true);
 
 	rtcdrv->regmap = devm_regmap_init_iobg(&pdev->dev,
 			&sysrtc_regmap_config);
@@ -367,7 +367,7 @@ static int sirfsoc_rtc_probe(struct platform_device *pdev)
 
 static int sirfsoc_rtc_remove(struct platform_device *pdev)
 {
-	device_init_wakeup(&pdev->dev, 0);
+	device_init_wakeup(&pdev->dev, false);
 
 	return 0;
 }
