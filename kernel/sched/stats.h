@@ -97,6 +97,10 @@ static inline void psi_enqueue(struct task_struct *p, int flags)
 	if (flags & ENQUEUE_RESTORE)
 		return;
 
+	/* psi_sched_switch() will handle the flags */
+	if (task_running(task_rq(p), p))
+		return;
+
 	if (p->se.sched_delayed) {
 		/* CPU migration of "sleeping" task */
 		SCHED_WARN_ON(!(flags & ENQUEUE_MIGRATED) || p->sched_psi_wake_requeue);

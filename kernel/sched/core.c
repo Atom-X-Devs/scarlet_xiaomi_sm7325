@@ -5973,7 +5973,6 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
  */
 static void __sched notrace __schedule(int sched_mode)
 {
-	bool block = false;
 	struct task_struct *prev, *next;
 	bool preempt = sched_mode > SM_NONE;
 	unsigned long *switch_count;
@@ -6060,7 +6059,6 @@ static void __sched notrace __schedule(int sched_mode)
 			 * After this, schedule() must not care about p->state any more.
 			 */
 			block_task(rq, prev, flags);
-			block = true;
 		}
 		switch_count = &prev->nvcsw;
 	}
@@ -6094,7 +6092,8 @@ picked:
 		++*switch_count;
 
 		migrate_disable_switch(rq, prev);
-		psi_sched_switch(prev, next, block);
+		psi_sched_switch(prev, next, !task_on_rq_queued(prev) ||
+					     prev->se.sched_delayed);
 
 		trace_sched_switch(preempt, prev, next);
 
