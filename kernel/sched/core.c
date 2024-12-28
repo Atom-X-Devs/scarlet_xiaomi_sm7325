@@ -5204,7 +5204,7 @@ void scheduler_tick(void)
 
 #ifdef CONFIG_SPRD_ROTATION_TASK
 	if (curr->sched_class == &fair_sched_class) {
-		if (rq->misfit_task_load && curr->state == TASK_RUNNING) {
+		if (rq->misfit_task_load && READ_ONCE(curr->__state) == TASK_RUNNING) {
 			raw_spin_lock(&rotation_lock);
 			check_for_task_rotation(rq);
 			raw_spin_unlock(&rotation_lock);
