@@ -313,9 +313,9 @@ static int gsx_gesture_ist(struct goodix_ts_core *cd,
 	case GOODIX_GESTURE_SINGLE_TAP:
 		if (cd->gesture_type & GESTURE_SINGLE_TAP) {
 			ts_info("get SINGLE-TAP gesture");
-			input_report_key(cd->input_dev, KEY_WAKEUP, 1);
+			input_report_key(cd->input_dev, KEY_GOTO, 1);
 			input_sync(cd->input_dev);
-			input_report_key(cd->input_dev, KEY_WAKEUP, 0);
+			input_report_key(cd->input_dev, KEY_GOTO, 0);
 			input_sync(cd->input_dev);
 		}
 		break;
