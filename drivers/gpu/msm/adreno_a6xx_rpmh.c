@@ -124,7 +124,7 @@ static void tcs_cmd_data(struct bcm *bcms, int count, u32 ab, u32 ib,
 	for (i = 0; i < count; i++) {
 		bool valid = true;
 		bool commit = false;
-		u64 avg, peak, x, y;
+		u64 avg, total_width, peak, x, y;
 
 		if (i == count - 1 || bcms[i].vcd != bcms[i + 1].vcd)
 			commit = true;
@@ -146,7 +146,9 @@ static void tcs_cmd_data(struct bcm *bcms, int count, u32 ab, u32 ib,
 		avg = ((u64) ab) * bcms[i].width;
 
 		/* And then divide by the total width across channels */
-		do_div(avg, bcms[i].buswidth * bcms[i].channels);
+		total_width = bcms[i].buswidth * bcms[i].channels;
+		if (total_width)
+			do_div(avg, total_width);
 
 		peak = ((u64) ib) * bcms[i].width;
 		do_div(peak, bcms[i].buswidth);
