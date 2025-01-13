@@ -756,7 +756,7 @@ static int dapm_connect_mux(struct snd_soc_dapm_context *dapm,
 
 	if (e->reg != SND_SOC_NOPM) {
 		soc_dapm_read(dapm, e->reg, &val);
-		val = (val >> e->shift_l) & e->mask;
+		val = shr_bound(val, e->shift_l) & e->mask;
 		item = snd_soc_enum_val_to_item(e, val);
 	} else {
 		/* since a virtual mux has no backing registers to
@@ -810,7 +810,7 @@ static void dapm_set_mixer_path_status(struct snd_soc_dapm_path *p, int i,
 				soc_dapm_read(p->sink->dapm, mc->rreg, &val);
 			val = (val >> mc->rshift) & mask;
 		} else {
-			val = (val >> shift) & mask;
+			val = shr_bound(val, shift) & mask;
 		}
 		if (invert)
 			val = max - val;
