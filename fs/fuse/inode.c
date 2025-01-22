@@ -654,6 +654,7 @@ void fuse_conn_init(struct fuse_conn *fc, struct user_namespace *user_ns,
 	fc->pid_ns = get_pid_ns(task_active_pid_ns(current));
 	fc->user_ns = get_user_ns(user_ns);
 	fc->max_pages = FUSE_DEFAULT_MAX_PAGES_PER_REQ;
+	fc->timeout.req_timeout = 0;
 }
 EXPORT_SYMBOL_GPL(fuse_conn_init);
 
@@ -662,6 +663,8 @@ void fuse_conn_put(struct fuse_conn *fc)
 	if (refcount_dec_and_test(&fc->count)) {
 		struct fuse_iqueue *fiq = &fc->iq;
 
+		if (fc->timeout.req_timeout)
+			cancel_delayed_work_sync(&fc->timeout.work);
 		if (fiq->ops->release)
 			fiq->ops->release(fiq);
 		put_pid_ns(fc->pid_ns);
@@ -901,6 +904,14 @@ static void process_init_limits(struct fuse_conn *fc, struct fuse_init_out *arg)
 	spin_unlock(&fc->bg_lock);
 }
 
+static void set_request_timeout(struct fuse_conn *fc, unsigned int timeout)
+{
+	fc->timeout.req_timeout = secs_to_jiffies(timeout);
+	INIT_DELAYED_WORK(&fc->timeout.work, fuse_check_timeout);
+	queue_delayed_work(system_wq, &fc->timeout.work,
+			   fuse_timeout_timer_freq);
+}
+
 struct fuse_init_args {
 	struct fuse_args args;
 	struct fuse_init_in in;
@@ -983,6 +994,8 @@ static void process_init_reply(struct fuse_conn *fc, struct fuse_args *args,
 				fc->sb->s_stack_depth =
 					FILESYSTEM_MAX_STACK_DEPTH;
 			}
+			if (arg->request_timeout)
+				set_request_timeout(fc, arg->request_timeout);
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
 			fc->no_lock = 1;
