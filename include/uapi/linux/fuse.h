@@ -703,6 +703,7 @@ struct fuse_init_out {
 	uint16_t	max_pages;
 	uint16_t	map_alignment;
 	uint32_t	unused[8];
+	uint16_t	request_timeout;
 };
 
 #define CUSE_INIT_INFO_MAX 4096
