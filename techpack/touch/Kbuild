@@ -81,7 +81,9 @@ ifeq ($(CONFIG_TOUCHSCREEN_FOCALTECH_3680), y)
 		focaltech_3680/focaltech_esdcheck.o \
 		focaltech_3680/focaltech_point_report_check.o \
 		focaltech_3680/focaltech_flash.o \
-		focaltech_3680/focaltech_spi.o \
+		focaltech_3680/focaltech_spi.o
+
+	focaltech_touch-$(CONFIG_TOUCHSCREEN_FOCALTECH_TEST) += \
 		focaltech_3680/focaltech_test/focaltech_test.o \
 		focaltech_3680/focaltech_test/focaltech_test_ini.o \
 		focaltech_3680/focaltech_test/supported_ic/focaltech_test_ft5662.o
