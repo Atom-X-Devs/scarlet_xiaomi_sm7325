@@ -690,6 +690,8 @@ static int gov_resume(struct devfreq *df)
 	if (!node->hw->resume_hwmon)
 		return -EPERM;
 
+	BUG_ON(!node->resume_freq);
+
 	mutex_lock(&df->lock);
 	update_devfreq(df);
 	mutex_unlock(&df->lock);
