@@ -3092,19 +3092,11 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 	init_completion(&ts_data->pm_completion);
 	ts_data->pm_suspend = false;
 #endif
-	ts_data->battery_psy = power_supply_get_by_name("battery");
-	if (!ts_data->battery_psy) {
-		mdelay(50);
-		ts_data->battery_psy = power_supply_get_by_name("battery");
-	}
-	if (!ts_data->battery_psy)
-		FTS_ERROR(
-			"get battery psy failed, don't register callback for charger mode");
-	else {
-		power_supply_reg_notifier(&ts_data->power_supply_notifier);
-		ts_data->power_supply_notifier.notifier_call =
-			fts_power_supply_callback;
-	}
+
+	ts_data->power_supply_notifier.notifier_call = fts_power_supply_callback;
+	ret = power_supply_reg_notifier(&ts_data->power_supply_notifier);
+	if (ret)
+		FTS_ERROR("get battery psy failed, don't register callback for charger mode");
 
 #ifdef CONFIG_DRM_PANEL
 	ts_data->drm_notifier.notifier_call = drm_notifier_callback;
