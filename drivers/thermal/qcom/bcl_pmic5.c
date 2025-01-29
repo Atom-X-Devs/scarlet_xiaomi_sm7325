@@ -755,6 +755,9 @@ static void bcl_probe_lvls(struct platform_device *pdev,
 static void bcl_configure_bcl_peripheral(struct bcl_device *bcl_perph)
 {
 	bcl_write_register(bcl_perph, BCL_MONITOR_EN, BIT(7));
+#ifdef CONFIG_MACH_XIAOMI
+	bcl_write_register(bcl_perph, 0x59, 0x7E);
+#endif
 }
 
 static int bcl_remove(struct platform_device *pdev)
