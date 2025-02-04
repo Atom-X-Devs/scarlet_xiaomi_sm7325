@@ -5,8 +5,13 @@ TOUCH_ROOT=$(srctree)/techpack/touch
 endif
 
 ifeq ($(CONFIG_ARCH_LAHAINA), y)
+ifeq ($(CONFIG_MACH_XIAOMI_LISA), y)
+	include $(TOUCH_ROOT)/config/lisatouch.conf
+	LINUX_INC += -include $(TOUCH_ROOT)/config/lisatouchconf.h
+else
 	include $(TOUCH_ROOT)/config/gki_lahainatouch.conf
 	LINUX_INC += -include $(TOUCH_ROOT)/config/gki_lahainatouchconf.h
+endif
 endif
 
 LINUX_INC += -Iinclude/linux \
@@ -89,4 +94,23 @@ ifeq ($(CONFIG_TOUCHSCREEN_FOCALTECH_3680), y)
 		focaltech_3680/focaltech_test/supported_ic/focaltech_test_ft5662.o
 
 	obj-$(CONFIG_MSM_TOUCH) += focaltech_touch.o
+endif
+
+ifeq ($(CONFIG_TOUCHSCREEN_GT9897T), y)
+	LINUX_INC += -include $(TOUCH_ROOT)/gt9897t/goodix_ts_core.h
+
+	gt9897t_ts-y := \
+		gt9897t/goodix_ts_core.o \
+		gt9897t/goodix_brl_spi.o \
+		gt9897t/goodix_brl_hw.o \
+		gt9897t/goodix_cfg_bin.o \
+		gt9897t/goodix_ts_utils.o \
+		gt9897t/goodix_brl_fwupdate.o \
+		gt9897t/goodix_ts_gesture.o
+
+	gt9897t_ts-$(CONFIG_TOUCHSCREEN_GOODIX_BRL_DEBUG) += \
+		gt9897t/goodix_ts_test.o \
+		gt9897t/goodix_ts_tools.o
+
+	obj-$(CONFIG_MSM_TOUCH) += gt9897t_ts.o
 endif
