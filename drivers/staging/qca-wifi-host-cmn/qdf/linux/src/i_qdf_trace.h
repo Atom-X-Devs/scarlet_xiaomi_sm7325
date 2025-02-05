@@ -339,8 +339,7 @@ static inline void qdf_vprint(const char *fmt, va_list args)
 }
 #endif
 
-#ifdef PANIC_ON_BUG
-#ifdef CONFIG_SLUB_DEBUG
+#if defined(WLAN_DEBUG) && defined(PANIC_ON_BUG) && defined(CONFIG_SLUB_DEBUG)
 /**
  * __qdf_bug() - Calls BUG() when the PANIC_ON_BUG compilation option is enabled
  *
@@ -373,13 +372,14 @@ static inline void qdf_vprint(const char *fmt, va_list args)
  * Return: None
  */
 void __qdf_bug(void);
-#else /* CONFIG_SLUB_DEBUG */
+#else
 static inline void __qdf_bug(void)
 {
 	BUG();
 }
-#endif /* CONFIG_SLUB_DEBUG */
+#endif
 
+#ifdef PANIC_ON_BUG
 /**
  * QDF_DEBUG_PANIC() - In debug builds, panic, otherwise do nothing
  * @reason_fmt: a format string containing the reason for the panic
