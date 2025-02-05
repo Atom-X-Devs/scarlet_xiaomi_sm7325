@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <soc/qcom/msm_performance.h>
+#include <uapi/linux/sched/types.h>
 #include "adreno.h"
 #include "adreno_sysfs.h"
 #include "adreno_trace.h"
@@ -548,6 +549,11 @@ static int dispatcher_queue_context(struct adreno_device *adreno_dev,
 static int sendcmd(struct adreno_device *adreno_dev,
 	struct kgsl_drawobj_cmd *cmdobj)
 {
+	struct sched_param sched_param = { .sched_priority = MAX_RT_PRIO / 2 };
+	struct sched_attr attr = {
+		.sched_policy = SCHED_NORMAL,
+		.sched_nice   = 0,
+	};
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct kgsl_drawobj *drawobj = DRAWOBJ(cmdobj);
 	const struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
@@ -556,11 +562,17 @@ static int sendcmd(struct adreno_device *adreno_dev,
 	struct adreno_dispatcher_drawqueue *dispatch_q =
 				ADRENO_DRAWOBJ_DISPATCH_DRAWQUEUE(drawobj);
 	int ret;
+	int is_current_rt = rt_task(current);
 
 	mutex_lock(&device->mutex);
+
+	/* Elevating thread’s priority to avoid context switch with holding device mutex */
+	if (!is_current_rt)
+		sched_setscheduler_nocheck(current, SCHED_FIFO, &sched_param);
+
 	if (adreno_gpu_halt(adreno_dev) != 0) {
-		mutex_unlock(&device->mutex);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto err;
 	}
 
 	dispatcher->inflight++;
@@ -573,8 +585,7 @@ static int sendcmd(struct adreno_device *adreno_dev,
 		if (ret) {
 			dispatcher->inflight--;
 			dispatch_q->inflight--;
-			mutex_unlock(&device->mutex);
-			return ret;
+			goto err;
 		}
 
 		set_bit(ADRENO_DISPATCHER_POWER, &dispatcher->priv);
@@ -630,8 +641,6 @@ static int sendcmd(struct adreno_device *adreno_dev,
 		dispatcher->inflight--;
 		dispatch_q->inflight--;
 
-		mutex_unlock(&device->mutex);
-
 		/*
 		 * Don't log a message in case of:
 		 * -ENOENT means that the context was detached before the
@@ -645,7 +654,7 @@ static int sendcmd(struct adreno_device *adreno_dev,
 			dev_err(device->dev,
 				     "Unable to submit command to the ringbuffer %d\n",
 				     ret);
-		return ret;
+		goto err;
 	}
 
 	/*
@@ -663,6 +672,9 @@ static int sendcmd(struct adreno_device *adreno_dev,
 			       pid_nr(context->proc_priv->pid),
 			       context->id, drawobj->timestamp,
 			       !!(drawobj->flags & KGSL_DRAWOBJ_END_OF_FRAME));
+
+	if (!is_current_rt)
+		sched_setattr_nocheck(current, &attr);
 
 	mutex_unlock(&device->mutex);
 
@@ -688,6 +700,11 @@ static int sendcmd(struct adreno_device *adreno_dev,
 	if (gpudev->preemption_schedule)
 		gpudev->preemption_schedule(adreno_dev);
 	return 0;
+err:
+	if (!is_current_rt)
+		sched_setattr_nocheck(current, &attr);
+	mutex_unlock(&device->mutex);
+	return ret;
 }
 
 /**
