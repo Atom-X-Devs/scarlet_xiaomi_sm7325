@@ -868,8 +868,8 @@ static void goodix_ts_proc_exit(struct goodix_ts_core *core_data)
 
 static void goodix_ts_wq_exit(struct goodix_ts_core *core_data)
 {
-	destroy_workqueue(core_data->event_wq);
 	destroy_workqueue(core_data->gesture_wq);
+	destroy_workqueue(core_data->event_wq);
 }
 
 #ifdef GOODIX_DEBUGFS_ENABLE
@@ -3243,6 +3243,9 @@ static int goodix_ts_remove(struct platform_device *pdev)
 		goodix_ts_wq_exit(core_data);
 	}
 
+#ifdef GOODIX_XIAOMI_TOUCHFEATURE
+	destroy_workqueue(core_data->game_wq);
+#endif
 #ifdef GOODIX_DEBUGFS_ENABLE
 	goodix_ts_debugfs_exit(core_data);
 #endif
