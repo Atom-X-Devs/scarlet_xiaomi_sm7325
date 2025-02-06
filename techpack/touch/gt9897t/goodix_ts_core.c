@@ -320,6 +320,7 @@ struct kobject *goodix_get_default_kobj(void)
 }
 EXPORT_SYMBOL_GPL(goodix_get_default_kobj);
 
+#ifdef CONFIG_TOUCHSCREEN_GOODIX_BRL_DEBUG
 /* show rawdata */
 static ssize_t goodix_ts_get_rawdata_show(struct device *dev,
 					  struct device_attribute *attr,
@@ -357,6 +358,7 @@ exit:
 	kfree(info);
 	return ret;
 }
+#endif
 
 /* show driver infomation */
 static ssize_t goodix_ts_driver_info_show(struct device *dev,
@@ -800,7 +802,9 @@ static ssize_t goodix_ts_esd_info_store(struct device *dev,
 	return count;
 }
 
+#ifdef CONFIG_TOUCHSCREEN_GOODIX_BRL_DEBUG
 static DEVICE_ATTR(get_rawdata, S_IRUGO, goodix_ts_get_rawdata_show, NULL);
+#endif
 static DEVICE_ATTR(driver_info, S_IRUGO, goodix_ts_driver_info_show, NULL);
 static DEVICE_ATTR(chip_info, S_IRUGO, goodix_ts_chip_info_show, NULL);
 static DEVICE_ATTR(reset, S_IWUSR | S_IWGRP, NULL, goodix_ts_reset_store);
@@ -814,11 +818,18 @@ static DEVICE_ATTR(esd_info, S_IRUGO | S_IWUSR | S_IWGRP,
 		   goodix_ts_esd_info_show, goodix_ts_esd_info_store);
 
 static struct attribute *sysfs_attrs[] = {
-	&dev_attr_get_rawdata.attr, &dev_attr_driver_info.attr,
-	&dev_attr_chip_info.attr,   &dev_attr_reset.attr,
-	&dev_attr_send_cfg.attr,    &dev_attr_read_cfg.attr,
-	&dev_attr_reg_rw.attr,	    &dev_attr_irq_info.attr,
-	&dev_attr_esd_info.attr,    NULL,
+#ifdef CONFIG_TOUCHSCREEN_GOODIX_BRL_DEBUG
+	&dev_attr_get_rawdata.attr,
+#endif
+	&dev_attr_driver_info.attr,
+	&dev_attr_chip_info.attr,
+	&dev_attr_reset.attr,
+	&dev_attr_send_cfg.attr,
+	&dev_attr_read_cfg.attr,
+	&dev_attr_reg_rw.attr,
+	&dev_attr_irq_info.attr,
+	&dev_attr_esd_info.attr,
+	NULL,
 };
 
 static const struct attribute_group sysfs_group = {
@@ -2834,6 +2845,7 @@ static const struct proc_ops goodix_fw_version_info_ops = {
 	.read = goodix_fw_version_info_read,
 };
 
+#ifdef CONFIG_TOUCHSCREEN_GOODIX_BRL_DEBUG
 static ssize_t goodix_selftest_read(struct file *file, char __user *buf,
 				    size_t count, loff_t *pos)
 {
@@ -2922,6 +2934,7 @@ static const struct proc_ops goodix_selftest_ops = {
 	.read = goodix_selftest_read,
 	.write = goodix_selftest_write,
 };
+#endif
 #endif
 
 #ifdef GOODIX_DEBUGFS_ENABLE
