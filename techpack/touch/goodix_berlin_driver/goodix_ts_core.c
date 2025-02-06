@@ -915,6 +915,12 @@ static void goodix_ts_sysfs_exit(struct goodix_ts_core *core_data)
 	sysfs_remove_group(&core_data->pdev->dev.kobj, &sysfs_group);
 }
 
+static void goodix_ts_wq_exit(struct goodix_ts_core *core_data)
+{
+	destroy_workqueue(core_data->gesture_wq);
+	destroy_workqueue(core_data->event_wq);
+}
+
 /* prosfs create */
 static int rawdata_proc_show(struct seq_file *m, void *v)
 {
@@ -2847,8 +2853,12 @@ static int goodix_ts_remove(struct platform_device *pdev)
 		goodix_ts_input_dev_remove(core_data);
 
 		goodix_fw_update_uninit();
+		goodix_ts_wq_exit(core_data);
 	}
 
+#ifdef GOODIX_XIAOMI_TOUCHFEATURE
+	destroy_workqueue(core_data->event_wq);
+#endif
 	goodix_tools_exit();
 	goodix_ts_unregister_notifier(&core_data->ts_notifier);
 	goodix_ts_power_off(core_data);
