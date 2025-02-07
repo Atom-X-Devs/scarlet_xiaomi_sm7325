@@ -189,3 +189,8 @@ extern int do_vfs_ioctl(struct file *file, unsigned int fd, unsigned int cmd,
 
 /* direct-io.c: */
 int sb_init_dio_done_wq(struct super_block *sb);
+
+/*
+ * fs/file.c
+ */
+bool file_seek_cur_needs_f_lock(struct file *file);
