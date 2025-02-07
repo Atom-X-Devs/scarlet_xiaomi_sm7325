@@ -30,10 +30,14 @@
 #include "cam_compat.h"
 #include "cam_cpas_hw.h"
 
-#ifndef CONFIG_MACH_XIAOMI
-#define CAM_REQ_MGR_EVENT_MAX 30
-#else
+#ifdef CONFIG_MACH_XIAOMI
+#ifdef REDWOOD_CAM
 #define CAM_REQ_MGR_EVENT_MAX 150
+#else
+#define CAM_REQ_MGR_EVENT_MAX 120
+#endif
+#else
+#define CAM_REQ_MGR_EVENT_MAX 30
 #endif
 
 static struct cam_req_mgr_device g_dev;
