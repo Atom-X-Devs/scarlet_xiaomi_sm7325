@@ -550,9 +550,10 @@ static int sendcmd(struct adreno_device *adreno_dev,
 	struct kgsl_drawobj_cmd *cmdobj)
 {
 	struct sched_param sched_param = { .sched_priority = MAX_RT_PRIO / 2 };
+	int nice = task_nice(current);
 	struct sched_attr attr = {
 		.sched_policy = SCHED_NORMAL,
-		.sched_nice   = 0,
+		.sched_nice   = nice,
 	};
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct kgsl_drawobj *drawobj = DRAWOBJ(cmdobj);
