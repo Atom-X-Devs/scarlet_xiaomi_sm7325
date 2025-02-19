@@ -183,12 +183,6 @@ enum wireless_property_id {
 	WLS_CURR_MAX,
 	WLS_TYPE,
 	WLS_BOOST_EN,
-#ifdef CONFIG_MACH_XIAOMI
-	WLS_FW_VER,
-	WLS_TX_ADAPTER,
-	WLS_REGISTER,
-	WLS_INPUT_CURR,
-#endif
 	WLS_PROP_MAX,
 };
 
@@ -366,13 +360,6 @@ struct battery_model_resp_msg {
 };
 
 #ifdef CONFIG_MACH_XIAOMI
-struct wls_fw_resp_msg {
-	struct pmic_glink_hdr   hdr;
-	u32                     property_id;
-	u32			value;
-	char                    version[MAX_STR_LEN];
-};
-
 struct xm_verify_digest_resp_msg {
 	struct pmic_glink_hdr	hdr;
 	u32			property_id;
@@ -380,14 +367,15 @@ struct xm_verify_digest_resp_msg {
 	bool			slave_fg;
 };
 
-struct xm_set_wls_bin_req_msg {
-	struct pmic_glink_hdr hdr;
-	u32 property_id;
-	u16 total_length;
-	u8 serial_number;
-	u8 fw_area;
-	u8 wls_fw_bin[MAX_STR_LEN];
-};  /* Message */
+struct battery_charger_shutdown_req_msg {
+	struct pmic_glink_hdr	hdr;
+};
+
+struct xm_ss_auth_resp_msg {
+	struct pmic_glink_hdr	hdr;
+	u32			property_id;
+	u32			data[BATTERY_SS_AUTH_DATA_LEN];
+};
 #endif
 
 struct wireless_fw_check_req {
@@ -431,18 +419,6 @@ struct battery_charger_ship_mode_req_msg {
 	struct pmic_glink_hdr	hdr;
 	u32			ship_mode_type;
 };
-
-#ifdef CONFIG_MACH_XIAOMI
-struct battery_charger_shutdown_req_msg {
-	struct pmic_glink_hdr	hdr;
-};
-
-struct xm_ss_auth_resp_msg {
-	struct pmic_glink_hdr	hdr;
-	u32			property_id;
-	u32			data[BATTERY_SS_AUTH_DATA_LEN];
-};
-#endif
 
 struct psy_state {
 	struct power_supply	*psy;
@@ -611,28 +587,24 @@ static const char * const power_supply_usbc_text[] = {
 	"Powered cable w/o sink",
 };
 
-int StringToHex(char *str, unsigned char *out, unsigned int *outlen)
+void StringToHex(char *str, unsigned char *out, unsigned int *outlen)
 {
 	char *p = str;
 	char high = 0, low = 0;
 	int tmplen = strlen(p), cnt = 0;
 
-	tmplen = strlen(p);
-	while(cnt < (tmplen / 2)) {
-		high = ((*p > '9') && ((*p <= 'F') || (*p <= 'f'))) ? *p - 48 - 7 : *p - 48;
-		low = (*(++ p) > '9' && ((*p <= 'F') || (*p <= 'f'))) ? *(p) - 48 - 7 : *(p) - 48;
+	for (cnt = 0; cnt < tmplen / 2; cnt++, p++) {
+		high = (*p > '9' && ((*p <= 'F') || (*p <= 'f'))) ? *p - 48 - 7 : *p - 48;
+		p++;
+		low = (*p > '9' && ((*p <= 'F') || (*p <= 'f'))) ? *p - 48 - 7 : *p - 48;
 		out[cnt] = ((high & 0x0f) << 4 | (low & 0x0f));
-		p ++;
-		cnt ++;
 	}
 
 	if (tmplen % 2 != 0)
-		out[cnt] = ((*p > '9') && ((*p <= 'F') || (*p <= 'f'))) ? *p - 48 - 7 : *p - 48;
+		out[cnt] = (*p > '9' && ((*p <= 'F') || (*p <= 'f'))) ? *p - 48 - 7 : *p - 48;
 
 	if (outlen != NULL)
 		*outlen = tmplen / 2 + tmplen % 2;
-
-	return tmplen / 2 + tmplen % 2;
 }
 #endif
 
@@ -969,7 +941,6 @@ static void handle_message(struct battery_chg_dev *bcdev, void *data,
 #ifdef CONFIG_MACH_XIAOMI
 	struct xm_verify_digest_resp_msg *verify_digest_resp_msg = data;
 	struct xm_ss_auth_resp_msg *ss_auth_resp_msg = data;
-	struct wls_fw_resp_msg *wls_fw_ver_resp_msg = data;
 #endif
 	struct wireless_fw_check_resp *fw_check_msg;
 	struct wireless_fw_push_buf_resp *fw_resp_msg;
@@ -1030,16 +1001,6 @@ static void handle_message(struct battery_chg_dev *bcdev, void *data,
 		break;
 	case BC_WLS_STATUS_GET:
 		pst = &bcdev->psy_list[PSY_TYPE_WLS];
-
-#ifdef CONFIG_MACH_XIAOMI
-		/* Handle model response uniquely as it's a string */
-		if (pst->version && len == sizeof(*wls_fw_ver_resp_msg)) {
-			memcpy(pst->version, wls_fw_ver_resp_msg->version, MAX_STR_LEN);
-			ack_set = true;
-			break;
-		}
-#endif
-
 		if (validate_message(resp_msg, len) &&
 		    resp_msg->property_id < pst->prop_count) {
 			pst->prop[resp_msg->property_id] = resp_msg->value;
@@ -1084,6 +1045,9 @@ static void handle_message(struct battery_chg_dev *bcdev, void *data,
 	case BC_DISABLE_NOTIFY_REQ:
 	case BC_SHUTDOWN_NOTIFY:
 	case BC_SHIP_MODE_REQ_SET:
+#ifdef CONFIG_MACH_XIAOMI
+	case BC_SHUTDOWN_REQ_SET:
+#endif
 		/* Always ACK response for notify or ship_mode request */
 		ack_set = true;
 		break;
@@ -5091,6 +5055,7 @@ static int battery_chg_probe(struct platform_device *pdev)
 	INIT_WORK(&bcdev->usb_type_work, battery_chg_update_usb_type_work);
 #ifdef CONFIG_MACH_XIAOMI
 	INIT_WORK(&bcdev->notify_blankstate_work, notify_blankstate_changed_work);
+	INIT_DELAYED_WORK(&bcdev->xm_prop_change_work, generate_xm_charge_uvent);
 #endif
 	bcdev->dev = dev;
 
@@ -5182,8 +5147,6 @@ static int battery_chg_probe(struct platform_device *pdev)
 	schedule_work(&bcdev->usb_type_work);
 
 #ifdef CONFIG_MACH_XIAOMI
-	INIT_DELAYED_WORK(&bcdev->xm_prop_change_work, generate_xm_charge_uvent);
-
 	bcdev->slave_fg_verify_flag = false;
 	bcdev->shutdown_delay_en = true;
 	bcdev->hw_version_build = 0;
