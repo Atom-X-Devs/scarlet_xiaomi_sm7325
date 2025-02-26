@@ -64,7 +64,7 @@ int cam_top_tpg_deinit_soc_resources(struct cam_hw_soc_info *soc_info);
  *
  */
 int cam_top_tpg_enable_soc_resources(struct cam_hw_soc_info  *soc_info,
-	uint32_t clk_lvl);
+	enum cam_vote_level clk_lvl);
 
 /**
  * cam_top_tpg_disable_soc_resources()
