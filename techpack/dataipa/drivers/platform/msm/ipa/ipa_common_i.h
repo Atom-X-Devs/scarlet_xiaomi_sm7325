@@ -601,9 +601,10 @@ int ipa_wigig_send_wlan_msg(enum ipa_wlan_event msg_type,
 	const char *netdev_name, u8 *mac);
 
 void ipa3_register_client_callback(int (*client_cb)(bool is_lock),
-			bool (*teth_port_state)(void), u32 ipa_ep_idx);
+			bool (*teth_port_state)(void),
+			enum ipa_client_type client_type);
 
-void ipa3_deregister_client_callback(u32 ipa_ep_idx);
+void ipa3_deregister_client_callback(enum ipa_client_type client_type);
 
 /*
 * Configuration
