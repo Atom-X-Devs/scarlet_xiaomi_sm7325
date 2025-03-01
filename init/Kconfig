@@ -1315,6 +1315,7 @@ endchoice
 
 config LTO_GCC
 	bool "Enable Link Time Optimization for GCC"
+	depends on CC_IS_GCC
 
 config HAVE_LD_DEAD_CODE_DATA_ELIMINATION
 	bool
