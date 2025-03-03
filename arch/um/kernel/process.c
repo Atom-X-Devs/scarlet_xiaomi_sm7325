@@ -255,7 +255,7 @@ void arch_cpu_idle(void)
 {
 	cpu_tasks[current_thread_info()->cpu].pid = os_getpid();
 	um_idle_sleep();
-	local_irq_enable();
+	raw_local_irq_enable();
 }
 
 int __uml_cant_sleep(void) {
@@ -410,7 +410,7 @@ unsigned long get_wchan(struct task_struct *p)
 	unsigned long stack_page, sp, ip;
 	bool seen_sched = 0;
 
-	if ((p == NULL) || (p == current) || (p->state == TASK_RUNNING))
+	if ((p == NULL) || (p == current) || task_is_running(p))
 		return 0;
 
 	stack_page = (unsigned long) task_stack_page(p);

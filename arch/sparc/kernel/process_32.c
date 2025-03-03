@@ -76,7 +76,7 @@ void arch_cpu_idle(void)
 {
 	if (sparc_idle)
 		(*sparc_idle)();
-	local_irq_enable();
+	raw_local_irq_enable();
 }
 
 /* XXX cli/sti -> local_irq_xxx here, check this works once SMP is fixed. */
@@ -466,8 +466,7 @@ unsigned long get_wchan(struct task_struct *task)
 	struct reg_window32 *rw;
 	int count = 0;
 
-	if (!task || task == current ||
-            task->state == TASK_RUNNING)
+	if (!task || task == current || task_is_running(task))
 		goto out;
 
 	fp = task_thread_info(task)->ksp + bias;

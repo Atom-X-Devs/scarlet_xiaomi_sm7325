@@ -132,17 +132,15 @@ static struct notifier_block dev_pm_qos_nb[MAX_LPM_CPUS] = {
 };
 #endif
 
-#ifdef CONFIG_SCHED_WALT
-static bool check_cpu_isolated(int cpu)
-{
-	return cpu_isolated(cpu);
-}
-#else
 static bool check_cpu_isolated(int cpu)
 {
 	return false;
 }
-#endif
+
+static inline uint64_t sched_lpm_disallowed_time(int cpu)
+{
+	return 0;
+}
 
 #ifdef CONFIG_SMP
 static int lpm_cpu_qos_notify(struct notifier_block *nb,
