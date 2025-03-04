@@ -3951,7 +3951,7 @@ bool try_invoke_on_locked_down_task(struct task_struct *p, bool (*func)(struct t
 			ret = func(p, arg);
 		rq_unlock(rq, &rf);
 	} else {
-		switch (p->state) {
+		switch (READ_ONCE(p->__state)) {
 		case TASK_RUNNING:
 		case TASK_WAKING:
 			break;
