@@ -3953,7 +3953,7 @@ int task_call_func(struct task_struct *p, task_call_f func, void *arg)
 
 	raw_spin_lock_irqsave(&p->pi_lock, rf.flags);
 
-	state = p->state;
+	state = READ_ONCE(p->__state);
 
 	/*
 	 * Ensure we load p->on_rq after p->__state, otherwise it would be
