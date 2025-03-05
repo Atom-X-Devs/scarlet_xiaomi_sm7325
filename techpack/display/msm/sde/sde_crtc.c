@@ -4119,7 +4119,6 @@ static void sde_crtc_handle_power_event(u32 event_type, void *arg)
 static void _sde_crtc_reset(struct drm_crtc *crtc)
 {
 	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
-	struct sde_crtc_state *cstate = to_sde_crtc_state(crtc->state);
 
 	/* mark mixer cfgs dirty before wiping them */
 	sde_crtc_clear_cached_mixer_cfg(crtc);
