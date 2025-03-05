@@ -4212,7 +4212,9 @@ static int cam_smmu_fw_dev_component_bind(struct device *dev,
 static void cam_smmu_fw_dev_component_unbind(struct device *dev,
 	struct device *master_dev, void *data)
 {
+#ifdef CONFIG_DEBUG_KERNEL
 	struct platform_device *pdev = to_platform_device(dev);
+#endif
 
 	CAM_DBG(CAM_SMMU, "Unbinding component: %s", pdev->name);
 }
@@ -4242,7 +4244,9 @@ static int cam_smmu_cb_component_bind(struct device *dev,
 static void cam_smmu_cb_component_unbind(struct device *dev,
 	struct device *master_dev, void *data)
 {
+#ifdef CONFIG_DEBUG_KERNEL
 	struct platform_device *pdev = to_platform_device(dev);
+#endif
 
 	CAM_DBG(CAM_SMMU, "Unbinding component: %s", pdev->name);
 }
@@ -4270,7 +4274,9 @@ static int cam_smmu_cb_qsmmu_component_bind(struct device *dev,
 static void cam_smmu_cb_qsmmu_component_unbind(struct device *dev,
 	struct device *master_dev, void *data)
 {
+#ifdef CONFIG_DEBUG_KERNEL
 	struct platform_device *pdev = to_platform_device(dev);
+#endif
 
 	CAM_DBG(CAM_SMMU, "Unbinding component: %s", pdev->name);
 }
