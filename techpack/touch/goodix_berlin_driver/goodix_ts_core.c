@@ -1598,7 +1598,9 @@ static int goodix_ts_input_dev_config(struct goodix_ts_core *core_data)
 			     0, ts_bdata->panel_max_w, 0, 0);
 	input_mt_init_slots(input_dev, GOODIX_MAX_TOUCH, INPUT_MT_DIRECT);
 
+	input_set_capability(input_dev, EV_KEY, KEY_POWER);
 	input_set_capability(input_dev, EV_KEY, KEY_WAKEUP);
+	input_set_capability(input_dev, EV_KEY, KEY_GOTO);
 
 	r = input_register_device(input_dev);
 	if (r < 0) {
