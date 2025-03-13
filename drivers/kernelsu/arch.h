@@ -70,7 +70,9 @@
 #endif
 
 #else
+#ifdef KSU_HOOK_WITH_KPROBES
 #error "Unsupported arch"
+#endif
 #endif
 
 /* allow some architecutres to override `struct pt_regs` */

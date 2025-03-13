@@ -45,7 +45,7 @@ endif
 
 obj-$(CONFIG_KSU) += kernelsu.o
 
-ccflags-y += -DKSU_VERSION=12099
+ccflags-y += -DKSU_VERSION=12105
 
 # SELinux drivers check
 ifeq ($(shell grep -q " current_sid(void)" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
