@@ -490,7 +490,6 @@ static int qcom_cpufreq_hw_driver_probe(struct platform_device *pdev)
 
 static int qcom_cpufreq_hw_driver_remove(struct platform_device *pdev)
 {
-	struct cpufreq_qcom *c;
 	struct device *cpu_dev;
 	int cpu;
 
