@@ -41,10 +41,10 @@ enum sched_tunable_scaling sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_N
 /*
  * Minimal preemption granularity for CPU-bound tasks:
  *
- * (default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ * (default: 0.28 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
-unsigned int sysctl_sched_base_slice			= 3000000ULL;
-static unsigned int normalized_sysctl_sched_base_slice	= 3000000ULL;
+unsigned int sysctl_sched_base_slice			= 2800000ULL;
+static unsigned int normalized_sysctl_sched_base_slice	= 2800000ULL;
 
 /*
  * Minimal preemption granularity for CPU-bound SCHED_IDLE tasks.
