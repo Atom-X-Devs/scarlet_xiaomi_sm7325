@@ -109,8 +109,10 @@ static inline void gf_setup(struct gf_dev *gf_dev)
 				 IRQF_TRIGGER_RISING | IRQF_ONESHOT, "gf",
 				 gf_dev))
 		irq_switch(gf_dev, 1);
-	gf_dev->vreg = regulator_get(NULL, "pm8150_l17");
-	if (!regulator_is_enabled(gf_dev->vreg)) {
+	gf_dev->vreg = regulator_get(&gf_dev->spi->dev, "l3c_vdd");
+	if (regulator_is_enabled(gf_dev->vreg)) {
+		regulator_set_load(gf_dev->vreg, 200000);
+	} else if (!regulator_is_enabled(gf_dev->vreg)) {
 		regulator_set_voltage(gf_dev->vreg, 3000000, 3000000);
 		if (regulator_enable(gf_dev->vreg))
 			return;
