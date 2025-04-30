@@ -54,7 +54,7 @@ static DEFINE_MUTEX(g_cali_lock);
 #ifdef AW_CALI_STORE_EXAMPLE
  /*write cali to persist file example*/
 #define AWINIC_CALI_FILE "aw_cali.bin"
-#define AW_INT_DEC_DIGIT 10
+#define AW_INT_DEC_DIGIT 4
 
 static int aw_cali_write_cali_re_to_file(int32_t cali_re, int channel)
 {
@@ -68,9 +68,7 @@ static int aw_cali_write_cali_re_to_file(int32_t cali_re, int channel)
 static int aw_cali_get_read_cali_re(struct aw_device *aw_dev, int32_t *cali_re,
 				    int channel)
 {
-	const u8 *buf = NULL;
 	const struct firmware *fw = NULL;
-	int32_t int_cali_re = 0;
 	loff_t pos = 0;
 
 	if (request_firmware(&fw, AWINIC_CALI_FILE, aw_dev->dev)) {
@@ -87,15 +85,9 @@ static int aw_cali_get_read_cali_re(struct aw_device *aw_dev, int32_t *cali_re,
 		return -EINVAL;
 	}
 
-	buf = &fw->data[pos];
+	memcpy(cali_re, &fw->data[pos], AW_INT_DEC_DIGIT);
 
-	if (sscanf(buf, "%d", &int_cali_re) == 1)
-		*cali_re = int_cali_re;
-	else
-		*cali_re = AW_ERRO_CALI_VALUE;
-
-	aw_pr_info("channel: %d buf: %.*s int_cali_re: %d", channel,
-		   AW_INT_DEC_DIGIT, buf, int_cali_re);
+	aw_pr_info("channel: %d cali_re: %d", channel, *cali_re);
 
 	release_firmware(fw);
 
