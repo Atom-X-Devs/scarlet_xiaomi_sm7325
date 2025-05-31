@@ -403,8 +403,10 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq)
 	} else {
 		unsigned int refresh_rate = dsi_panel_get_refresh_rate();
 
-		if (refresh_rate > 60)
-			priv->bin.busy_time *= refresh_rate / 60;
+		if (refresh_rate >= 120)
+			priv->bin.busy_time += (priv->bin.busy_time >> 1);
+		else if (refresh_rate == 90)
+			priv->bin.busy_time += (priv->bin.busy_time >> 2);
 
 		val = __secure_tz_update_entry3(level, priv->bin.total_time,
 			priv->bin.busy_time, context_count, priv);
