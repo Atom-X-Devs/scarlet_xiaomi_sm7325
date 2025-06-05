@@ -76,7 +76,6 @@ static inline bool mmget_still_valid(struct mm_struct *mm)
 	return likely(!mm->core_state);
 }
 
-#ifdef CONFIG_PREEMPT_RT
 /*
  * RCU callback for delayed mm drop. Not strictly RCU, but call_rcu() is
  * by far the least expensive way to do that.
@@ -98,12 +97,6 @@ static inline void mmdrop_sched(struct mm_struct *mm)
 	if (atomic_dec_and_test(&mm->mm_count))
 		call_rcu(&mm->delayed_drop, __mmdrop_delayed);
 }
-#else
-static inline void mmdrop_sched(struct mm_struct *mm)
-{
-	mmdrop(mm);
-}
-#endif
 
 /**
  * mmget() - Pin the address space associated with a &struct mm_struct.
