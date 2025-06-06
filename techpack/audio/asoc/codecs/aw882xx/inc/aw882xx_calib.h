@@ -181,6 +181,7 @@ struct aw_cali_desc {
 	int32_t cali_q;			/*store cali q*/
 	int8_t cali_result;
 	uint8_t cali_check_st;
+	atomic_t cali_re_initialized;
 };
 
 int aw882xx_cali_init(struct aw_cali_desc *cali_desc);
