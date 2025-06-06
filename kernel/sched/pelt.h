@@ -6,6 +6,8 @@
 
 #include "sched-pelt.h"
 
+int ___update_load_sum(u64 now, struct sched_avg *sa, unsigned long load,
+		       unsigned long runnable, int running);
 int __update_load_avg_blocked_se(u64 now, struct sched_entity *se);
 int __update_load_avg_se(u64 now, struct cfs_rq *cfs_rq, struct sched_entity *se);
 int __update_load_avg_cfs_rq(u64 now, struct cfs_rq *cfs_rq);
