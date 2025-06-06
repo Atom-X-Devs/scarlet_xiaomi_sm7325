@@ -2374,6 +2374,7 @@ int aw882xx_cali_init(struct aw_cali_desc *cali_desc)
 	cali_desc->cali_re = 0;
 	cali_desc->cali_q = 0;
 	cali_desc->status = 0;
+	atomic_set(&cali_desc->cali_re_initialized, 0);
 
 	aw_cali_parse_dt(aw_dev);
 
