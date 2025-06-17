@@ -876,3 +876,12 @@ On same-directory ->rename() the (tautological) update of .. is not protected
 by any locks; just don't do it if the old parent is the same as the new one.
 We really can't lock two subdirectories in same-directory rename - not without
 deadlocks.
+
+---
+
+collect_mounts()/drop_collected_mounts()/iterate_mounts() are gone now.
+Replacement is collect_paths()/drop_collected_path(), with no special
+iterator needed.  Instead of a cloned mount tree, the new interface returns
+an array of struct path, one for each mount collect_mounts() would've
+created.  These struct path point to locations in the caller's namespace
+that would be roots of the cloned mounts.
