@@ -123,6 +123,7 @@ static int binderfs_binder_device_create(struct inode *ref_inode,
 	struct dentry *dentry, *root;
 	struct binder_device *device;
 	char *name = NULL;
+	size_t name_len;
 	struct inode *inode = NULL;
 	struct super_block *sb = ref_inode->i_sb;
 	struct binderfs_info *info = sb->s_fs_info;
@@ -169,6 +170,7 @@ static int binderfs_binder_device_create(struct inode *ref_inode,
 	name = kstrdup(req->name, GFP_KERNEL);
 	if (!name)
 		goto err;
+	name_len = strlen(name);
 
 	refcount_set(&device->ref, 1);
 	device->binderfs_inode = inode;
