@@ -67,11 +67,6 @@ struct kgsl_pwrscale {
 	unsigned int ctxt_aware_busy_penalty;
 	/** @busmondev: A child device for the busmon  governor */
 	struct device busmondev;
-	/**
-	 * @avoid_ddr_stall: Whether or not to increase IB vote on high
-	 * ddr stall
-	 */
-	bool avoid_ddr_stall;
 };
 
 /**
