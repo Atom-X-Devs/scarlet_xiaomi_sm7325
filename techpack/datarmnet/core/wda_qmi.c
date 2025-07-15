@@ -327,7 +327,7 @@ static void wda_svc_config(struct work_struct *work)
 
 	while (!rtnl_trylock()) {
 		if (!data->restart_state)
-			cond_resched();
+			msleep(1);
 		else
 			return;
 	}
@@ -348,7 +348,7 @@ static void wda_svc_config(struct work_struct *work)
 		return;
 	while (!rtnl_trylock()) {
 		if (!data->restart_state)
-			cond_resched();
+			msleep(1);
 		else
 			return;
 	}
