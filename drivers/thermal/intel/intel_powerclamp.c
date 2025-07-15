@@ -72,7 +72,7 @@ static unsigned int control_cpu; /* The cpu assigned to collect stat and update
 static bool clamping;
 
 static const struct sched_param sparam = {
-	.sched_priority = MAX_USER_RT_PRIO / 2,
+	.sched_priority = MAX_RT_PRIO / 2,
 };
 struct powerclamp_worker_data {
 	struct kthread_worker *worker;

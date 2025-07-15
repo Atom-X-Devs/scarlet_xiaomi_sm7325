@@ -139,17 +139,10 @@ uint32_t register_system_pm_ops(struct system_pm_ops *pm_ops)
 	return 0;
 }
 
-#ifdef CONFIG_SCHED_WALT
-static bool check_cpu_isolated(int cpu)
-{
-	return cpu_isolated(cpu);
-}
-#else
 static bool check_cpu_isolated(int cpu)
 {
 	return false;
 }
-#endif
 
 static uint32_t least_cluster_latency(struct lpm_cluster *cluster,
 					struct latency_level *lat_level)

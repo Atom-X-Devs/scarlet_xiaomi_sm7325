@@ -496,6 +496,17 @@ extern bool force_irqthreads;
 #define set_softirq_pending(x)	(__this_cpu_write(local_softirq_pending_ref, (x)))
 #define or_softirq_pending(x)	(__this_cpu_or(local_softirq_pending_ref, (x)))
 
+/**
+ * __cpu_softirq_pending() - Checks to see if softirq is pending on a cpu
+ *
+ * This helper is inherently racy, as we're accessing per-cpu data w/o locks.
+ * But peeking at the flag can still be useful when deciding where to place a
+ * task.
+ */
+static inline u32 __cpu_softirq_pending(int cpu)
+{
+	return (u32)per_cpu(local_softirq_pending_ref, cpu);
+}
 #endif /* local_softirq_pending */
 
 /* Some architectures might implement lazy enabling/disabling of
@@ -533,11 +544,10 @@ enum
 
 #define SOFTIRQ_STOP_IDLE_MASK (~(1 << RCU_SOFTIRQ))
 /* Softirq's where the handling might be long: */
-#define LONG_SOFTIRQ_MASK ((1 << NET_TX_SOFTIRQ)       | \
-			   (1 << NET_RX_SOFTIRQ)       | \
-			   (1 << BLOCK_SOFTIRQ)        | \
-			   (1 << IRQ_POLL_SOFTIRQ)     | \
-			   (1 << TASKLET_SOFTIRQ))
+#define LONG_SOFTIRQ_MASK (BIT(NET_TX_SOFTIRQ)    | \
+			   BIT(NET_RX_SOFTIRQ)    | \
+			   BIT(BLOCK_SOFTIRQ)     | \
+			   BIT(IRQ_POLL_SOFTIRQ))
 
 /* map softirq index to softirq name. update 'softirq_to_name' in
  * kernel/softirq.c when adding a new softirq.
@@ -573,7 +583,10 @@ extern void raise_softirq_irqoff(unsigned int nr);
 extern void raise_softirq(unsigned int nr);
 
 DECLARE_PER_CPU(struct task_struct *, ksoftirqd);
-DECLARE_PER_CPU(__u32, active_softirqs);
+
+#ifdef CONFIG_RT_SOFTIRQ_AWARE_SCHED
+DECLARE_PER_CPU(u32, active_softirqs);
+#endif
 
 static inline struct task_struct *this_cpu_ksoftirqd(void)
 {

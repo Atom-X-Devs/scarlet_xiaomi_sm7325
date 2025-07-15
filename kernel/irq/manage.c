@@ -1294,7 +1294,7 @@ setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
 {
 	struct task_struct *t;
 	struct sched_param param = {
-		.sched_priority = MAX_USER_RT_PRIO/2,
+		.sched_priority = MAX_RT_PRIO / 2,
 	};
 
 	if (!secondary) {

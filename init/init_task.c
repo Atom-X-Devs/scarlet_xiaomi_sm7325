@@ -63,7 +63,7 @@ struct task_struct init_task
 	.thread_info	= INIT_THREAD_INFO(init_task),
 	.stack_refcount	= REFCOUNT_INIT(1),
 #endif
-	.state		= 0,
+	.__state	= 0,
 	.stack		= init_stack,
 	.usage		= REFCOUNT_INIT(2),
 	.flags		= PF_KTHREAD,
@@ -74,12 +74,6 @@ struct task_struct init_task
 	.cpus_ptr	= &init_task.cpus_mask,
 	.cpus_mask	= CPU_MASK_ALL,
 	.nr_cpus_allowed= NR_CPUS,
-#ifdef CONFIG_SCHED_WALT
-	.wts		= {
-		.cpus_requested	= CPU_MASK_ALL,
-		.wake_up_idle	= false,
-	},
-#endif
 	.mm		= NULL,
 	.active_mm	= &init_mm,
 	.restart_block	= {

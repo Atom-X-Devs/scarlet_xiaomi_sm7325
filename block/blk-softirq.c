@@ -61,13 +61,8 @@ static void trigger_softirq(void *data)
 static int raise_blk_irq(int cpu, struct request *rq)
 {
 	if (cpu_online(cpu)) {
-		call_single_data_t *data = &rq->csd;
-
-		data->func = trigger_softirq;
-		data->info = rq;
-		data->flags = 0;
-
-		smp_call_function_single_async(cpu, data);
+		INIT_CSD(&rq->csd, trigger_softirq, rq);
+		smp_call_function_single_async(cpu, &rq->csd);
 		return 0;
 	}
 
