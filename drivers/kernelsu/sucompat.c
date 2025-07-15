@@ -8,14 +8,12 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
+#include <linux/ptrace.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/task_stack.h>
 #else
 #include <linux/sched.h>
 #endif
-
-/* current_user_stack_pointer */
-#include <linux/ptrace.h>
 
 #include "objsec.h"
 #include "allowlist.h"
@@ -60,7 +58,7 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 
 	const char su[] = SU_PATH;
 
-#ifndef KSU_HOOK_WITH_KPROBES
+#ifndef CONFIG_KSU_KPROBES_HOOK
 	if (!ksu_sucompat_hook_state) {
 		return 0;
 	}
@@ -87,7 +85,7 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 	// const char sh[] = SH_PATH;
 	const char su[] = SU_PATH;
 
-#ifndef KSU_HOOK_WITH_KPROBES
+#ifndef CONFIG_KSU_KPROBES_HOOK
 	if (!ksu_sucompat_hook_state) {
 		return 0;
 	}
@@ -123,7 +121,7 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 	const char sh[] = KSUD_PATH;
 	const char su[] = SU_PATH;
 
-#ifndef KSU_HOOK_WITH_KPROBES
+#ifndef CONFIG_KSU_KPROBES_HOOK
 	if (!ksu_sucompat_hook_state) {
 		return 0;
 	}
@@ -151,14 +149,52 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 	return 0;
 }
 
-int ksu_handle_devpts(struct inode *inode)
+int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
+			       void *__never_use_argv, void *__never_use_envp,
+			       int *__never_use_flags)
 {
-#ifndef KSU_HOOK_WITH_KPROBES
-	if (!ksu_sucompat_hook_state) {
-		return 0;
-	}
-#endif
+	const char su[] = SU_PATH;
+	char path[sizeof(su) + 1];
 
+	if (unlikely(!filename_user))
+		return 0;
+
+	/*
+	 * nofault variant fails silently due to pagefault_disable
+	 * some cpus dont really have that good speculative execution
+	 * access_ok to substitute set_fs, we check if pointer is accessible
+	 */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+	if (!access_ok(VERIFY_READ, *filename_user, sizeof(path)))
+		return 0;
+#else
+	if (!access_ok(*filename_user, sizeof(path)))
+		return 0;
+#endif
+	// success = returns number of bytes and should be less than path
+	long len = strncpy_from_user(path, *filename_user, sizeof(path));
+	if (len <= 0)
+		return 0;
+
+	// strncpy_from_user_nofault does this too
+	path[sizeof(path) - 1] = '\0';
+
+	if (likely(memcmp(path, su, sizeof(su))))
+		return 0;
+
+	if (!ksu_is_allow_uid(current_uid().val))
+		return 0;
+
+	pr_info("sys_execve su found\n");
+	*filename_user = ksud_user_path();
+
+	escape_to_root();
+
+	return 0;
+}
+
+static int ksu_inline_handle_devpts(struct inode *inode)
+{
 	if (!current->mm) {
 		return 0;
 	}
@@ -187,34 +223,23 @@ int ksu_handle_devpts(struct inode *inode)
 	return 0;
 }
 
-#ifdef KSU_HOOK_WITH_KPROBES
-
-int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
-			       void *__never_use_argv, void *__never_use_envp,
-			       int *__never_use_flags)
+int __ksu_handle_devpts(struct inode *inode)
 {
-	const char su[] = SU_PATH;
-	char path[sizeof(su) + 1];
-
-	if (unlikely(!filename_user))
+#ifndef CONFIG_KSU_KPROBES_HOOK
+	if (!ksu_sucompat_hook_state) {
 		return 0;
+	}
+#endif
+	return ksu_inline_handle_devpts(inode);
+}
 
-	memset(path, 0, sizeof(path));
-	ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
-
-	if (likely(memcmp(path, su, sizeof(su))))
-		return 0;
-
-	if (!ksu_is_allow_uid(current_uid().val))
-		return 0;
-
-	pr_info("sys_execve su found\n");
-	*filename_user = ksud_user_path();
-
-	escape_to_root();
-
+// dead code, we are phasing out ksu_handle_devpts for LSM hooks.
+int __maybe_unused ksu_handle_devpts(struct inode *inode)
+{
 	return 0;
 }
+
+#ifdef CONFIG_KSU_KPROBES_HOOK
 
 static int faccessat_handler_pre(struct kprobe *p, struct pt_regs *regs)
 {
@@ -248,14 +273,23 @@ static int execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
 					  NULL);
 }
 
+#ifdef MODULE
+static struct kprobe *su_kps[6];
 static int pts_unix98_lookup_pre(struct kprobe *p, struct pt_regs *regs)
 {
 	struct inode *inode;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 6, 0)
 	struct file *file = (struct file *)PT_REGS_PARM2(regs);
 	inode = file->f_path.dentry->d_inode;
+#else
+	inode = (struct inode *)PT_REGS_PARM2(regs);
+#endif
 
-	return ksu_handle_devpts(inode);
+	return ksu_inline_handle_devpts(inode);
 }
+#else
+static struct kprobe *su_kps[5];
+#endif
 
 static struct kprobe *init_kprobe(const char *name,
 				  kprobe_pre_handler_t handler)
@@ -286,37 +320,35 @@ static void destroy_kprobe(struct kprobe **kp_ptr)
 	kfree(kp);
 	*kp_ptr = NULL;
 }
-
-static struct kprobe *su_kps[6];
+#endif
 
 // sucompat: permited process can execute 'su' to gain root access.
 void ksu_sucompat_init()
 {
+#ifdef CONFIG_KSU_KPROBES_HOOK
 	su_kps[0] = init_kprobe(SYS_EXECVE_SYMBOL, execve_handler_pre);
 	su_kps[1] = init_kprobe(SYS_EXECVE_COMPAT_SYMBOL, execve_handler_pre);
 	su_kps[2] = init_kprobe(SYS_FACCESSAT_SYMBOL, faccessat_handler_pre);
 	su_kps[3] = init_kprobe(SYS_NEWFSTATAT_SYMBOL, newfstatat_handler_pre);
 	su_kps[4] = init_kprobe(SYS_FSTATAT64_SYMBOL, newfstatat_handler_pre);
+#ifdef MODULE
 	su_kps[5] = init_kprobe("pts_unix98_lookup", pts_unix98_lookup_pre);
+#endif
+#else
+	ksu_sucompat_hook_state = true;
+	pr_info("ksu_sucompat init\n");
+#endif
 }
 
 void ksu_sucompat_exit()
 {
+#ifdef CONFIG_KSU_KPROBES_HOOK
 	int i;
 	for (i = 0; i < ARRAY_SIZE(su_kps); i++) {
 		destroy_kprobe(&su_kps[i]);
 	}
-}
-#else // We still have non-GKI support!
-void ksu_sucompat_init()
-{
-	ksu_sucompat_hook_state = true;
-	pr_info("ksu_sucompat init\n");
-}
-
-void ksu_sucompat_exit()
-{
+#else
 	ksu_sucompat_hook_state = false;
 	pr_info("ksu_sucompat exit\n");
-}
 #endif
+}
