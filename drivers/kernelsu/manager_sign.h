@@ -1,5 +1,5 @@
-#ifndef MANAGER_SIGN_H
-#define MANAGER_SIGN_H
+#ifndef __KSU_H_MANAGER_SIGN
+#define __KSU_H_MANAGER_SIGN
 
 // rsuntk/KernelSU
 #define EXPECTED_SIZE_RSUNTK    0x396

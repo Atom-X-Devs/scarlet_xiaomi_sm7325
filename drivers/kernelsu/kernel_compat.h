@@ -3,6 +3,7 @@
 
 #include <linux/fs.h>
 #include <linux/version.h>
+#include <linux/cred.h>
 #include "ss/policydb.h"
 #include "linux/key.h"
 

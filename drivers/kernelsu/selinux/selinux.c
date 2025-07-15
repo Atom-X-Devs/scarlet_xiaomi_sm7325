@@ -34,6 +34,25 @@ static int transive_to_domain(const char *domain)
 	return error;
 }
 
+bool __maybe_unused is_ksu_transition(const struct task_security_struct *old_tsec,
+			const struct task_security_struct *new_tsec)
+{
+	static u32 ksu_sid;
+	char *secdata;
+	u32 seclen;
+	bool allowed = false;
+
+	if (!ksu_sid)
+		security_secctx_to_secid("u:r:su:s0", strlen("u:r:su:s0"), &ksu_sid);
+
+	if (security_secid_to_secctx(old_tsec->sid, &secdata, &seclen))
+		return false;
+
+	allowed = (!strcmp("u:r:init:s0", secdata) && new_tsec->sid == ksu_sid);
+	security_release_secctx(secdata, seclen);
+	return allowed;
+}
+
 void setup_selinux(const char *domain)
 {
 	if (transive_to_domain(domain)) {
