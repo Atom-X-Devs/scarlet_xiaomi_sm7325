@@ -493,6 +493,14 @@ sugov_update_shared(struct update_util_data *hook, u64 time, unsigned int flags)
 	struct sugov_policy *sg_policy = sg_cpu->sg_policy;
 	unsigned int next_f;
 
+	if (unlikely(!sg_policy || !sg_cpu || sg_cpu->sg_policy != sg_policy)) {
+		pr_emerg("CPU%d: UAF DETECTED! Policy:%px CPU:%px CPU->Policy:%px\n",
+			 smp_processor_id(), sg_policy, sg_cpu,
+			 sg_cpu ? sg_cpu->sg_policy : NULL);
+		dump_stack();
+		BUG();
+	}
+
 	raw_spin_lock(&sg_policy->update_lock);
 
 	sugov_iowait_boost(sg_cpu, time, flags);
