@@ -772,4 +772,15 @@ config KEYBOARD_MTK_PMIC
 	  To compile this driver as a module, choose M here: the
 	  module will be called pmic-keys.
 
+config VOLUMEUP_BUTTON_PANIC
+	bool "Button Panic"
+	depends on KEYBOARD_GPIO
+	default n
+	help
+	  Say Y here if you want to enable volume up button panic feature.
+	  This will cause the system to panic when the volume up button is pressed.
+	  This is useful for debugging purposes.
+
+	  If unsure, say N.
+
 endif
