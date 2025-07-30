@@ -1548,7 +1548,6 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
 			  unsigned long flags)
 {
 	enum hrtimer_restart (*fn)(struct hrtimer *);
-	bool expires_in_hardirq;
 	int restart;
 
 	lockdep_assert_held(&cpu_base->lock);
@@ -1583,11 +1582,11 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
 	 */
 	raw_spin_unlock_irqrestore(&cpu_base->lock, flags);
 	trace_hrtimer_expire_entry(timer, now);
-	expires_in_hardirq = lockdep_hrtimer_enter(timer);
+	lockdep_hrtimer_enter(timer);
 
 	restart = fn(timer);
 
-	lockdep_hrtimer_exit(expires_in_hardirq);
+	lockdep_hrtimer_exit(timer);
 	trace_hrtimer_expire_exit(timer);
 	raw_spin_lock_irq(&cpu_base->lock);
 
