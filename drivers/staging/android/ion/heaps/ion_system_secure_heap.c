@@ -113,6 +113,8 @@ static void process_one_prefetch(struct ion_heap *sys_heap,
 	int vmid;
 
 	memset(&buffer, 0, sizeof(struct ion_buffer));
+	mutex_init(&buffer.lock);
+
 	buffer.heap = sys_heap;
 
 	ret = sys_heap->ops->allocate(sys_heap, &buffer, info->size,
