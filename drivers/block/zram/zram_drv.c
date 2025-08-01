@@ -1598,9 +1598,9 @@ static int read_same_filled_page(struct zram *zram, struct page *page,
 {
 	void *mem;
 
-	mem = kmap_atomic(page);
+	mem = kmap_local_page(page);
 	zram_fill_page(mem, PAGE_SIZE, zram_get_handle(zram, index));
-	kunmap_atomic(mem);
+	kunmap_local(mem);
 	return 0;
 }
 
@@ -1612,9 +1612,9 @@ static int read_incompressible_page(struct zram *zram, struct page *page,
 
 	handle = zram_get_handle(zram, index);
 	src = zs_obj_read_begin(zram->mem_pool, handle, NULL);
-	dst = kmap_atomic(page);
+	dst = kmap_local_page(page);
 	copy_page(dst, src);
-	kunmap_atomic(dst);
+	kunmap_local(dst);
 	zs_obj_read_end(zram->mem_pool, handle, src);
 
 	return 0;
@@ -1634,9 +1634,9 @@ static int read_compressed_page(struct zram *zram, struct page *page, u32 index)
 
 	zstrm = zcomp_stream_get(zram->comps[prio]);
 	src = zs_obj_read_begin(zram->mem_pool, handle, zstrm->local_copy);
-	dst = kmap_atomic(page);
+	dst = kmap_local_page(page);
 	ret = zcomp_decompress(zram->comps[prio], zstrm, src, size, dst);
-	kunmap_atomic(dst);
+	kunmap_local(dst);
 	zs_obj_read_end(zram->mem_pool, handle, src);
 	zcomp_stream_put(zstrm);
 
@@ -1751,9 +1751,9 @@ static int write_incompressible_page(struct zram *zram, struct page *page,
 		return -ENOMEM;
 	}
 
-	src = kmap_atomic(page);
+	src = kmap_local_page(page);
 	zs_obj_write(zram->mem_pool, handle, src, PAGE_SIZE);
-	kunmap_atomic(src);
+	kunmap_local(src);
 
 	zram_slot_lock(zram, index);
 	zram_set_flag(zram, index, ZRAM_HUGE);
@@ -1784,17 +1784,17 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	zram_free_page(zram, index);
 	zram_slot_unlock(zram, index);
 
-	mem = kmap_atomic(page);
+	mem = kmap_local_page(page);
 	same_filled = page_same_filled(mem, &element);
-	kunmap_atomic(mem);
+	kunmap_local(mem);
 	if (same_filled)
 		return write_same_filled_page(zram, element, index);
 
 	zstrm = zcomp_stream_get(zram->comps[ZRAM_PRIMARY_COMP]);
-	mem = kmap_atomic(page);
+	mem = kmap_local_page(page);
 	ret = zcomp_compress(zram->comps[ZRAM_PRIMARY_COMP], zstrm,
 			     mem, &comp_len);
-	kunmap_atomic(mem);
+	kunmap_local(mem);
 
 	if (unlikely(ret)) {
 		zcomp_stream_put(zstrm);
@@ -1973,10 +1973,10 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 			continue;
 
 		zstrm = zcomp_stream_get(zram->comps[prio]);
-		src = kmap_atomic(page);
+		src = kmap_local_page(page);
 		ret = zcomp_compress(zram->comps[prio], zstrm,
 				     src, &comp_len_new);
-		kunmap_atomic(src);
+		kunmap_local(src);
 
 		if (ret) {
 			zcomp_stream_put(zstrm);
