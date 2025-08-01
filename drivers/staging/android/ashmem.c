@@ -54,14 +54,12 @@ static int ashmem_open(struct inode *inode, struct file *file)
 	if (unlikely(ret))
 		return ret;
 
-	asma = kmem_cache_alloc(ashmem_area_cachep, GFP_KERNEL);
+	asma = kmem_cache_zalloc(ashmem_area_cachep, GFP_KERNEL);
 	if (unlikely(!asma))
 		return -ENOMEM;
 
-	*asma = (typeof(*asma)){
-		.mmap_lock = __MUTEX_INITIALIZER(asma->mmap_lock),
-		.prot_mask = PROT_MASK
-	};
+	mutex_init(&asma->mmap_lock);
+	asma->prot_mask = PROT_MASK;
 
 	file->private_data = asma;
 
