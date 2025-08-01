@@ -601,6 +601,9 @@ static int i2c_pmic_probe(struct i2c_client *client,
 	if (!chip->regmap)
 		return -ENODEV;
 
+	chip->resume_completed = true;
+	mutex_init(&chip->irq_complete);
+
 	i2c_set_clientdata(client, chip);
 	if (!of_property_read_bool(chip->dev->of_node, "interrupt-controller"))
 		goto probe_children;
@@ -634,9 +637,6 @@ static int i2c_pmic_probe(struct i2c_client *client,
 			goto cleanup;
 		}
 	}
-
-	chip->resume_completed = true;
-	mutex_init(&chip->irq_complete);
 
 	rc = i2c_pmic_toggle_stat(chip);
 	if (rc < 0) {
