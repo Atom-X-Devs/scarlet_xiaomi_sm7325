@@ -16,8 +16,6 @@
 #include <soc/qcom/subsystem_restart.h>
 #include "msm_vidc_internal.h"
 
-#define CREATE_TRACE_POINTS
-
 // void disable_irq_nosync(unsigned int irq);
 // void enable_irq(unsigned int irq);
 
