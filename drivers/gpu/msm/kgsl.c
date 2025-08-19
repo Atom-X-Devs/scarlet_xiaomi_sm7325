@@ -328,6 +328,7 @@ static void kgsl_destroy_ion(struct kgsl_memdesc *memdesc)
 	}
 
 	memdesc->sgt = NULL;
+	entry->priv_data = NULL;
 }
 
 static const struct kgsl_memdesc_ops kgsl_dmabuf_ops = {
