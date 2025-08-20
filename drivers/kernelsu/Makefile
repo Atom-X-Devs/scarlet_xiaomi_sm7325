@@ -11,18 +11,20 @@ kernelsu-objs += kernel_compat.o
 kernelsu-objs += selinux/selinux.o
 kernelsu-objs += selinux/sepolicy.o
 kernelsu-objs += selinux/rules.o
+
 ccflags-y += -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include
 ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-generic/errno.h
+ccflags-y += -include $(srctree)/$(src)/include/ksu_creds.h
 
 obj-$(CONFIG_KSU) += kernelsu.o
 
-ccflags-y += -DKSU_VERSION=12219
+ccflags-y += -DKSU_VERSION=12250
 
 # Checks hooks state
 ifeq ($(strip $(CONFIG_KSU_MANUAL_HOOK)),y)
-$(info -- KernelSU: Manually-patched hook.)
+$(info -- KernelSU: CONFIG_KSU_MANUAL_HOOK)
 else
-$(info -- KernelSU: Kernel-probe hook.)
+$(info -- KernelSU: CONFIG_KSU_KPROBES_HOOK)
 ccflags-y += -DCONFIG_KSU_KPROBES_HOOK
 endif
 
@@ -53,25 +55,22 @@ ifeq ($(shell grep -q "CONFIG_KDP_CRED" $(srctree)/kernel/cred.c; echo $$?),0)
 ccflags-y += -DSAMSUNG_UH_DRIVER_EXIST
 endif
 
-ifndef KSU_EXPECTED_SIZE
-KSU_EXPECTED_SIZE := 0x033b
+# Custom Signs
+ifdef KSU_EXPECTED_SIZE
+ccflags-y += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
+# $(info -- Custom KernelSU Manager signature size: $(KSU_EXPECTED_SIZE))
 endif
-
-ifndef KSU_EXPECTED_HASH
-KSU_EXPECTED_HASH := c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
+ifdef KSU_EXPECTED_HASH
+ccflags-y += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
+# $(info -- Custom KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
 endif
 
 ifdef KSU_MANAGER_PACKAGE
 ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
-$(info -- KernelSU Manager package name: $(KSU_MANAGER_PACKAGE))
+# $(info -- KernelSU Manager package name: $(KSU_MANAGER_PACKAGE))
 endif
 
-# $(info -- KernelSU Manager signature size: $(KSU_EXPECTED_SIZE))
-# $(info -- KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
-# $(info -- Supported Unofficial Manager: rsuntk (Non-GKI), 5ec1cff (GKI)) 
-
-ccflags-y += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
-ccflags-y += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
+# $(info -- Supported KernelSU Manager(s): tiann, rsuntk, 5ec1cff) 
 
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function

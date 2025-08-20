@@ -44,13 +44,14 @@
 #include "manager.h"
 #include "selinux/selinux.h"
 #include "throne_tracker.h"
-#include "throne_tracker.h"
 #include "kernel_compat.h"
 
 static bool ksu_module_mounted = false;
 
+// selinux/rules.c
 extern int handle_sepolicy(unsigned long arg3, void __user *arg4);
 
+// sucompat.c
 static bool ksu_su_compat_enabled = true;
 extern void ksu_sucompat_init();
 extern void ksu_sucompat_exit();
@@ -61,7 +62,7 @@ static inline bool is_allow_su()
 		// we are manager, allow!
 		return true;
 	}
-	return ksu_is_allow_uid(current_uid().val);
+	return ksu_is_allow_uid(ksu_current_uid());
 }
 
 static inline bool is_unsupported_uid(uid_t uid)
@@ -117,9 +118,10 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 	put_group_info(group_info);
 }
 
-static void disable_seccomp(void)
+static void disable_seccomp(struct task_struct *tsk)
 {
-	assert_spin_locked(&current->sighand->siglock);
+	assert_spin_locked(&tsk->sighand->siglock);
+
 	// disable seccomp
 #if defined(CONFIG_GENERIC_ENTRY) &&                                           \
 	LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
@@ -129,40 +131,50 @@ static void disable_seccomp(void)
 #endif
 
 #ifdef CONFIG_SECCOMP
-	current->seccomp.mode = 0;
-	current->seccomp.filter = NULL;
+	tsk->seccomp.mode = 0;
+	if (tsk->seccomp.filter) {
+	// TODO: Add kernel 6.11+ support
+	// 5.9+ have filter_count and use seccomp_filter_release
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+		seccomp_filter_release(tsk);
+		atomic_set(&tsk->seccomp.filter_count, 0);
 #else
+		put_seccomp_filter(tsk);
+		tsk->seccomp.filter = NULL;
+#endif
+	}
 #endif
 }
 
 void escape_to_root(void)
 {
-	struct cred *cred;
-
-	cred = prepare_creds();
-	if (!cred) {
+	struct cred *newcreds = prepare_creds();
+	if (newcreds == NULL) {
 		pr_err("%s: failed to allocate new cred.\n", __func__);
 		return;
 	}
 
-	if (cred->euid.val == 0) {
+	if (ksu_cred_euid(newcreds) == 0) {
 		pr_warn("Already root, don't escape!\n");
-		abort_creds(cred);
+		abort_creds(newcreds);
 		return;
 	}
 
-	struct root_profile *profile = ksu_get_root_profile(cred->uid.val);
+	struct root_profile *profile =
+		ksu_get_root_profile(ksu_cred_uid(newcreds));
 
-	cred->uid.val = profile->uid;
-	cred->suid.val = profile->uid;
-	cred->euid.val = profile->uid;
-	cred->fsuid.val = profile->uid;
+	ksu_cred_uid(newcreds) = profile->uid;
+	ksu_cred_suid(newcreds) = profile->uid;
+	ksu_cred_euid(newcreds) = profile->uid;
+	ksu_cred_fsuid(newcreds) = profile->uid;
 
-	cred->gid.val = profile->gid;
-	cred->fsgid.val = profile->gid;
-	cred->sgid.val = profile->gid;
-	cred->egid.val = profile->gid;
-	cred->securebits = 0;
+	ksu_cred_gid(newcreds) = profile->gid;
+	ksu_cred_fsgid(newcreds) = profile->gid;
+	ksu_cred_sgid(newcreds) = profile->gid;
+	ksu_cred_egid(newcreds) = profile->gid;
+
+	// no wrapper, ignore it.
+	newcreds->securebits = 0;
 
 	BUILD_BUG_ON(sizeof(profile->capabilities.effective) !=
 		     sizeof(kernel_cap_t));
@@ -172,26 +184,22 @@ void escape_to_root(void)
 	// we add it here but don't add it to cap_inhertiable, it would be dropped automaticly after exec!
 	u64 cap_for_ksud =
 		profile->capabilities.effective | CAP_DAC_READ_SEARCH;
-	memcpy(&cred->cap_effective, &cap_for_ksud,
-	       sizeof(cred->cap_effective));
-	memcpy(&cred->cap_permitted, &profile->capabilities.effective,
-	       sizeof(cred->cap_permitted));
-	memcpy(&cred->cap_bset, &profile->capabilities.effective,
-	       sizeof(cred->cap_bset));
+	memcpy(&newcreds->cap_effective, &cap_for_ksud,
+	       sizeof(newcreds->cap_effective));
+	memcpy(&newcreds->cap_permitted, &profile->capabilities.effective,
+	       sizeof(newcreds->cap_permitted));
+	memcpy(&newcreds->cap_bset, &profile->capabilities.effective,
+	       sizeof(newcreds->cap_bset));
 	// set ambient caps to all-zero
 	// fixes "operation not permitted" on dbus cap dropping
-	memset(&cred->cap_ambient, 0, sizeof(cred->cap_ambient));
+	memset(&newcreds->cap_ambient, 0, sizeof(newcreds->cap_ambient));
 
-	setup_groups(profile, cred);
+	setup_groups(profile, newcreds);
+	commit_creds(newcreds);
 
-	commit_creds(cred);
-
-	// Refer to kernel/seccomp.c: seccomp_set_mode_strict
-	// When disabling Seccomp, ensure that current->sighand->siglock is held during the operation.
 	spin_lock_irq(&current->sighand->siglock);
-	disable_seccomp();
+	disable_seccomp(current);
 	spin_unlock_irq(&current->sighand->siglock);
-
 	setup_selinux(profile->selinux_domain);
 }
 
@@ -202,7 +210,7 @@ int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
 		return 0;
 	}
 
-	if (current_uid().val != 1000) {
+	if (ksu_current_uid() != 1000) {
 		// skip non system uid
 		return 0;
 	}
@@ -270,14 +278,14 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 	}
 
 	// TODO: find it in throne tracker!
-	uid_t current_uid_val = current_uid().val;
+	uid_t current_uid_val = ksu_current_uid();
 	uid_t manager_uid = ksu_get_manager_uid();
 	if (current_uid_val != manager_uid &&
 	    current_uid_val % 100000 == manager_uid) {
 		ksu_set_manager_uid(current_uid_val);
 	}
 
-	bool from_root = 0 == current_uid().val;
+	bool from_root = 0 == ksu_current_uid();
 	bool from_manager = is_manager();
 
 	if (!from_root && !from_manager) {
@@ -301,7 +309,7 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 
 	if (arg2 == CMD_GRANT_ROOT) {
 		if (is_allow_su()) {
-			pr_info("allow root for: %d\n", current_uid().val);
+			pr_info("allow root for: %d\n", ksu_current_uid());
 			escape_to_root();
 			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
 				pr_err("grant_root: prctl reply error\n");
@@ -494,7 +502,7 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 		bool enabled = (arg3 != 0);
 		if (enabled == ksu_su_compat_enabled) {
 			pr_info("cmd enable su but no need to change.\n");
-			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {// return the reply_ok directly
+			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
 				pr_err("prctl reply error, cmd: %lu\n", arg2);
 			}
 			return 0;
@@ -531,7 +539,7 @@ static bool should_umount(struct path *path)
 
 	if (current->nsproxy->mnt_ns == init_nsproxy.mnt_ns) {
 		pr_info("ignore global mnt namespace process: %d\n",
-			current_uid().val);
+			ksu_current_uid());
 		return false;
 	}
 
@@ -548,8 +556,8 @@ static void ksu_path_umount(const char *mnt, struct path *path, int flags)
 	int ret = path_umount(path, flags);
 	pr_info("%s: path: %s ret: %d\n", __func__, mnt, ret);
 }
+#define ksu_umount_mnt(mnt, path, flags)	(ksu_path_umount(mnt, path, flags))
 #else
-// TODO: Search a way to make this works without set_fs functions
 static void ksu_sys_umount(const char *mnt, int flags)
 {
 	char __user *usermnt = (char __user *)mnt;
@@ -566,7 +574,14 @@ static void ksu_sys_umount(const char *mnt, int flags)
 	set_fs(old_fs);
 	pr_info("%s: path: %s ret: %d\n", __func__, usermnt, ret);
 }
-#endif
+
+#define ksu_umount_mnt(mnt, __unused, flags)	\
+	({					\
+		path_put(__unused);		\
+		ksu_sys_umount(mnt, flags);	\
+	})
+
+#endif 
 
 static void try_umount(const char *mnt, bool check_mnt, int flags)
 {
@@ -588,11 +603,7 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
 		return;
 	}
 
-#ifdef KSU_HAS_PATH_UMOUNT
-	ksu_path_umount(mnt, &path, flags);
-#else
-	ksu_sys_umount(mnt, flags);
-#endif
+	ksu_umount_mnt(mnt, &path, flags);
 }
 
 int ksu_handle_setuid(struct cred *new, const struct cred *old)

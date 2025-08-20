@@ -37,7 +37,6 @@ static struct policydb *get_policydb(void)
 }
 
 static DEFINE_MUTEX(ksu_rules);
-
 void apply_kernelsu_rules()
 {
 	struct policydb *db;
@@ -47,7 +46,7 @@ void apply_kernelsu_rules()
 	}
 
 	mutex_lock(&ksu_rules);
-	
+
 	db = get_policydb();
 
 	ksu_permissive(db, KERNEL_SU_DOMAIN);
@@ -139,6 +138,9 @@ void apply_kernelsu_rules()
 	// Allow system server kill su process
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
+
+	// https://android-review.googlesource.com/c/platform/system/logging/+/3725346
+	ksu_dontaudit(db, "untrusted_app", KERNEL_SU_DOMAIN, "dir", "getattr");
 
 	mutex_unlock(&ksu_rules);
 }
