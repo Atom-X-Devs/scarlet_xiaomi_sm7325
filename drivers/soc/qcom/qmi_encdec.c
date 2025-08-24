@@ -3,6 +3,8 @@
  * Copyright (c) 2012-2015, 2019 The Linux Foundation. All rights reserved.
  * Copyright (C) 2017 Linaro Ltd.
  */
+
+#include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/module.h>
@@ -763,7 +765,7 @@ void *qmi_encode_message(int type, unsigned int msg_id, size_t *len,
 		}
 	}
 
-	msg = kzalloc(sizeof(*hdr) + *len, GFP_KERNEL);
+	msg = kvzalloc(sizeof(*hdr) + *len, GFP_KERNEL);
 	if (!msg)
 		return ERR_PTR(-ENOMEM);
 
@@ -771,7 +773,7 @@ void *qmi_encode_message(int type, unsigned int msg_id, size_t *len,
 	if (c_struct) {
 		msglen = qmi_encode(ei, msg + sizeof(*hdr), c_struct, *len, 1);
 		if (msglen < 0) {
-			kfree(msg);
+			kvfree(msg);
 			return ERR_PTR(msglen);
 		}
 	}
