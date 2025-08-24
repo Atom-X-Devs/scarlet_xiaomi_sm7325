@@ -797,7 +797,7 @@ static ssize_t qmi_send_message(struct qmi_handle *qmi,
 	}
 	mutex_unlock(&qmi->sock_lock);
 
-	kfree(msg);
+	kvfree(msg);
 
 	return ret < 0 ? ret : 0;
 }
