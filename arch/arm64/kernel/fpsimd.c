@@ -308,8 +308,12 @@ static void fpsimd_save(void)
 			sve_save_state((char *)last->sve_state +
 						sve_ffr_offset(last->sve_vl),
 				       &last->st->fpsr);
-		} else
+		} else {
+			if (WARN_ON(!last || !last->st))
+				pr_warn("RIP! NULL pointer alert, panic incoming\n");
+
 			fpsimd_save_state(last->st);
+		}
 	}
 }
 
