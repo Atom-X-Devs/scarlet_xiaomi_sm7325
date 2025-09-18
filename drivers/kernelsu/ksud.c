@@ -52,9 +52,9 @@ static const char KERNEL_SU_RC[] =
 
 	"\n";
 
-static void stop_vfs_read_hook();
-static void stop_execve_hook();
-static void stop_input_hook();
+static void stop_vfs_read_hook(void);
+static void stop_execve_hook(void);
+static void stop_input_hook(void);
 
 #ifdef CONFIG_KSU_KPROBES_HOOK
 static struct work_struct stop_vfs_read_work;
@@ -612,7 +612,7 @@ int __maybe_unused ksu_handle_compat_execve_ksud(const char __user *filename_use
 
 #endif
 
-static void stop_vfs_read_hook()
+static void stop_vfs_read_hook(void)
 {
 #ifdef CONFIG_KSU_KPROBES_HOOK
 	bool ret = schedule_work(&stop_vfs_read_work);
@@ -623,7 +623,7 @@ static void stop_vfs_read_hook()
 #endif
 }
 
-static void stop_execve_hook()
+static void stop_execve_hook(void)
 {
 #ifdef CONFIG_KSU_KPROBES_HOOK
 	bool ret = schedule_work(&stop_execve_hook_work);
@@ -634,7 +634,7 @@ static void stop_execve_hook()
 #endif
 }
 
-static void stop_input_hook()
+static void stop_input_hook(void)
 {
 #ifdef CONFIG_KSU_KPROBES_HOOK
 	static bool input_hook_stopped = false;
@@ -652,7 +652,7 @@ static void stop_input_hook()
 }
 
 // ksud: module support
-void ksu_ksud_init()
+void ksu_ksud_init(void)
 {
 #ifdef CONFIG_KSU_KPROBES_HOOK
 	int ret;
@@ -672,7 +672,7 @@ void ksu_ksud_init()
 #endif
 }
 
-void ksu_ksud_exit()
+void ksu_ksud_exit(void)
 {
 #ifdef CONFIG_KSU_KPROBES_HOOK
 	unregister_kprobe(&execve_kp);

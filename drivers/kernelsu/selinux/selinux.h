@@ -14,12 +14,12 @@ void setenforce(bool);
 
 bool getenforce(void);
 
-bool is_ksu_domain();
+bool is_ksu_domain(void);
 
 bool is_zygote(void *cred);
 
-void apply_kernelsu_rules();
+void apply_kernelsu_rules(void);
 
-u32 ksu_get_devpts_sid();
+u32 ksu_get_devpts_sid(void);
 
 #endif

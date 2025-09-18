@@ -28,7 +28,7 @@
 static const char su[] = SU_PATH;
 static const char ksud_path[] = KSUD_PATH;
 
-extern void escape_to_root();
+extern void escape_to_root(void);
 
 bool ksu_sucompat_hook_state __read_mostly = true;
 
@@ -58,7 +58,7 @@ static inline bool __is_su_allowed(const void *ptr_to_check)
 	if (!ksu_sucompat_hook_state)
 		return false;
 #endif
-	if (likely(!ksu_is_allow_uid(ksu_current_uid())))
+	if (likely(!ksu_is_allow_uid(current_uid().val)))
 		return false;
 
 	if (unlikely(!ptr_to_check))
@@ -143,13 +143,18 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 	return 0;
 }
 
-static int ksu_inline_handle_devpts(struct inode *inode)
+int ksu_handle_devpts(struct inode *inode)
 {
+#ifndef CONFIG_KSU_KPROBES_HOOK
+	if (!ksu_sucompat_hook_state)
+		return 0;
+#endif
+
 	if (!current->mm) {
 		return 0;
 	}
 
-	uid_t uid = ksu_current_uid();
+	uid_t uid = current_uid().val;
 	if (uid % 100000 < 10000) {
 		// not untrusted_app, ignore it
 		return 0;
@@ -159,7 +164,7 @@ static int ksu_inline_handle_devpts(struct inode *inode)
 		return 0;
 
 	if (ksu_devpts_sid) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0) || defined(KSU_OPTIONAL_SELINUX_INODE)
 		struct inode_security_struct *sec = selinux_inode(inode);
 #else
 		struct inode_security_struct *sec =
@@ -170,21 +175,6 @@ static int ksu_inline_handle_devpts(struct inode *inode)
 		}
 	}
 
-	return 0;
-}
-
-int __ksu_handle_devpts(struct inode *inode)
-{
-#ifndef CONFIG_KSU_KPROBES_HOOK
-	if (!ksu_sucompat_hook_state)
-		return 0;
-#endif
-	return ksu_inline_handle_devpts(inode);
-}
-
-// dead code, we are phasing out ksu_handle_devpts for LSM hooks.
-int __maybe_unused ksu_handle_devpts(struct inode *inode)
-{
 	return 0;
 }
 
@@ -222,7 +212,6 @@ static int execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
 					  NULL);
 }
 
-#ifdef MODULE
 static struct kprobe *su_kps[6];
 static int pts_unix98_lookup_pre(struct kprobe *p, struct pt_regs *regs)
 {
@@ -234,11 +223,8 @@ static int pts_unix98_lookup_pre(struct kprobe *p, struct pt_regs *regs)
 	inode = (struct inode *)PT_REGS_PARM2(regs);
 #endif
 
-	return ksu_inline_handle_devpts(inode);
+	return ksu_handle_devpts(inode);
 }
-#else
-static struct kprobe *su_kps[5];
-#endif
 
 static struct kprobe *init_kprobe(const char *name,
 				  kprobe_pre_handler_t handler)
@@ -272,7 +258,7 @@ static void destroy_kprobe(struct kprobe **kp_ptr)
 #endif
 
 // sucompat: permited process can execute 'su' to gain root access.
-void ksu_sucompat_init()
+void ksu_sucompat_init(void)
 {
 #ifdef CONFIG_KSU_KPROBES_HOOK
 	su_kps[0] = init_kprobe(SYS_EXECVE_SYMBOL, execve_handler_pre);
@@ -280,16 +266,14 @@ void ksu_sucompat_init()
 	su_kps[2] = init_kprobe(SYS_FACCESSAT_SYMBOL, faccessat_handler_pre);
 	su_kps[3] = init_kprobe(SYS_NEWFSTATAT_SYMBOL, newfstatat_handler_pre);
 	su_kps[4] = init_kprobe(SYS_FSTATAT64_SYMBOL, newfstatat_handler_pre);
-#ifdef MODULE
 	su_kps[5] = init_kprobe("pts_unix98_lookup", pts_unix98_lookup_pre);
-#endif
 #else
 	ksu_sucompat_hook_state = true;
 	pr_info("ksu_sucompat init\n");
 #endif
 }
 
-void ksu_sucompat_exit()
+void ksu_sucompat_exit(void)
 {
 #ifdef CONFIG_KSU_KPROBES_HOOK
 	int i;

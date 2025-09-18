@@ -61,7 +61,7 @@ static bool android_context_saved_checked = false;
 static bool android_context_saved_enabled = false;
 static struct ksu_ns_fs_saved android_context_saved;
 
-void ksu_android_ns_fs_check()
+void ksu_android_ns_fs_check(void)
 {
 	if (android_context_saved_checked)
 		return;

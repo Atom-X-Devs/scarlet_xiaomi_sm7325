@@ -310,7 +310,7 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
 	return exist;
 }
 
-void track_throne()
+void track_throne(void)
 {
 	struct file *fp =
 		ksu_filp_open_compat(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
@@ -405,12 +405,12 @@ out:
 	}
 }
 
-void ksu_throne_tracker_init()
+void ksu_throne_tracker_init(void)
 {
 	// nothing to do
 }
 
-void ksu_throne_tracker_exit()
+void ksu_throne_tracker_exit(void)
 {
 	// nothing to do
 }

@@ -50,10 +50,10 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 					    flags);
 }
 
-extern void ksu_sucompat_init();
-extern void ksu_sucompat_exit();
-extern void ksu_ksud_init();
-extern void ksu_ksud_exit();
+extern void ksu_sucompat_init(void);
+extern void ksu_sucompat_exit(void);
+extern void ksu_ksud_init(void);
+extern void ksu_ksud_exit(void);
 
 int __init kernelsu_init(void)
 {
