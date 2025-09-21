@@ -4386,8 +4386,10 @@ static int dwc3_msm_interconnect_vote_populate(struct dwc3_msm *mdwc)
 		return -ENOMEM;
 
 	vv_svs = kzalloc(count * 2 * sizeof(*vv_svs), GFP_KERNEL);
-	if (!vv_svs)
+	if (!vv_svs) {
+		kfree(vv_nom);
 		return -ENOMEM;
+	}
 
 	/* of_property_read_u32_array returns 0 on success */
 	ret_nom = of_property_read_u32_array(mdwc->dev->of_node,
