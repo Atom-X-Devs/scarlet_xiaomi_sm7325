@@ -2062,7 +2062,7 @@ unknown_cmnd:
 		sprintf(unknown, "Unknown x%02x", common->cmnd[0]);
 		reply = check_command(common, common->cmnd_size,
 				      DATA_DIR_UNKNOWN, ~0, 0, unknown);
-		if (reply == 0) {
+		if (reply == 0 && common->curlun) {
 			common->curlun->sense_data = SS_INVALID_COMMAND;
 			reply = -EINVAL;
 		}
