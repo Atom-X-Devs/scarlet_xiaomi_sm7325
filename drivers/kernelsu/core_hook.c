@@ -44,18 +44,19 @@
 #include "manager.h"
 #include "selinux/selinux.h"
 #include "throne_tracker.h"
-#include "throne_tracker.h"
 #include "kernel_compat.h"
 
 static bool ksu_module_mounted = false;
 
+// selinux/rules.c
 extern int handle_sepolicy(unsigned long arg3, void __user *arg4);
 
+// sucompat.c
 static bool ksu_su_compat_enabled = true;
-extern void ksu_sucompat_init();
-extern void ksu_sucompat_exit();
+extern void ksu_sucompat_init(void);
+extern void ksu_sucompat_exit(void);
 
-static inline bool is_allow_su()
+static inline bool is_allow_su(void)
 {
 	if (is_manager()) {
 		// we are manager, allow!
@@ -64,7 +65,7 @@ static inline bool is_allow_su()
 	return ksu_is_allow_uid(current_uid().val);
 }
 
-static inline bool is_unsupported_uid(uid_t uid)
+static inline bool is_unsupported_app_uid(uid_t uid)
 {
 #define LAST_APPLICATION_UID 19999
 	uid_t appid = uid % 100000;
@@ -117,9 +118,10 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 	put_group_info(group_info);
 }
 
-static void disable_seccomp(void)
+static void disable_seccomp(struct task_struct *tsk)
 {
-	assert_spin_locked(&current->sighand->siglock);
+	assert_spin_locked(&tsk->sighand->siglock);
+
 	// disable seccomp
 #if defined(CONFIG_GENERIC_ENTRY) &&                                           \
 	LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
@@ -129,40 +131,49 @@ static void disable_seccomp(void)
 #endif
 
 #ifdef CONFIG_SECCOMP
-	current->seccomp.mode = 0;
-	current->seccomp.filter = NULL;
+	tsk->seccomp.mode = 0;
+	if (tsk->seccomp.filter) {
+	// TODO: Add kernel 6.11+ support
+	// 5.9+ have filter_count and use seccomp_filter_release
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+		seccomp_filter_release(tsk);
+		atomic_set(&tsk->seccomp.filter_count, 0);
 #else
+		put_seccomp_filter(tsk);
+		tsk->seccomp.filter = NULL;
+#endif
+	}
 #endif
 }
 
 void escape_to_root(void)
 {
-	struct cred *cred;
+	struct cred *newcreds;
 
-	cred = prepare_creds();
-	if (!cred) {
+	if (current_euid().val == 0) {
+		pr_warn("Already root, don't escape!\n");
+		return;
+	}
+
+	newcreds = prepare_creds();
+	if (newcreds == NULL) {
 		pr_err("%s: failed to allocate new cred.\n", __func__);
 		return;
 	}
 
-	if (cred->euid.val == 0) {
-		pr_warn("Already root, don't escape!\n");
-		abort_creds(cred);
-		return;
-	}
+	struct root_profile *profile =
+		ksu_get_root_profile(newcreds->uid.val);
 
-	struct root_profile *profile = ksu_get_root_profile(cred->uid.val);
+	newcreds->uid.val = profile->uid;
+	newcreds->suid.val = profile->uid;
+	newcreds->euid.val = profile->uid;
+	newcreds->fsuid.val = profile->uid;
 
-	cred->uid.val = profile->uid;
-	cred->suid.val = profile->uid;
-	cred->euid.val = profile->uid;
-	cred->fsuid.val = profile->uid;
-
-	cred->gid.val = profile->gid;
-	cred->fsgid.val = profile->gid;
-	cred->sgid.val = profile->gid;
-	cred->egid.val = profile->gid;
-	cred->securebits = 0;
+	newcreds->gid.val = profile->gid;
+	newcreds->fsgid.val = profile->gid;
+	newcreds->sgid.val = profile->gid;
+	newcreds->egid.val = profile->gid;
+	newcreds->securebits = 0;
 
 	BUILD_BUG_ON(sizeof(profile->capabilities.effective) !=
 		     sizeof(kernel_cap_t));
@@ -172,24 +183,21 @@ void escape_to_root(void)
 	// we add it here but don't add it to cap_inhertiable, it would be dropped automaticly after exec!
 	u64 cap_for_ksud =
 		profile->capabilities.effective | CAP_DAC_READ_SEARCH;
-	memcpy(&cred->cap_effective, &cap_for_ksud,
-	       sizeof(cred->cap_effective));
-	memcpy(&cred->cap_permitted, &profile->capabilities.effective,
-	       sizeof(cred->cap_permitted));
-	memcpy(&cred->cap_bset, &profile->capabilities.effective,
-	       sizeof(cred->cap_bset));
+	memcpy(&newcreds->cap_effective, &cap_for_ksud,
+	       sizeof(newcreds->cap_effective));
+	memcpy(&newcreds->cap_permitted, &profile->capabilities.effective,
+	       sizeof(newcreds->cap_permitted));
+	memcpy(&newcreds->cap_bset, &profile->capabilities.effective,
+	       sizeof(newcreds->cap_bset));
 	// set ambient caps to all-zero
 	// fixes "operation not permitted" on dbus cap dropping
-	memset(&cred->cap_ambient, 0, sizeof(cred->cap_ambient));
+	memset(&newcreds->cap_ambient, 0, sizeof(newcreds->cap_ambient));
 
-	setup_groups(profile, cred);
+	setup_groups(profile, newcreds);
+	commit_creds(newcreds);
 
-	commit_creds(cred);
-
-	// Refer to kernel/seccomp.c: seccomp_set_mode_strict
-	// When disabling Seccomp, ensure that current->sighand->siglock is held during the operation.
 	spin_lock_irq(&current->sighand->siglock);
-	disable_seccomp();
+	disable_seccomp(current);
 	spin_unlock_irq(&current->sighand->siglock);
 
 	setup_selinux(profile->selinux_domain);
@@ -235,7 +243,8 @@ int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
 }
 
 #ifdef CONFIG_EXT4_FS
-static void nuke_ext4_sysfs() {
+static void nuke_ext4_sysfs(void)
+{
 	struct path path;
 	int err = kern_path("/data/adb/modules", 0, &path);
 	if (err) {
@@ -255,7 +264,9 @@ static void nuke_ext4_sysfs() {
 	path_put(&path);
 }
 #else
-static inline void nuke_ext4_sysfs() { }
+static inline void nuke_ext4_sysfs(void)
+{
+}
 #endif
 
 int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
@@ -313,15 +324,22 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 	// Both root manager and root processes should be allowed to get version
 	if (arg2 == CMD_GET_VERSION) {
 		u32 version = KERNEL_SU_VERSION;
-		if (copy_to_user(arg3, &version, sizeof(version))) {
+		if (arg3 &&
+		    copy_to_user(arg3, &version, sizeof(version))) {
 			pr_err("prctl reply error, cmd: %lu\n", arg2);
 		}
-		u32 is_lkm = 0x0;
+		u32 flags = 0;
+#ifdef CONFIG_KSU_MANUAL_HOOK
+		flags |= KSU_FLAG_HOOK_MANUAL;
+#else
 #ifdef MODULE
-		is_lkm = 0x1; // override 0x0
+		flags |= KSU_FLAG_MODE_LKM;
+#else
+		flags |= KSU_FLAG_HOOK_KP;
+#endif
 #endif
 		if (arg4 &&
-		    copy_to_user(arg4, &is_lkm, sizeof(is_lkm))) {
+		    copy_to_user(arg4, &flags, sizeof(flags))) {
 			pr_err("prctl reply error, cmd: %lu\n", arg2);
 		}
 		return 0;
@@ -494,7 +512,7 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 		bool enabled = (arg3 != 0);
 		if (enabled == ksu_su_compat_enabled) {
 			pr_info("cmd enable su but no need to change.\n");
-			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {// return the reply_ok directly
+			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
 				pr_err("prctl reply error, cmd: %lu\n", arg2);
 			}
 			return 0;
@@ -513,14 +531,13 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 	return 0;
 }
 
-static bool is_appuid(kuid_t uid)
+static bool is_non_appuid(kuid_t uid)
 {
 #define PER_USER_RANGE 100000
 #define FIRST_APPLICATION_UID 10000
-#define LAST_APPLICATION_UID 19999
 
 	uid_t appid = uid.val % PER_USER_RANGE;
-	return appid >= FIRST_APPLICATION_UID && appid <= LAST_APPLICATION_UID;
+	return appid < FIRST_APPLICATION_UID;
 }
 
 static bool should_umount(struct path *path)
@@ -543,14 +560,13 @@ static bool should_umount(struct path *path)
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) || defined(KSU_HAS_PATH_UMOUNT)
-static void ksu_path_umount(const char *mnt, struct path *path, int flags)
+static int ksu_path_umount(struct path *path, int flags)
 {
-	int ret = path_umount(path, flags);
-	pr_info("%s: path: %s ret: %d\n", __func__, mnt, ret);
+	return path_umount(path, flags);
 }
+#define ksu_umount_mnt(__unused, path, flags)	(ksu_path_umount(path, flags))
 #else
-// TODO: Search a way to make this works without set_fs functions
-static void ksu_sys_umount(const char *mnt, int flags)
+static int ksu_sys_umount(const char *mnt, int flags)
 {
 	char __user *usermnt = (char __user *)mnt;
 	mm_segment_t old_fs;
@@ -564,13 +580,24 @@ static void ksu_sys_umount(const char *mnt, int flags)
 	ret = sys_umount(usermnt, flags); // cuz asmlinkage long sys##name
 #endif
 	set_fs(old_fs);
-	pr_info("%s: path: %s ret: %d\n", __func__, usermnt, ret);
+	pr_info("%s was called, ret: %d\n", __func__, ret);
+	return ret;
 }
+
+#define ksu_umount_mnt(mnt, __unused, flags)		\
+	({						\
+		int ret;				\
+		path_put(__unused);			\
+		ret = ksu_sys_umount(mnt, flags);	\
+		ret;					\
+	})
+
 #endif
 
 static void try_umount(const char *mnt, bool check_mnt, int flags)
 {
 	struct path path;
+	int ret;
 	int err = kern_path(mnt, 0, &path);
 	if (err) {
 		return;
@@ -588,11 +615,12 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
 		return;
 	}
 
-#ifdef KSU_HAS_PATH_UMOUNT
-	ksu_path_umount(mnt, &path, flags);
-#else
-	ksu_sys_umount(mnt, flags);
+	ret = ksu_umount_mnt(mnt, &path, flags);
+	if (ret) {
+#ifdef CONFIG_KSU_DEBUG
+		pr_info("%s: path: %s, ret: %d\n", __func__, mnt, ret);
 #endif
+	}
 }
 
 int ksu_handle_setuid(struct cred *new, const struct cred *old)
@@ -614,13 +642,25 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 		return 0;
 	}
 
-	if (!is_appuid(new_uid) || is_unsupported_uid(new_uid.val)) {
-		// pr_info("handle setuid ignore non application or isolated uid: %d\n", new_uid.val);
+	if (is_non_appuid(new_uid)) {
+#ifdef CONFIG_KSU_DEBUG
+		pr_info("handle setuid ignore non application uid: %d\n", new_uid.val);
+#endif
 		return 0;
 	}
 
+	// isolated process may be directly forked from zygote, always unmount
+	if (is_unsupported_app_uid(new_uid.val)) {
+#ifdef CONFIG_KSU_DEBUG
+		pr_info("handle umount for unsupported application uid: %d\n", new_uid.val);
+#endif
+		goto do_umount;
+	}
+
 	if (ksu_is_allow_uid(new_uid.val)) {
-		// pr_info("handle setuid ignore allowed application: %d\n", new_uid.val);
+#ifdef CONFIG_KSU_DEBUG
+		pr_info("handle setuid ignore allowed application: %d\n", new_uid.val);
+#endif
 		return 0;
 	}
 
@@ -632,11 +672,11 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 #endif
 	}
 
+do_umount:
 	// check old process's selinux context, if it is not zygote, ignore it!
 	// because some su apps may setuid to untrusted_app but they are in global mount namespace
 	// when we umount for such process, that is a disaster!
-	bool is_zygote_child = is_zygote(old->security);
-	if (!is_zygote_child) {
+	if (!is_zygote(old->security)) {
 		pr_info("handle umount ignore non zygote child: %d\n",
 			current->pid);
 		return 0;
@@ -702,23 +742,10 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
 }
 
 #ifndef MODULE
-extern int __ksu_handle_devpts(struct inode *inode);
-static int ksu_inode_permission(struct inode *inode, int mask)
-{
-	if (unlikely(inode->i_sb && inode->i_sb->s_magic == DEVPTS_SUPER_MAGIC)) {
-#ifdef CONFIG_KSU_DEBUG
-		pr_info("%s: devpts inode accessed with mask: %x\n", __func__, mask);
-#endif
-		__ksu_handle_devpts(inode);
-	}
-	return 0;
-}
-
 static struct security_hook_list ksu_hooks[] = {
 	LSM_HOOK_INIT(task_prctl, ksu_task_prctl),
 	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
 	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
-	LSM_HOOK_INIT(inode_permission, ksu_inode_permission),
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||	\
 	defined(CONFIG_IS_HW_HISI) ||	\
 	defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)

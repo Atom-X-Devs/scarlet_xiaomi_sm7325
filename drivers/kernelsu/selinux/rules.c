@@ -37,8 +37,7 @@ static struct policydb *get_policydb(void)
 }
 
 static DEFINE_MUTEX(ksu_rules);
-
-void apply_kernelsu_rules()
+void apply_kernelsu_rules(void)
 {
 	struct policydb *db;
 
@@ -47,7 +46,7 @@ void apply_kernelsu_rules()
 	}
 
 	mutex_lock(&ksu_rules);
-	
+
 	db = get_policydb();
 
 	ksu_permissive(db, KERNEL_SU_DOMAIN);
@@ -140,6 +139,9 @@ void apply_kernelsu_rules()
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
 
+	// https://android-review.googlesource.com/c/platform/system/logging/+/3725346
+	ksu_dontaudit(db, "untrusted_app", KERNEL_SU_DOMAIN, "dir", "getattr");
+
 	mutex_unlock(&ksu_rules);
 }
 
@@ -208,7 +210,7 @@ static int get_object(char *buf, char __user *user_object, size_t buf_sz,
 }
 
 // reset avc cache table, otherwise the new rules will not take effect if already denied
-static void reset_avc_cache()
+static void reset_avc_cache(void)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0) ||	\
 	!defined(KSU_COMPAT_USE_SELINUX_STATE)
