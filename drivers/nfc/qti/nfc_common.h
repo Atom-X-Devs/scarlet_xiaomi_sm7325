@@ -205,7 +205,7 @@ struct platform_ldo {
 struct cold_reset {
 	wait_queue_head_t read_wq;
 	bool rsp_pending;
-	uint8_t status;
+	s16 status;
 	/* Is NFC enabled from UI */
 	bool is_nfc_enabled;
 };
