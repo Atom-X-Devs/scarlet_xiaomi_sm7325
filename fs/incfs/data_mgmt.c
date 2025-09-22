@@ -76,7 +76,7 @@ int incfs_realloc_mount_info(struct mount_info *mi,
 		 */
 		if (options->read_log_pages > 0) {
 			new_buffer_size = PAGE_SIZE * options->read_log_pages;
-			new_buffer = kzalloc(new_buffer_size, GFP_NOFS);
+			new_buffer = kvzalloc(new_buffer_size, GFP_NOFS);
 			if (!new_buffer)
 				return -ENOMEM;
 		}
@@ -92,7 +92,7 @@ int incfs_realloc_mount_info(struct mount_info *mi,
 		mi->mi_log.rl_tail = log_state;
 		spin_unlock(&mi->mi_log.rl_lock);
 
-		kfree(old_buffer);
+		kvfree(old_buffer);
 	}
 
 	mi->mi_options = *options;
@@ -111,7 +111,7 @@ void incfs_free_mount_info(struct mount_info *mi)
 	mutex_destroy(&mi->mi_dir_struct_mutex);
 	mutex_destroy(&mi->mi_pending_reads_mutex);
 	put_cred(mi->mi_owner);
-	kfree(mi->mi_log.rl_ring_buf);
+	kvfree(mi->mi_log.rl_ring_buf);
 	kfree(mi->log_xattr);
 	kfree(mi->pending_read_xattr);
 	kfree(mi);
