@@ -2019,11 +2019,6 @@ static int fts_get_charging_status(void)
 	struct power_supply *dc_psy;
 	union power_supply_propval val;
 	int ret = 0;
-	int is_charging = 0;
-
-	is_charging = !!power_supply_is_system_supplied();
-	if (!is_charging)
-		return 0;
 
 	dc_psy = power_supply_get_by_name("wireless");
 	if (dc_psy) {
