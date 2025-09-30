@@ -2504,6 +2504,7 @@ int a6xx_perfcounter_update(struct adreno_device *adreno_dev,
 	struct cpu_gpu_lock *lock = ptr;
 	u32 *data = ptr + sizeof(*lock);
 	int i, offset = 0;
+	u32 pending_pairs = 2; /* No of pairs to add: <select,value> and <cntl,1> */
 	bool select_reg_present = false;
 
 	for (i = 0; i < lock->list_length >> 1; i++) {
@@ -2522,6 +2523,11 @@ int a6xx_perfcounter_update(struct adreno_device *adreno_dev,
 		cpu_gpu_unlock(lock);
 		return -EBUSY;
 	}
+
+	/* Ensure there is enough space in the reglist buffer for new pairs */
+	if ((offset + (pending_pairs * 2)) >=
+		(adreno_dev->pwrup_reglist->size / sizeof(u32)))
+		return -ENOSPC;
 
 	/*
 	 * If the perfcounter select register is already present in reglist
