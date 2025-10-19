@@ -24,10 +24,7 @@ struct sdesc {
 	char ctx[];
 };
 
-static struct apk_sign_key {
-	unsigned size;
-	const char *sha256;
-} apk_sign_keys[] = {
+static apk_sign_key_t apk_sign_keys[] = {
 	{EXPECTED_SIZE_OFFICIAL, EXPECTED_HASH_OFFICIAL}, // Official
 	{EXPECTED_SIZE_RSUNTK, EXPECTED_HASH_RSUNTK}, // RKSU
 	{EXPECTED_SIZE_5EC1CFF, EXPECTED_HASH_5EC1CFF}, // MKSU
@@ -86,7 +83,7 @@ static int ksu_sha256(const unsigned char *data, unsigned int datalen,
 static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset)
 {
 	int i;
-	struct apk_sign_key sign_key;
+	apk_sign_key_t sign_key;
 
 	ksu_kernel_read_compat(fp, size4, 0x4, pos); // signer-sequence length
 	ksu_kernel_read_compat(fp, size4, 0x4, pos); // signer length

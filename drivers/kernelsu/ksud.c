@@ -449,7 +449,7 @@ int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
 	return 0;
 }
 
-bool ksu_is_safe_mode()
+bool ksu_is_safe_mode(void)
 {
 	static bool safe_mode = false;
 	if (safe_mode) {

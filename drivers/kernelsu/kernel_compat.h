@@ -6,6 +6,44 @@
 #include <linux/cred.h>
 #include "ss/policydb.h"
 #include "linux/key.h"
+#include <linux/list.h>
+
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
+#define kcompat_barrier() do { barrier(); isb(); } while (0)
+#else
+#define kcompat_barrier() barrier()
+#endif
+
+/*
+ * Linux 6.8+ does not have LKM support, due to numerous changes on LSM.
+ * Let's fails if MODULE were defined.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) && defined(MODULE) 
+#error "LKM mode is not supported on Linux 6.8+, aborting build."
+#endif
+
+/**
+ * list_count_nodes - count the number of nodes in a list
+ * the head of the list
+ * 
+ * Returns the number of nodes in the list
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
+static inline size_t list_count_nodes(const struct list_head *head)
+{
+	const struct list_head *pos;
+	size_t count = 0;
+
+	if (!head)
+		return 0;
+
+	list_for_each(pos, head) {
+		count++;
+	}
+	
+	return count;
+}
+#endif
 
 /*
  * Adapt to Huawei HISI kernel without affecting other kernels ,

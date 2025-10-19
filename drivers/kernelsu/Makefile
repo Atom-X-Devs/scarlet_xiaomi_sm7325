@@ -17,7 +17,7 @@ ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-
 
 obj-$(CONFIG_KSU) += kernelsu.o
 
-ccflags-y += -DKSU_VERSION=12280
+ccflags-y += -DKSU_VERSION=12309
 
 # Checks hooks state
 ifeq ($(CONFIG_KSU_MANUAL_HOOK), y)
@@ -51,7 +51,11 @@ endif
 ifeq ($(shell grep -q "int\s\+path_umount" $(srctree)/fs/namespace.c; echo $$?),0)
 ccflags-y += -DKSU_HAS_PATH_UMOUNT
 endif
-# Checks Samsung UH drivers
+ifeq ($(shell grep -A1 "^int vfs_getattr" $(srctree)/fs/stat.c | grep -q "query_flags"; echo $$?),0)
+ccflags-y += -DKSU_HAS_NEW_VFS_GETATTR
+endif
+
+# Checks Samsung
 ifeq ($(shell grep -q "CONFIG_KDP_CRED" $(srctree)/kernel/cred.c; echo $$?),0)
 ccflags-y += -DSAMSUNG_UH_DRIVER_EXIST
 endif
