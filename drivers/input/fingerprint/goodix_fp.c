@@ -121,7 +121,6 @@ static inline void gf_setup(struct gf_dev *gf_dev)
 	if (regulator_is_enabled(gf_dev->vreg)) {
 		regulator_set_load(gf_dev->vreg, 200000);
 	} else if (!regulator_is_enabled(gf_dev->vreg)) {
-		regulator_set_voltage(gf_dev->vreg, 3000000, 3000000);
 		if (regulator_enable(gf_dev->vreg))
 			return;
 	}
