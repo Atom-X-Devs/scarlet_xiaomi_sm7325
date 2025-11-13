@@ -669,14 +669,17 @@ static int battery_chg_write(struct battery_chg_dev *bcdev, void *data,
 				int len)
 {
 	int rc;
+	int before, after;
+
+	before = atomic_read(&bcdev->state);
 
 	/*
 	 * When the subsystem goes down, it's better to return the last
 	 * known values until it comes back up. Hence, return 0 so that
 	 * pmic_glink_write() is not attempted until pmic glink is up.
 	 */
-	if (atomic_read(&bcdev->state) == PMIC_GLINK_STATE_DOWN) {
-		pr_debug("glink state is down\n");
+	if (before == PMIC_GLINK_STATE_DOWN) {
+		pr_err("glink state is down\n");
 		return 0;
 	}
 
@@ -684,6 +687,10 @@ static int battery_chg_write(struct battery_chg_dev *bcdev, void *data,
 		return 0;
 
 	mutex_lock(&bcdev->rw_lock);
+	after = atomic_read(&bcdev->state);
+	if (before != after)
+		pr_err("BUG: Glink state changed %d->%d\n", before, after);
+
 	reinit_completion(&bcdev->ack);
 	rc = pmic_glink_write(bcdev->client, data, len);
 	if (!rc) {
