@@ -3649,7 +3649,7 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 	do {
 		if (first_n && !defer_count) {
 			defer_count = atomic_long_inc_return(&q->defer_count);
-			if (unlikely(defer_count > q->limit)) {
+			if (unlikely(defer_count > READ_ONCE(q->limit))) {
 				kfree_skb(skb);
 				return NET_XMIT_DROP;
 			}
