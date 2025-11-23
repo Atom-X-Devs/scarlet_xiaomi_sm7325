@@ -26,12 +26,12 @@ extern void vtime_task_switch(struct task_struct *prev);
  * For now vtime state is tied to context tracking. We might want to decouple
  * those later if necessary.
  */
-static inline bool vtime_accounting_enabled(void)
+static __always_inline bool vtime_accounting_enabled(void)
 {
 	return context_tracking_is_enabled();
 }
 
-static inline bool vtime_accounting_cpu_enabled(void)
+static __always_inline bool vtime_accounting_cpu_enabled(void)
 {
 	if (vtime_accounting_enabled()) {
 		if (context_tracking_cpu_is_enabled())
@@ -43,7 +43,7 @@ static inline bool vtime_accounting_cpu_enabled(void)
 
 extern void vtime_task_switch_generic(struct task_struct *prev);
 
-static inline void vtime_task_switch(struct task_struct *prev)
+static __always_inline void vtime_task_switch(struct task_struct *prev)
 {
 	if (vtime_accounting_cpu_enabled())
 		vtime_task_switch_generic(prev);
