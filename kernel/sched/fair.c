@@ -13723,7 +13723,6 @@ static int need_active_balance(struct lb_env *env)
 	return 0;
 }
 
-static int active_load_balance_cpu_stop(void *data);
 static int active_load_balance_llc_cpu_stop(void *data);
 
 /*
@@ -14268,10 +14267,11 @@ out_unlock:
 	return 0;
 }
 
-static int active_load_balance_cpu_stop(void *data)
+int active_load_balance_cpu_stop(void *data)
 {
 	return __active_load_balance_cpu_stop(data, 0);
 }
+EXPORT_SYMBOL_GPL(active_load_balance_cpu_stop);
 
 static int active_load_balance_llc_cpu_stop(void *data)
 {
