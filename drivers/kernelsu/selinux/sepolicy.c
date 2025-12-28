@@ -355,8 +355,8 @@ static void add_xperm_rule_raw(struct policydb *db, struct type_datum *src,
 
 		if (datum->u.xperms == NULL) {
 			datum->u.xperms =
-				(struct avtab_extended_perms *)(kmalloc(
-					sizeof(xperms), GFP_KERNEL));
+				(struct avtab_extended_perms *)(kzalloc(
+					sizeof(xperms), GFP_ATOMIC));
 			if (!datum->u.xperms) {
 				pr_err("alloc xperms failed\n");
 				return;
@@ -555,7 +555,7 @@ static bool add_filename_trans(struct policydb *db, const char *s,
 		trans = (struct filename_trans_datum *)kcalloc(sizeof(*trans),
 							       1, GFP_ATOMIC);
 		struct filename_trans_key *new_key =
-			(struct filename_trans_key *)kmalloc(sizeof(*new_key),
+			(struct filename_trans_key *)kzalloc(sizeof(*new_key),
 							     GFP_ATOMIC);
 		*new_key = key;
 		new_key->name = kstrdup(key.name, GFP_ATOMIC);
@@ -585,7 +585,7 @@ static bool add_filename_trans(struct policydb *db, const char *s,
 			return false;
 		}
 		struct filename_trans *new_key =
-			(struct filename_trans *)kmalloc(sizeof(*new_key),
+			(struct filename_trans *)kzalloc(sizeof(*new_key),
 							 GFP_ATOMIC);
 		if (!new_key) {
 			pr_err("add_filename_trans: Failed to alloc new_key\n");
@@ -608,21 +608,13 @@ static bool add_genfscon(struct policydb *db, const char *fs_name,
 	return false;
 }
 
-static void *ksu_realloc(void *old, size_t new_size, size_t old_size)
-{
-	// we can't use krealloc, because it may be read-only
-	void *new = kzalloc(new_size, GFP_ATOMIC);
-	if (!new) {
-		return NULL;
-	}
-	if (old_size) {
-		memcpy(new, old, old_size);
-	}
-	// we can't use kfree, because it may be read-only
-	// there maybe some leaks, maybe we can check ptr_write, but it's not a big deal
-	// kfree(old);
-	return new;
-}
+// https://github.com/torvalds/linux/commit/590b9d576caec6b4c46bba49ed36223a399c3fc5#diff-cc9aa90e094e6e0f47bd7300db4f33cf4366b98b55d8753744f31eb69c691016R844-R845
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#define ksu_kvrealloc(p, new_size, _old_size) kvrealloc(p, new_size, GFP_ATOMIC)
+#else
+#define ksu_kvrealloc(p, new_size, old_size)                                   \
+	ksu_compat_kvrealloc(p, old_size, new_size, GFP_ATOMIC)
+#endif
 
 static bool add_type(struct policydb *db, const char *type_name, bool attr)
 {
@@ -658,9 +650,9 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 	struct ebitmap *new_type_attr_map_array =
-		ksu_realloc(db->type_attr_map_array,
-			    value * sizeof(struct ebitmap),
-			    (value - 1) * sizeof(struct ebitmap));
+		ksu_kvrealloc(db->type_attr_map_array,
+			      value * sizeof(struct ebitmap),
+			      (value - 1) * sizeof(struct ebitmap));
 
 	if (!new_type_attr_map_array) {
 		pr_err("add_type: alloc type_attr_map_array failed\n");
@@ -668,9 +660,9 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
 	}
 
 	struct type_datum **new_type_val_to_struct =
-		ksu_realloc(db->type_val_to_struct,
-			    sizeof(*db->type_val_to_struct) * value,
-			    sizeof(*db->type_val_to_struct) * (value - 1));
+		ksu_kvrealloc(db->type_val_to_struct,
+			      sizeof(*db->type_val_to_struct) * value,
+			      sizeof(*db->type_val_to_struct) * (value - 1));
 
 	if (!new_type_val_to_struct) {
 		pr_err("add_type: alloc type_val_to_struct failed\n");
@@ -678,9 +670,9 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
 	}
 
 	char **new_val_to_name_types =
-		ksu_realloc(db->sym_val_to_name[SYM_TYPES],
-			    sizeof(char *) * value,
-			    sizeof(char *) * (value - 1));
+		ksu_kvrealloc(db->sym_val_to_name[SYM_TYPES],
+			      sizeof(char *) * value,
+			      sizeof(char *) * (value - 1));
 	if (!new_val_to_name_types) {
 		pr_err("add_type: alloc val_to_name failed\n");
 		return false;
