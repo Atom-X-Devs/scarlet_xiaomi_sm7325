@@ -94,7 +94,8 @@ bool cass_prime_cpu(const struct cass_cpu_cand *c)
 static __always_inline
 bool cass_cpu_better(const struct cass_cpu_cand *a,
 		     const struct cass_cpu_cand *b, unsigned long p_util,
-		     unsigned long uc_min, int this_cpu, int prev_cpu, bool sync)
+		     unsigned long uc_min, int this_cpu, int prev_cpu, bool sync,
+		     bool prefer_idle)
 {
 #define cass_cmp(a, b) ({ res = (a) - (b); })
 #define cass_eq(a, b) ({ res = (a) == (b); })
@@ -102,7 +103,7 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 	bool a_prime = cass_prime_cpu(a);
 	bool b_prime = cass_prime_cpu(b);
 	const struct cass_cpu_cand *non_prime;
-	const unsigned long margin;
+	unsigned long margin;
 
 	/* Prefer the CPU that's not overloaded */
 	if (cass_cmp(b->eff_util / b->cap_max, a->eff_util / a->cap_max))
@@ -118,6 +119,26 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 	if (cass_cmp(fits_capacity(p_util, a->cap_max),
 		     fits_capacity(p_util, b->cap_max)))
 		goto done;
+
+	/*
+	 * Prefer packing small, non-sync work on an active cpu over waking an idle
+	 * CPU, unless the active CPU is much worse.
+	 */
+	if (!prefer_idle && !!a->exit_lat != !!b->exit_lat) {
+		if (!a->exit_lat && b->exit_lat) {
+			if (a->eff_util <= a->cap_max &&
+			    a->util <= b->util + (SCHED_CAPACITY_SCALE / 16)) {
+				res = 1;
+				goto done;
+			}
+		} else if (a->exit_lat && !b->exit_lat) {
+			if (b->eff_util <= b->cap_max &&
+			    b->util <= a->util + (SCHED_CAPACITY_SCALE / 16)) {
+				res = -1;
+				goto done;
+			}
+		}
+	}
 
 	/*
 	 * Prefer the CPU that isn't the single fastest one in the system,
@@ -186,6 +207,7 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 	int this_cpu = raw_smp_processor_id();
 	unsigned long p_util, uc_min;
 	bool has_idle = false;
+	bool prefer_idle;
 	int cidx = 0, cpu;
 
 	memset(cands, 0, sizeof(cands));
@@ -196,6 +218,12 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 	 */
 	p_util = rt ? 0 : task_util_est(p);
 	uc_min = uclamp_eff_value(p, UCLAMP_MIN);
+
+	/*
+	 * Prefer idle CPUs for sync wakes and for "heavy enough" work; otherwise,
+	 * prefer packing onto an already-active CPU.
+	 */
+	prefer_idle = sync || rt || uc_min || p_util >= (SCHED_CAPACITY_SCALE / 8);
 
 	/*
 	 * Find the best CPU to wake @p on. Although idle_get_state() requires
@@ -238,7 +266,7 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 			 * found so far is the prime CPU. Otherwise, prefer idle
 			 * candidates.
 			 */
-			if (!has_idle &&
+			if (!has_idle && prefer_idle &&
 			    uc_min <= arch_scale_min_freq_capacity(cpu) &&
 			    !cass_prime_cpu(curr)) {
 				/* Discard any previous non-idle candidate */
@@ -255,7 +283,7 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 				curr->exit_lat += idle_state->exit_latency;
 		} else {
 			/* Skip non-idle CPUs if there's an idle candidate */
-			if (has_idle)
+			if (has_idle && prefer_idle)
 				continue;
 
 			/* Zero exit latency indicates this CPU isn't idle */
@@ -309,7 +337,7 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 		 */
 		if (best == curr ||
 		    cass_cpu_better(curr, best, p_util, uc_min, this_cpu, prev_cpu,
-				    sync)) {
+				    sync, prefer_idle)) {
 			best = curr;
 			cidx ^= 1;
 		}
