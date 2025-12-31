@@ -94,13 +94,14 @@ bool cass_prime_cpu(const struct cass_cpu_cand *c)
 static __always_inline
 bool cass_cpu_better(const struct cass_cpu_cand *a,
 		     const struct cass_cpu_cand *b, unsigned long p_util,
-		     int this_cpu, int prev_cpu, bool sync)
+		     unsigned long uc_min, int this_cpu, int prev_cpu, bool sync)
 {
 #define cass_cmp(a, b) ({ res = (a) - (b); })
 #define cass_eq(a, b) ({ res = (a) == (b); })
 	long res;
 	bool a_prime = cass_prime_cpu(a);
 	bool b_prime = cass_prime_cpu(b);
+	const struct cass_cpu_cand *non_prime;
 
 	/* Prefer the CPU that's not overloaded */
 	if (cass_cmp(b->eff_util / b->cap_max, a->eff_util / a->cap_max))
@@ -117,9 +118,19 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 		     fits_capacity(p_util, b->cap_max)))
 		goto done;
 
-	/* Prefer the CPU that isn't the single fastest one in the system */
-	if (cass_cmp(b_prime, a_prime))
-		goto done;
+	/*
+	 * Prefer the CPU that isn't the single fastest one in the system,
+	 * but only when the non-prime CPU can satisfy the task, including
+	 * uclamp inflation.
+	 */
+	if (a_prime != b_prime) {
+		non_prime = a_prime ? b : a;
+
+		if (non_prime->cap_max >= uc_min &&
+		    fits_capacity(p_util, non_prime->cap_max) &&
+		    cass_cmp(b_prime, a_prime))
+			goto done;
+	}
 
 	/* Prefer the CPU with lower relative utilization */
 	if (cass_cmp(b->util, a->util))
@@ -280,7 +291,7 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 		 * cidx still needs to be changed to the other candidate slot.
 		 */
 		if (best == curr ||
-		    cass_cpu_better(curr, best, p_util, this_cpu, prev_cpu,
+		    cass_cpu_better(curr, best, p_util, uc_min, this_cpu, prev_cpu,
 				    sync)) {
 			best = curr;
 			cidx ^= 1;
