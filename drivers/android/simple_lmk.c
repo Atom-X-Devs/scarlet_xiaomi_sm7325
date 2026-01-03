@@ -466,7 +466,7 @@ void simple_lmk_mm_freed(struct mm_struct *mm)
 	read_unlock(&mm_free_lock);
 }
 
-static unsigned short slmk_vmpressure __read_mostly = 98;
+static unsigned short slmk_vmpressure __read_mostly = 95;
 module_param(slmk_vmpressure, short, 0644);
 
 static int simple_lmk_vmpressure_cb(struct notifier_block *nb,
