@@ -850,6 +850,16 @@ static int qmp_shim_send_data(struct mbox_chan *chan, void *data)
 	if (pkt->size > SZ_4K)
 		return -EINVAL;
 
+	if (!pkt) {
+		pr_warn("DEBUG: pkt is NULL\n");
+		dump_stack();
+	}
+
+	if (!pkt->data) {
+		pr_warn("DEBUG: pkt's data is NULL\n");
+		dump_stack();
+	}
+
 	spin_lock_irqsave(&mbox->tx_lock, flags);
 	for (i = 0; i < mbox->ctrl.num_chans; i++) {
 		if (chan == &mbox->ctrl.chans[i]) {
