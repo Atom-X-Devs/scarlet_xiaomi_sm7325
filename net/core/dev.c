@@ -3649,7 +3649,7 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 	do {
 		if (first_n && !defer_count) {
 			defer_count = atomic_long_inc_return(&q->defer_count);
-			if (unlikely(defer_count > READ_ONCE(q->limit))) {
+			if (unlikely(defer_count > READ_ONCE(qdisc_max_burst))) {
 				kfree_skb(skb);
 				return NET_XMIT_DROP;
 			}
@@ -3668,7 +3668,7 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 	ll_list = llist_del_all(&q->defer_list);
 	/* There is a small race because we clear defer_count not atomically
 	 * with the prior llist_del_all(). This means defer_list could grow
-	 * over q->limit.
+	 * over qdisc_max_burst.
 	 */
 	atomic_long_set(&q->defer_count, 0);
 
@@ -4141,6 +4141,7 @@ int netdev_tstamp_prequeue __read_mostly = 1;
 int netdev_budget __read_mostly = 300;
 /* Must be at least 2 jiffes to guarantee 1 jiffy timeout */
 unsigned int __read_mostly netdev_budget_usecs = 2 * USEC_PER_SEC / HZ;
+int qdisc_max_burst __read_mostly = 1000;
 int weight_p __read_mostly = 64;           /* old backlog weight */
 int dev_weight_rx_bias __read_mostly = 1;  /* bias for backlog weight */
 int dev_weight_tx_bias __read_mostly = 1;  /* bias for output_queue quota */
