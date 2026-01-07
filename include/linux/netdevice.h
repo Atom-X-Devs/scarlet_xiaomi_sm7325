@@ -4420,6 +4420,7 @@ void netdev_stats_to_stats64(struct rtnl_link_stats64 *stats64,
 
 extern int		netdev_max_backlog;
 extern int		netdev_tstamp_prequeue;
+extern int		qdisc_max_burst;
 extern int		weight_p;
 extern int		dev_weight_rx_bias;
 extern int		dev_weight_tx_bias;
