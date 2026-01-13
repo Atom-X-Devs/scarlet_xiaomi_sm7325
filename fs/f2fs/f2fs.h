@@ -400,7 +400,7 @@ static inline int update_sits_in_cursum(struct f2fs_journal *journal, int i)
 }
 
 static inline bool __has_cursum_space(struct f2fs_journal *journal,
-							int size, int type)
+				      unsigned int size, int type)
 {
 	if (type == NAT_JOURNAL)
 		return size <= MAX_NAT_JENTRIES(journal);
