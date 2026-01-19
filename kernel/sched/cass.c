@@ -170,6 +170,10 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 	if (cass_cmp(b->util, a->util))
 		goto done;
 
+	/* Prefer the CPU that is idle (only relevant for uclamped tasks) */
+	if (cass_cmp(!!a->exit_lat, !!b->exit_lat))
+		goto done;
+
 	/*
 	 * Prefer the current CPU for sync wakes, but only if it isn't
 	 * substantially more overloaded than the alternative.
@@ -192,10 +196,6 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 
 	/* Prefer the CPU with higher capacity */
 	if (cass_cmp(a->cap, b->cap))
-		goto done;
-
-	/* Prefer the CPU that is idle (tie-breaker) */
-	if (cass_cmp(!!a->exit_lat, !!b->exit_lat))
 		goto done;
 
 	/* Prefer the CPU with lower idle exit latency */
