@@ -29,7 +29,7 @@
  * wakeup-preemption), since its likely going to consume data we
  * touched, increases cache locality.
  */
-#define SCHED_FEAT_NEXT_BUDDY 1
+#define SCHED_FEAT_NEXT_BUDDY 0
 
 /*
  * Allow completely ignoring cfs_rq->next; which can be set from various
