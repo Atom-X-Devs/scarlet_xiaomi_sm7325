@@ -34,6 +34,7 @@ struct cass_cpu_cand {
 	unsigned long eff_util;
 	unsigned long hard_util;
 	unsigned long util;
+	s64 eevdf_lag;
 };
 
 static __always_inline
@@ -62,6 +63,9 @@ void cass_cpu_util(struct cass_cpu_cand *c, int this_cpu, bool sync)
 	if (sync && c->cpu == this_cpu && !rt_task(current))
 		c->util -= min(c->util, task_util(current));
 
+	/* Initialize eevdf lag */
+	c->eevdf_lag = 0;
+
 	/* Get the utilization of everything other than CFS tasks */
 	hard_util = cpu_util_rt(rq) + cpu_util_dl(rq) + cpu_util_irq(rq);
 	c->hard_util = hard_util;
@@ -73,6 +77,14 @@ void cass_cpu_util(struct cass_cpu_cand *c, int this_cpu, bool sync)
 	 * CFS and RT tasks when CASS selects a CPU for them.
 	 */
 	c->cap = c->cap_max - min(hard_util, c->cap_max - 1);
+}
+
+/* EEVDF lag approximation for a candidate CPU. */
+static __always_inline
+void cass_compute_eevdf_lag(struct cass_cpu_cand *c, u64 se_vruntime)
+{
+	struct cfs_rq *cfs_rq = &cpu_rq(c->cpu)->cfs;
+	c->eevdf_lag = READ_ONCE(cfs_rq->avg_vruntime) - (s64)se_vruntime;
 }
 
 /*
@@ -281,6 +293,9 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 
 		/* Get this CPU's capacity and utilization */
 		cass_cpu_util(curr, this_cpu, sync);
+
+		if (!rt)
+			cass_compute_eevdf_lag(curr, p_vruntime);
 
 		/*
 		 * Add @p's utilization to this CPU if it's not @p's CPU, to
