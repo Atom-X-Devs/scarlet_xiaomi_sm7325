@@ -6254,7 +6254,7 @@ static int binder_open(struct inode *nodp, struct file *filp)
 	bool existing_pid = false;
 
 	binder_debug(BINDER_DEBUG_OPEN_CLOSE, "%s: %d:%d\n", __func__,
-		     current->group_leader->pid, current->pid);
+		     current->tgid, current->pid);
 
 	eproc = kmem_cache_zalloc(binder_eproc_pool, GFP_KERNEL);
 	if (eproc == NULL)
@@ -6266,6 +6266,7 @@ static int binder_open(struct inode *nodp, struct file *filp)
 	spin_lock_init(&proc->outer_lock);
 	get_task_struct(current->group_leader);
 	proc->tsk = current->group_leader;
+	proc->pid = current->tgid;
 	eproc->cred = get_cred(filp->f_cred);
 	INIT_LIST_HEAD(&proc->todo);
 	init_waitqueue_head(&proc->freeze_wait);
@@ -6295,7 +6296,6 @@ static int binder_open(struct inode *nodp, struct file *filp)
 	binder_alloc_init(&proc->alloc);
 
 	binder_stats_created(BINDER_STAT_PROC);
-	proc->pid = current->group_leader->pid;
 	INIT_LIST_HEAD(&proc->delivered_death);
 	INIT_LIST_HEAD(&proc_wrapper(proc)->delivered_freeze);
 	INIT_LIST_HEAD(&proc->waiting_threads);
