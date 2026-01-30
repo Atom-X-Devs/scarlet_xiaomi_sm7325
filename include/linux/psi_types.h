@@ -42,10 +42,7 @@ enum psi_res {
 	PSI_IO,
 	PSI_MEM,
 	PSI_CPU,
-#ifdef CONFIG_IRQ_TIME_ACCOUNTING
-	PSI_IRQ,
-#endif
-	NR_PSI_RESOURCES,
+	NR_PSI_RESOURCES = 3,
 };
 
 /*
@@ -61,12 +58,9 @@ enum psi_states {
 	PSI_MEM_FULL,
 	PSI_CPU_SOME,
 	PSI_CPU_FULL,
-#ifdef CONFIG_IRQ_TIME_ACCOUNTING
-	PSI_IRQ_FULL,
-#endif
 	/* Only per-CPU, to weigh the CPU in the global average: */
 	PSI_NONIDLE,
-	NR_PSI_STATES,
+	NR_PSI_STATES = 7,
 };
 
 /* Use one bit in the state mask to track TSK_ONCPU */
@@ -160,8 +154,6 @@ struct psi_trigger {
 };
 
 struct psi_group {
-	struct psi_group *parent;
-
 	/* Protects data used by the aggregator */
 	struct mutex avgs_lock;
 

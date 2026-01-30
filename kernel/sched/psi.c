@@ -844,7 +844,6 @@ static void psi_group_change(struct psi_group *group, int cpu,
 	u32 state_mask;
 	u64 now;
 
-	lockdep_assert_rq_held(cpu_rq(cpu));
 	groupc = per_cpu_ptr(group->pcpu, cpu);
 
 	/*
@@ -925,12 +924,27 @@ static void psi_group_change(struct psi_group *group, int cpu,
 		schedule_delayed_work(&group->avgs_work, PSI_FREQ);
 }
 
-static inline struct psi_group *task_psi_group(struct task_struct *task)
+static struct psi_group *iterate_groups(struct task_struct *task, void **iter)
 {
+	if (*iter == &psi_system)
+		return NULL;
+
 #ifdef CONFIG_CGROUPS
-	if (static_branch_likely(&psi_cgroups_enabled))
-		return cgroup_psi(task_dfl_cgroup(task));
+	if (static_branch_likely(&psi_cgroups_enabled)) {
+		struct cgroup *cgroup = NULL;
+
+		if (!*iter)
+			cgroup = task->cgroups->dfl_cgrp;
+		else
+			cgroup = cgroup_parent(*iter);
+
+		if (cgroup && cgroup_parent(cgroup)) {
+			*iter = cgroup;
+			return cgroup_psi(cgroup);
+		}
+	}
 #endif
+	*iter = &psi_system;
 	return &psi_system;
 }
 
@@ -953,16 +967,15 @@ void psi_task_change(struct task_struct *task, int clear, int set)
 {
 	int cpu = task_cpu(task);
 	struct psi_group *group;
+	void *iter = NULL;
 
 	if (!task->pid)
 		return;
 
 	psi_flags_change(task, clear, set);
 
-	group = task_psi_group(task);
-	do {
+	while ((group = iterate_groups(task, &iter)))
 		psi_group_change(group, cpu, clear, set, true);
-	} while ((group = group->parent));
 }
 
 void psi_task_switch(struct task_struct *prev, struct task_struct *next,
@@ -970,6 +983,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 {
 	struct psi_group *group, *common = NULL;
 	int cpu = task_cpu(prev);
+	void *iter;
 
 	if (next->pid) {
 		psi_flags_change(next, 0, TSK_ONCPU);
@@ -978,8 +992,8 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		 * ancestors with @prev, those will already have @prev's
 		 * TSK_ONCPU bit set, and we can stop the iteration there.
 		 */
-		group = task_psi_group(next);
-		do {
+		iter = NULL;
+		while ((group = iterate_groups(next, &iter))) {
 			if (per_cpu_ptr(group->pcpu, cpu)->state_mask &
 			    PSI_ONCPU) {
 				common = group;
@@ -987,7 +1001,7 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 			}
 
 			psi_group_change(group, cpu, 0, TSK_ONCPU, true);
-		} while ((group = group->parent));
+		}
 	}
 
 	if (prev->pid) {
@@ -1020,12 +1034,9 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 
 		psi_flags_change(prev, clear, set);
 
-		group = task_psi_group(prev);
-		do {
-			if (group == common)
-				break;
+		iter = NULL;
+		while ((group = iterate_groups(prev, &iter)) && group != common)
 			psi_group_change(group, cpu, clear, set, wake_clock);
-		} while ((group = group->parent));
 
 		/*
 		 * TSK_ONCPU is handled up to the common ancestor. If there are
@@ -1035,55 +1046,11 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		 */
 		if ((prev->psi_flags ^ next->psi_flags) & ~TSK_ONCPU) {
 			clear &= ~TSK_ONCPU;
-			for (; group; group = group->parent)
+			for (; group; group = iterate_groups(prev, &iter))
 				psi_group_change(group, cpu, clear, set, wake_clock);
 		}
 	}
 }
-
-#ifdef CONFIG_IRQ_TIME_ACCOUNTING
-static DEFINE_PER_CPU(u64, psi_irq_time);
-void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_struct *prev)
-{
-	int cpu = task_cpu(curr);
-	struct psi_group *group;
-	struct psi_group_cpu *groupc;
-	s64 delta;
-	u64 irq, *psi_time;
-
-	if (!curr->pid)
-		return;
-
-	lockdep_assert_rq_held(rq);
-	group = task_psi_group(curr);
-	if (prev && task_psi_group(prev) == group)
-		return;
-
-	irq = irq_time_read(cpu);
-	psi_time =  &per_cpu(psi_irq_time, cpu);
-	delta = (s64)(irq - *psi_time);
-	if (delta < 0)
-		return;
-	*psi_time = irq;
-
-	do {
-		u64 now;
-
-		groupc = per_cpu_ptr(group->pcpu, cpu);
-
-		write_seqcount_begin(&groupc->seq);
-		now = cpu_clock(cpu);
-
-		record_times(groupc, now);
-		groupc->times[PSI_IRQ_FULL] += delta;
-
-		write_seqcount_end(&groupc->seq);
-
-		if (group->rtpoll_states & (1 << PSI_IRQ_FULL))
-			psi_schedule_rtpoll_work(group, 1, false);
-	} while ((group = group->parent));
-}
-#endif
 
 /**
  * psi_memstall_enter - mark the beginning of a memory stall section
@@ -1161,7 +1128,6 @@ int psi_cgroup_alloc(struct cgroup *cgroup)
 		return -ENOMEM;
 	}
 	group_init(cgroup->psi);
-	cgroup->psi->parent = cgroup_psi(cgroup_parent(cgroup));
 	return 0;
 }
 
@@ -1247,7 +1213,6 @@ void cgroup_move_task(struct task_struct *task, struct css_set *to)
 
 int psi_show(struct seq_file *m, struct psi_group *group, enum psi_res res)
 {
-	bool only_full = false;
 	int full;
 	u64 now;
 
@@ -1262,11 +1227,7 @@ int psi_show(struct seq_file *m, struct psi_group *group, enum psi_res res)
 		group->avg_next_update = update_averages(group, now);
 	mutex_unlock(&group->avgs_lock);
 
-#ifdef CONFIG_IRQ_TIME_ACCOUNTING
-	only_full = res == PSI_IRQ;
-#endif
-
-	for (full = 0; full < 2 - only_full; full++) {
+	for (full = 0; full < 2; full++) {
 		unsigned long avg[3] = { 0, };
 		u64 total = 0;
 		int w;
@@ -1280,7 +1241,7 @@ int psi_show(struct seq_file *m, struct psi_group *group, enum psi_res res)
 		}
 
 		seq_printf(m, "%s avg10=%lu.%02lu avg60=%lu.%02lu avg300=%lu.%02lu total=%llu\n",
-			   full || only_full ? "full" : "some",
+			   full ? "full" : "some",
 			   LOAD_INT(avg[0]), LOAD_FRAC(avg[0]),
 			   LOAD_INT(avg[1]), LOAD_FRAC(avg[1]),
 			   LOAD_INT(avg[2]), LOAD_FRAC(avg[2]),
@@ -1315,11 +1276,6 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group, char *buf,
 		state = PSI_IO_FULL + res * 2;
 	else
 		return ERR_PTR(-EINVAL);
-
-#ifdef CONFIG_IRQ_TIME_ACCOUNTING
-	if (res == PSI_IRQ && --state != PSI_IRQ_FULL)
-		return ERR_PTR(-EINVAL);
-#endif
 
 	if (state >= PSI_NONIDLE)
 		return ERR_PTR(-EINVAL);
@@ -1630,33 +1586,6 @@ static const struct proc_ops psi_cpu_proc_ops = {
 	.proc_release	= psi_fop_release,
 };
 
-#ifdef CONFIG_IRQ_TIME_ACCOUNTING
-static int psi_irq_show(struct seq_file *m, void *v)
-{
-	return psi_show(m, &psi_system, PSI_IRQ);
-}
-
-static int psi_irq_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, psi_irq_show, NULL);
-}
-
-static ssize_t psi_irq_write(struct file *file, const char __user *user_buf,
-			     size_t nbytes, loff_t *ppos)
-{
-	return psi_write(file, user_buf, nbytes, PSI_IRQ);
-}
-
-static const struct proc_ops psi_irq_proc_ops = {
-	.proc_open	= psi_irq_open,
-	.proc_read	= seq_read,
-	.proc_lseek	= seq_lseek,
-	.proc_write	= psi_irq_write,
-	.proc_poll	= psi_fop_poll,
-	.proc_release	= psi_fop_release,
-};
-#endif
-
 static int __init psi_proc_init(void)
 {
 	if (psi_enable) {
@@ -1664,9 +1593,6 @@ static int __init psi_proc_init(void)
 		proc_create("pressure/io", 0, NULL, &psi_io_proc_ops);
 		proc_create("pressure/memory", 0, NULL, &psi_memory_proc_ops);
 		proc_create("pressure/cpu", 0, NULL, &psi_cpu_proc_ops);
-#ifdef CONFIG_IRQ_TIME_ACCOUNTING
-		proc_create("pressure/irq", 0, NULL, &psi_irq_proc_ops);
-#endif
 	}
 	return 0;
 }
