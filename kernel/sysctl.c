@@ -3042,7 +3042,7 @@ static int do_proc_dointvec_ms_jiffies_conv(bool *negp, unsigned long *lvalp,
  * Returns 0 on success or an error on write when the range check fails.
  */
 int proc_dou8vec_minmax(struct ctl_table *table, int write,
-			void __user *buffer, size_t *lenp, loff_t *ppos)
+			void *buffer, size_t *lenp, loff_t *ppos)
 {
 	struct ctl_table tmp;
 	unsigned int min = 0, max = 255U, val;
@@ -3352,7 +3352,7 @@ int proc_douintvec_minmax(struct ctl_table *table, int write,
 }
 
 int proc_dou8vec_minmax(struct ctl_table *table, int write,
-			void __user *buffer, size_t *lenp, loff_t *ppos)
+			void *buffer, size_t *lenp, loff_t *ppos)
 {
 	return -ENOSYS;
 }
