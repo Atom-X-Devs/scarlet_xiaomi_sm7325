@@ -2655,6 +2655,22 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx)
 			}
 			pages[idx].addr = map->phys + offset;
 			pages[idx].size = num << PAGE_SHIFT;
+			/*
+			 * Check for page range overflow and validate page
+			 * range is not greater than map buffer range.
+			 * This prevents potential buffer overflow
+			 * and memory corruption that could be exploited.
+			 */
+			if (pages[idx].addr > (ULLONG_MAX - pages[idx].size) ||
+			   (pages[idx].addr + pages[idx].size) >
+					(map->phys + map->size)) {
+				err = -EFAULT;
+				ADSPRPC_ERR(
+					"bad addr 0x%llx len %zu IPA 0x%llx size %zu fd %d\n",
+					(uintptr_t)lpra[i].buf.pv, len,
+					map->phys, map->size, map->fd);
+				goto bail;
+			}
 		}
 		rpra[i].buf.pv = buf;
 	}
