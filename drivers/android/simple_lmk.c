@@ -203,6 +203,12 @@ static void set_task_rt_prio(struct task_struct *tsk, int priority)
 	sched_setscheduler_nocheck(tsk, SCHED_RR, &rt_prio);
 }
 
+#if defined(CONFIG_HZ_100) || defined(CONFIG_HZ_300)
+#define SLEEP_DURATION_MS 30
+#else
+#define SLEEP_DURATION_MS 28
+#endif
+
 static void scan_and_kill(void)
 {
 	int i, nr_to_kill, nr_found = 0;
@@ -316,7 +322,7 @@ static void scan_and_kill(void)
 	if (!wait_for_completion_timeout(&reclaim_done, RECLAIM_EXPIRES))
 		pr_info("Timeout hit waiting for victims to die, proceeding\n");
 	else
-		msleep(28);
+		msleep(SLEEP_DURATION_MS);
 
 	/* Clean up for future reclaims but let the reaper thread keep going */
 	write_lock(&mm_free_lock);
