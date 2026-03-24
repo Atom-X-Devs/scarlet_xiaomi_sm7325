@@ -110,7 +110,7 @@ config ANDROID_BINDER_LOGS
 
 config ANDROID_SIMPLE_LMK
 	bool "Simple Android Low Memory Killer"
-	depends on !ANDROID_LOW_MEMORY_KILLER && !MEMCG && !PSI
+	depends on !ANDROID_LOW_MEMORY_KILLER && !MEMCG && PSI
 	---help---
 	  This is a complete low memory killer solution for Android that is
 	  small and simple. Processes are killed according to the priorities
@@ -138,6 +138,44 @@ config ANDROID_SIMPLE_LMK_TIMEOUT_MSEC
 	  which can block Simple LMK from killing more processes in time when
 	  needed. After the specified timeout elapses, Simple LMK will stop
 	  waiting and make itself available to kill more processes.
+
+config ANDROID_SIMPLE_LMK_PSI_THRESHOLD_US
+	int "Simple LMK PSI memory SOME threshold (usec)"
+	range 1 10000000
+	default 70000
+	help
+	  Cumulative memory SOME stall threshold, in microseconds, for the
+	  PSI trigger used by Simple LMK.
+	  Example: 100000 means 100ms of cumulative memory SOME stall in
+	  the configured monitoring window.
+
+config ANDROID_SIMPLE_LMK_PSI_WINDOW_US
+	int "Simple LMK PSI monitoring window (usec)"
+	range 500000 10000000
+	default 1000000
+	help
+	  Tracking window, in microseconds, for the PSI trigger used by
+	  Simple LMK.
+	  Example: 1000000 means a 1 second monitoring window.
+
+config ANDROID_SIMPLE_LMK_PSI_MIN_EVENTS
+	int "Simple LMK minimum consecutive PSI events"
+	range 1 32
+	default 2
+	help
+	  Number of consecutive PSI trigger wakeups required before Simple
+	  LMK starts a reclaim pass.
+	  This filters out isolated pressure bursts without tying decisions
+	  back to free-page watermarks.
+
+config ANDROID_SIMPLE_LMK_PSI_COOLDOWN_MSEC
+	int "Simple LMK cooldown after PSI-triggered reclaim (msec)"
+	range 0 60000
+	default 1500
+	help
+	  Minimum quiet period, in milliseconds, after kicking a reclaim
+	  pass from PSI before another PSI event may trigger another pass.
+	  This reduces back-to-back kill storms during sustained pressure.
 
 endif
 
