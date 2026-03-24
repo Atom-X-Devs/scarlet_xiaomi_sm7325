@@ -1,6 +1,3 @@
-#include <asm/syscall.h>
-#include <linux/vmalloc.h>
-
 #ifndef CONFIG_ARM
 #error "only meant for ARM"
 #endif
@@ -188,6 +185,8 @@ static void read_and_replace_syscall(void *old_ptr, unsigned long syscall_nr, vo
 	smp_mb(); 
 }
 
+extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
+
 static void restore_syscall(void *old_ptr, unsigned long syscall_nr, void *new_ptr, void *target_table)
 {
 	void **sctable = (void **)target_table;
@@ -302,19 +301,24 @@ static void ksu_syscall_table_hook_init()
 	vfs_read_hook_wait_thread(); // start unreg kthread
 }
 
+static DEFINE_MUTEX(sucompat_toggle_mutex);
+
 static void syscall_table_sucompat_enable()
 {
-
+	mutex_lock(&sucompat_toggle_mutex);
 	read_and_replace_syscall((void *)&armeabi_execve, __ARMEABI_execve, (void *)hook_armeabi_execve, (void *)sys_call_table);
 	read_and_replace_syscall((void *)&armeabi_faccessat, __ARMEABI_faccessat, (void *)hook_armeabi_faccessat, (void *)sys_call_table);
 	read_and_replace_syscall((void *)&armeabi_fstatat64, __ARMEABI_fstatat64, (void *)hook_armeabi_fstatat64, (void *)sys_call_table);
+	mutex_unlock(&sucompat_toggle_mutex);
 }
 
 static void syscall_table_sucompat_disable()
 {
+	mutex_lock(&sucompat_toggle_mutex);
 	restore_syscall((void *)&armeabi_execve, __ARMEABI_execve, (void *)hook_armeabi_execve, (void *)sys_call_table);
 	restore_syscall((void *)&armeabi_faccessat, __ARMEABI_faccessat, (void *)hook_armeabi_faccessat, (void *)sys_call_table);
 	restore_syscall((void *)&armeabi_fstatat64, __ARMEABI_fstatat64, (void *)hook_armeabi_fstatat64, (void *)sys_call_table);
+	mutex_unlock(&sucompat_toggle_mutex);
 }
 
 // EOF

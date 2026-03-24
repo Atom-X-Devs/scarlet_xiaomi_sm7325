@@ -1,9 +1,7 @@
-#ifndef __KSU_H_KSU_MANAGER
-#define __KSU_H_KSU_MANAGER
+#ifndef __KSU_H_MANAGER_IDENTITY
+#define __KSU_H_MANAGER_IDENTITY
 
-#include <linux/cred.h>
-#include <linux/types.h>
-#include "allowlist.h"
+// #include "allowlist.h"
 
 #define KSU_INVALID_APPID -1
 

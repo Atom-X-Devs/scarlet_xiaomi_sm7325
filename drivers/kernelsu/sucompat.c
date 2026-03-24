@@ -1,19 +1,3 @@
-#include <linux/dcache.h>
-#include <linux/security.h>
-#include <asm/current.h>
-#include <linux/cred.h>
-#include <linux/err.h>
-#include <linux/fs.h>
-#include <linux/types.h>
-#include <linux/uaccess.h>
-#include <linux/version.h>
-#include <linux/ptrace.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
-#include <linux/sched/task_stack.h>
-#else
-#include <linux/sched.h>
-#endif
-
 #define SU_PATH "/system/bin/su"
 #define SH_PATH "/system/bin/sh"
 
@@ -38,15 +22,20 @@ static void __user *userspace_stack_buffer(const void *d, size_t len)
 	unsigned int step = 32;
 	char __user *p = NULL;
 	
-	do {
-		p = (void __user *)(start_stack - step - len);
-		if (!copy_to_user(p, d, len)) {
-			/* pr_info("%s: start_stack: %lx p: %lx len: %zu\n",
-				__func__, start_stack, (unsigned long)p, len ); */
-			return p;
-		}
-		step = step + step;
-	} while (step <= 2048);
+start_loop:
+	p = (void __user *)(start_stack - step - len);
+
+	if (IS_ENABLED(CONFIG_KSU_DEBUG))
+		pr_info("%s: start_stack: %lx p: %lx len: %zu\n", __func__, start_stack, (unsigned long)p, len );
+
+	if (!copy_to_user(p, d, len))
+		return p;
+
+	step = step + step;
+
+	if (step <= 2048)
+		goto start_loop;
+
 	return NULL;
 }
 #endif
@@ -68,10 +57,13 @@ static char __user *ksud_user_path(void)
 __attribute__((hot))
 static __always_inline bool is_su_allowed(const void **ptr_to_check)
 {
+#ifndef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 	barrier();
 	if (!ksu_su_compat_enabled)
 		return false;
+#endif
 
+	barrier();
 	if (likely(!!current->seccomp.mode))
 		return false;
 
@@ -92,13 +84,11 @@ static __always_inline bool is_su_allowed(const void **ptr_to_check)
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
-static inline void sys_execve_escape_ksud(const char __user **filename_user)
+__attribute__((cold))
+static noinline void sys_execve_escape_ksud(const char __user **filename_user)
 {
-	if (likely(ksu_boot_completed))
-		return;
-
 	// see if its init
-	if (!is_init(get_current_cred()))
+	if (!is_init(current_cred()))
 		return;
 
 	const char ksud_path[] = KSUD_PATH;
@@ -118,13 +108,11 @@ static inline void sys_execve_escape_ksud(const char __user **filename_user)
 	return;
 }
 
-static inline void kernel_execve_escape_ksud(void *filename_ptr)
+__attribute__((cold))
+static noinline void kernel_execve_escape_ksud(void *filename_ptr)
 {
-	if (likely(ksu_boot_completed))
-		return;
-
 	// see if its init
-	if (!is_init(get_current_cred()))
+	if (!is_init(current_cred()))
 		return;
 
 	if (likely(memcmp(filename_ptr, KSUD_PATH, sizeof(KSUD_PATH))))
@@ -138,7 +126,7 @@ static inline void kernel_execve_escape_ksud(void *filename_ptr)
 }
 #else
 static inline void sys_execve_escape_ksud(const char __user **filename_user) { } // no-op
-static inline void kernel_execve_escape_ksud(void *filename_ptr) {} // no-op
+static inline void kernel_execve_escape_ksud(void *filename_ptr) { } // no-op
 #endif
 
 static int ksu_sucompat_user_common(const char __user **filename_user,
@@ -160,16 +148,28 @@ static int ksu_sucompat_user_common(const char __user **filename_user,
 
 	write_sulog(sym);
 
-	if (escalate) {
-		pr_info("%s su found\n", syscall_name);
-		*filename_user = ksud_user_path();
-		escape_with_root_profile(); // escalate !!
-	} else {
-		pr_info("%s su->sh!\n", syscall_name);
-		*filename_user = sh_user_path();
-	}
+	if (!escalate)
+		goto no_escalate;
 
+	if (!!escape_with_root_profile())
+		return 0;
+
+	// NOTE: we only check file existence, not exec success!
+	struct path kpath;
+	if (!!kern_path("/data/adb/ksud", 0, &kpath))
+		goto no_ksud;
+
+	path_put(&kpath);
+	pr_info("%s su->ksud!\n", syscall_name);
+	*filename_user = ksud_user_path();
 	return 0;
+
+no_ksud:
+no_escalate:
+	pr_info("%s su->sh!\n", syscall_name);
+	*filename_user = sh_user_path();
+	return 0;
+
 }
 
 // sys_faccessat
@@ -196,33 +196,13 @@ int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 			       void *__never_use_argv, void *__never_use_envp,
 			       int *__never_use_flags)
 {
-	sys_execve_escape_ksud(filename_user);
+	if (unlikely(!ksu_boot_completed))
+		sys_execve_escape_ksud(filename_user);
 
 	if (!is_su_allowed((const void **)filename_user))
 		return 0;
 
 	return ksu_sucompat_user_common(filename_user, "sys_execve", true, 'x');
-}
-
-// getname_flags on fs/namei.c, this hooks ALL fs-related syscalls.
-// NOT RECOMMENDED for daily use. mostly for debugging purposes.
-int ksu_getname_flags_user(const char __user **filename_user, int flags)
-{
-	if (!is_su_allowed((const void **)filename_user))
-		return 0;
-
-	// sys_execve always calls getname, which sets flags = 0 on getname_flags
-	// we can use it to deduce if caller is likely execve
-
-	uint8_t sym = '$';
-	bool escalate = false;
-	
-	if (!flags) {
-		escalate = true;
-		sym = 'x';
-	}
-
-	return ksu_sucompat_user_common(filename_user, "getname_flags", escalate, sym);
 }
 
 static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_name, bool escalate, const uint8_t sym)
@@ -233,15 +213,28 @@ static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_n
 
 	write_sulog(sym);
 
-	if (escalate) {
-		pr_info("%s su found\n", function_name);
-		memcpy(filename_ptr, KSUD_PATH, sizeof(KSUD_PATH));
-		escape_with_root_profile();
-	} else {
-		pr_info("%s su->sh\n", function_name);
-		memcpy(filename_ptr, SH_PATH, sizeof(SH_PATH));
-	}
+	if (!escalate)
+		goto no_escalate;
+
+	if (!!escape_with_root_profile())
+		return 0;
+
+	// NOTE: we only check file existence, not exec success!
+	struct path kpath;
+	if (!!kern_path("/data/adb/ksud", 0, &kpath))
+		goto no_ksud;
+
+	path_put(&kpath);
+	pr_info("%s su->ksud!\n", function_name);
+	memcpy(filename_ptr, KSUD_PATH, sizeof(KSUD_PATH));
 	return 0;
+
+no_ksud:
+no_escalate:
+	pr_info("%s su->sh!\n", function_name);
+	memcpy(filename_ptr, SH_PATH, sizeof(SH_PATH));
+	return 0;
+
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
@@ -251,7 +244,8 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 				 void *__never_use_argv, void *__never_use_envp,
 				 int *__never_use_flags)
 {
-	kernel_execve_escape_ksud((void *)(*filename_ptr)->name);
+	if (unlikely(!ksu_boot_completed))
+		kernel_execve_escape_ksud((void *)(*filename_ptr)->name);
 
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
@@ -267,7 +261,8 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 			void *envp, int *flags)
 {
-	kernel_execve_escape_ksud((void *)(*filename_ptr)->name);
+	if (unlikely(!ksu_boot_completed))
+		kernel_execve_escape_ksud((void *)(*filename_ptr)->name);
 
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
@@ -281,7 +276,8 @@ int ksu_legacy_execve_sucompat(const char **filename_ptr,
 				 void *__never_use_argv,
 				 void *__never_use_envp)
 {
-	kernel_execve_escape_ksud((void *)*filename_ptr);
+	if (unlikely(!ksu_boot_completed))
+		kernel_execve_escape_ksud((void *)*filename_ptr);
 
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
@@ -290,58 +286,18 @@ int ksu_legacy_execve_sucompat(const char **filename_ptr,
 }
 #endif
 
-// vfs_statx for 5.18+
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
-int ksu_handle_vfs_statx(void *__never_use_dfd, struct filename **filename_ptr,
-			void *__never_use_flags, void **__never_use_stat,
-			void *__never_use_request_mask)
-{
-	if (!is_su_allowed((const void **)filename_ptr))
-		return 0;
-
-	return ksu_sucompat_kernel_common((void *)(*filename_ptr)->name, "vfs_statx", false, 's');
-}
-#endif
-
-// getname_flags on fs/namei.c, this hooks ALL fs-related syscalls.
-// put the hook right after usercopy
-// NOT RECOMMENDED for daily use. mostly for debugging purposes.
-int ksu_getname_flags_kernel(char **kname, int flags)
-{
-	if (!is_su_allowed((const void **)kname))
-		return 0;
-
-	uint8_t sym = '$';
-	bool escalate = false;
-	
-	if (!flags) {
-		escalate = true;
-		sym = 'x';
-	}
-
-	return ksu_sucompat_kernel_common((void *)*kname, "getname_flags", escalate, sym);
-}
-
 #ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 static void syscall_table_sucompat_enable();
 static void syscall_table_sucompat_disable();
-#endif
-
-#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
-static void rp_sucompat_exit();
-static void rp_sucompat_init();
+#else
+static inline void syscall_table_sucompat_enable() { } // no-op
+static inline void syscall_table_sucompat_disable() { } // no-op
 #endif
 
 static void ksu_sucompat_enable()
 {
 
-#ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 	syscall_table_sucompat_enable();
-#endif
-
-#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
-	rp_sucompat_init();
-#endif
 
 	ksu_su_compat_enabled = true;
 	pr_info("%s: hooks enabled: exec, faccessat, stat\n", __func__);
@@ -350,13 +306,7 @@ static void ksu_sucompat_enable()
 static void ksu_sucompat_disable()
 {
 
-#ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 	syscall_table_sucompat_disable();
-#endif
-
-#ifdef CONFIG_KSU_KRETPROBES_SUCOMPAT
-	rp_sucompat_exit();
-#endif
 
 	ksu_su_compat_enabled = false;
 	pr_info("%s: hooks disabled: exec, faccessat, stat\n", __func__);

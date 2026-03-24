@@ -1,8 +1,6 @@
 #ifndef __KSU_H_KSUD
 #define __KSU_H_KSUD
 
-#include <linux/types.h>
-
 #define KSUD_PATH "/data/adb/ksud"
 
 void ksu_ksud_init();
@@ -16,8 +14,11 @@ bool ksu_is_safe_mode(void);
 
 int nuke_ext4_sysfs(const char* mnt);
 
-extern bool ksu_execveat_hook __read_mostly;
-extern int ksu_handle_pre_ksud(const char *filename);
+bool ksu_execveat_hook __read_mostly;
+static noinline int ksu_handle_pre_ksud(const char *filename);
+
+bool ksu_vfs_read_hook __read_mostly;
+static noinline void ksu_install_rc_hook(struct file *file);
 
 extern u32 ksu_file_sid;
 extern bool ksu_module_mounted;

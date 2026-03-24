@@ -1,17 +1,5 @@
-#include <linux/err.h>
-#include <linux/fs.h>
-#include <linux/list.h>
-#include <linux/slab.h>
-#include <linux/string.h>
-#include <linux/types.h>
-#include <linux/version.h>
-
-#include <linux/kthread.h>
-#include <linux/sched.h>
-
 uid_t ksu_manager_appid = KSU_INVALID_APPID;
 
-static struct task_struct *throne_thread = NULL;
 #define SYSTEM_PACKAGES_LIST_PATH "/data/system/packages.list"
 
 struct uid_data {
@@ -163,10 +151,13 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 	unsigned long data_app_magic = 0;
 
 	// First depth
-	struct data_path data = { };
-	strncpy(data.dirpath, path, DATA_PATH_LEN - 1 );
-	data.depth = depth;
-	list_add_tail(&data.list, &data_path_list);
+	struct data_path *data __attribute__((__cleanup__(ksu_kfree_byref))) = kzalloc(sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return;
+
+	strncpy(data->dirpath, path, DATA_PATH_LEN - 1 );
+	data->depth = depth;
+	list_add_tail(&data->list, &data_path_list);
 
 	// we put the apk path we collected here
 	char candidate_path[DATA_PATH_LEN];
@@ -188,7 +179,7 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 			if (stop)
 				goto skip_iterate;
 
-			struct file *file = ksu_filp_open_compat(pos->dirpath, O_RDONLY | O_NOFOLLOW | O_DIRECTORY, 0);
+			struct file *file = filp_open(pos->dirpath, O_RDONLY | O_NOFOLLOW | O_DIRECTORY, 0);
 			if (IS_ERR(file)) {
 				pr_err("Failed to open directory: %s, err: %ld\n", pos->dirpath, PTR_ERR(file));
 				goto skip_iterate;
@@ -232,7 +223,7 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 
 skip_iterate:
 			list_del(&pos->list);
-			if (pos != &data)
+			if (pos != data)
 				kfree(pos);
 		}
 	}
@@ -257,12 +248,18 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
 
 static void throne_tracker_fn(bool prune_only)
 {
-	struct file *fp;
+	struct file *fp = NULL;
 	int tries = 0;
+
+	if (unlikely(!(current->flags & PF_KTHREAD))) {
+		pr_info("%s: not a kthread! skip retry for: %s\n", __func__, SYSTEM_PACKAGES_LIST_PATH);
+		fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
+		goto skip_retry;
+	}
 
 	while (tries++ < 10) {
 		if (!is_lock_held(SYSTEM_PACKAGES_LIST_PATH)) {
-			fp = ksu_filp_open_compat(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
+			fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
 			if (!IS_ERR(fp)) 
 				break;
 		}
@@ -270,7 +267,8 @@ static void throne_tracker_fn(bool prune_only)
 		pr_info("%s: waiting for %s\n", __func__, SYSTEM_PACKAGES_LIST_PATH);
 		msleep(100); // migth as well add a delay
 	};
-	
+
+skip_retry:
 	if (IS_ERR(fp)) {
 		pr_err("%s: open " SYSTEM_PACKAGES_LIST_PATH " failed: %ld\n", __func__, PTR_ERR(fp));
 		return;
@@ -285,13 +283,13 @@ static void throne_tracker_fn(bool prune_only)
 	loff_t line_start = 0;
 	char buf[KSU_MAX_PACKAGE_NAME];
 	for (;;) {
-		ssize_t count = ksu_kernel_read_compat(fp, &chr, sizeof(chr), &pos);
+		ssize_t count = kernel_read(fp, &chr, sizeof(chr), &pos);
 		if (count != sizeof(chr))
 			break;
 		if (chr != '\n')
 			continue;
 
-		count = ksu_kernel_read_compat(fp, buf, sizeof(buf), &line_start);
+		count = kernel_read(fp, buf, sizeof(buf), &line_start);
 
 		struct uid_data *data = kzalloc(sizeof(struct uid_data), GFP_ATOMIC);
 		if (!data) {
@@ -361,6 +359,8 @@ out:
 	}
 }
 
+static DEFINE_MUTEX(throne_tracker_mutex);
+
 static int throne_tracker_thread(void *data)
 {
 	// now de-void it here
@@ -368,12 +368,20 @@ static int throne_tracker_thread(void *data)
 
 	pr_info("throne_tracker: pid: %d started\n", current->pid);
 
-	// this is normally not needed, but it wont hurt
-	escape_to_root_forced();
+	mutex_lock(&throne_tracker_mutex);
 
+	// lessen that window where user opens manager right away, yet its not crowned
+	// we are async/non-blocking in these kthreads
+	// sched_set_fifo_low
+	struct sched_param param = { 0 };
+	param.sched_priority = 1;
+	sched_setscheduler_nocheck(current, 1, &param);
+
+	escape_to_root_forced();
 	throne_tracker_fn(prune_only);
-	throne_thread = NULL;
-	smp_mb();
+
+	mutex_unlock(&throne_tracker_mutex);
+
 	pr_info("throne_tracker: pid: %d exit!\n", current->pid);
 	return 0;
 }
@@ -383,25 +391,16 @@ void track_throne(bool prune_only)
 #ifndef CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED
 	static bool throne_tracker_first_run __read_mostly = true;
 	if (unlikely(throne_tracker_first_run)) {
+		mutex_lock(&throne_tracker_mutex);
 		throne_tracker_fn(prune_only);
+		mutex_unlock(&throne_tracker_mutex);
 		throne_tracker_first_run = false;
 		return;
 	}
 #endif
-	smp_mb();
-	if (throne_thread != NULL) // single instance lock
-		return;
 
 	// HACK: force cast prune_only to be a void *
-	// this way we won't need to create a struct.
-	// there is only one argument anyway for track_throne()
-	// so yes, true or false is now a void pointer.
-	// reality is what I want to be.
-	throne_thread = kthread_run(throne_tracker_thread, (void *)prune_only, "throne_tracker");
-	if (IS_ERR(throne_thread)) {
-		throne_thread = NULL;
-		return;
-	}
+	kthread_run(throne_tracker_thread, (void *)prune_only, "thronetracker");
 }
 
 void ksu_throne_tracker_init()

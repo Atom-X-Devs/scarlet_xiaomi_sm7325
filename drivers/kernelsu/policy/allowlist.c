@@ -1,22 +1,3 @@
-#include <linux/rcupdate.h>
-#include <linux/limits.h>
-#include <linux/rculist.h>
-#include <linux/mutex.h>
-#include <linux/capability.h>
-#include <linux/compiler.h>
-#include <linux/fs.h>
-#include <linux/gfp.h>
-#include <linux/kernel.h>
-#include <linux/list.h>
-#include <linux/printk.h>
-#include <linux/slab.h>
-#include <linux/types.h>
-#include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-#include <linux/compiler_types.h>
-#endif
-#include <linux/kthread.h>
-
 #define FILE_MAGIC 0x7f4b5355 // ' KSU', u32
 #define FILE_FORMAT_VERSION 3 // u32
 
@@ -92,20 +73,6 @@ void ksu_show_allow_list(void)
 	}
 	rcu_read_unlock();
 }
-
-#ifdef CONFIG_KSU_DEBUG
-static void ksu_grant_root_to_shell()
-{	struct app_profile profile = {
-		.version = KSU_APP_PROFILE_VER,
-		.allow_su = true,
-		.current_uid = 2000,
-	};
-	strcpy(profile.key, "com.android.shell");
-	strcpy(profile.rp_config.profile.selinux_domain,
-		   KSU_DEFAULT_SELINUX_DOMAIN);
-	ksu_set_app_profile(&profile);
-}
-#endif
 
 bool ksu_get_app_profile(struct app_profile *profile)
 {
@@ -275,6 +242,9 @@ bool __ksu_is_allow_uid(uid_t uid)
 		return true;
 	}
 
+	if (IS_ENABLED(CONFIG_KSU_DEBUG) && unlikely(uid == SHELL_UID))
+		return true;
+
 	if (likely(uid <= BITMAP_UID_MAX)) {
 		return !!(allow_list_bitmap[uid / BITS_PER_BYTE] &
 				  (1 << (uid % BITS_PER_BYTE)));
@@ -331,6 +301,9 @@ void ksu_get_root_profile(uid_t uid, struct root_profile *profile)
 		goto use_default;
 	}
 
+	if (IS_ENABLED(CONFIG_KSU_DEBUG) && unlikely(uid == SHELL_UID))
+		goto use_default;
+
 	rcu_read_lock();
 	list_for_each_entry_rcu (p, &allow_list, list) {
 		if (uid == p->profile.current_uid && p->profile.allow_su) {
@@ -376,26 +349,26 @@ bool ksu_get_allow_list(int *array, u16 length, u16 *out_length, u16 *out_total,
 }
 
 
-void ksu_persistent_allow_list_fn()
+static void ksu_persistent_allow_list_fn()
 {
 	u32 magic = FILE_MAGIC;
 	u32 version = FILE_FORMAT_VERSION;
 	struct perm_data *p = NULL;
 	loff_t off = 0;
 
-	struct file *fp = ksu_filp_open_compat(KERNEL_SU_ALLOWLIST, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	struct file *fp = filp_open(KERNEL_SU_ALLOWLIST, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (IS_ERR(fp)) {
 		pr_err("save_allow_list create file failed: %ld\n", PTR_ERR(fp));
 		goto out;
 	}
 
 	// store magic and version
-	if (ksu_kernel_write_compat(fp, &magic, sizeof(magic), &off) != sizeof(magic)) {
+	if (kernel_write(fp, &magic, sizeof(magic), &off) != sizeof(magic)) {
 		pr_err("save_allow_list write magic failed.\n");
 		goto close_file;
 	}
 
-	if (ksu_kernel_write_compat(fp, &version, sizeof(version), &off) != sizeof(version)) {
+	if (kernel_write(fp, &version, sizeof(version), &off) != sizeof(version)) {
 		pr_err("save_allow_list write version failed.\n");
 		goto close_file;
 	}
@@ -404,7 +377,7 @@ void ksu_persistent_allow_list_fn()
 		pr_info("save allow list, name: %s uid :%d, allow: %d\n",
 				p->profile.key, p->profile.current_uid, p->profile.allow_su);
 
-		ksu_kernel_write_compat(fp, &p->profile, sizeof(p->profile), &off);
+		kernel_write(fp, &p->profile, sizeof(p->profile), &off);
 	}
 
 close_file:
@@ -451,26 +424,21 @@ void ksu_load_allow_list()
 	u32 magic;
 	u32 version;
 
-#ifdef CONFIG_KSU_DEBUG
-	// always allow adb shell by default
-	ksu_grant_root_to_shell();
-#endif
-
 	// load allowlist now!
-	fp = ksu_filp_open_compat(KERNEL_SU_ALLOWLIST, O_RDONLY, 0);
+	fp = filp_open(KERNEL_SU_ALLOWLIST, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		pr_err("load_allow_list open file failed: %ld\n", PTR_ERR(fp));
 		return;
 	}
 
 	// verify magic
-	if (ksu_kernel_read_compat(fp, &magic, sizeof(magic), &off) != sizeof(magic) ||
+	if (kernel_read(fp, &magic, sizeof(magic), &off) != sizeof(magic) ||
 		magic != FILE_MAGIC) {
 		pr_err("allowlist file invalid: %d!\n", magic);
 		goto exit;
 	}
 
-	if (ksu_kernel_read_compat(fp, &version, sizeof(version), &off) != sizeof(version)) {
+	if (kernel_read(fp, &version, sizeof(version), &off) != sizeof(version)) {
 		pr_err("allowlist read version: %d failed\n", version);
 		goto exit;
 	}
@@ -480,7 +448,7 @@ void ksu_load_allow_list()
 	while (true) {
 		struct app_profile profile;
 
-		ret = ksu_kernel_read_compat(fp, &profile, sizeof(profile), &off);
+		ret = kernel_read(fp, &profile, sizeof(profile), &off);
 
 		if (ret <= 0) {
 			pr_info("load_allow_list read err: %zd\n", ret);

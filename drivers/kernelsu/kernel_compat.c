@@ -1,114 +1,3 @@
-#include <linux/version.h>
-#include <linux/fs.h>
-#include <linux/nsproxy.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
-#include <linux/sched/signal.h> // signal_struct
-#include <linux/sched/task.h>
-#else
-#include <linux/sched.h>
-#endif
-#include <linux/uaccess.h>
-#include <linux/filter.h>
-#include <linux/seccomp.h>
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
-#include <linux/key.h>
-#include <linux/errno.h>
-#include <linux/cred.h>
-struct key *init_session_keyring = NULL;
-
-static inline int install_session_keyring(struct key *keyring)
-{
-	struct cred *new;
-	int ret;
-
-	new = prepare_creds();
-	if (!new)
-		return -ENOMEM;
-
-	ret = install_session_keyring_to_cred(new, keyring);
-	if (ret < 0) {
-		abort_creds(new);
-		return ret;
-	}
-
-	return commit_creds(new);
-}
-
-// this is on tgcred on < 3.8
-// while we can grab that one, it seems to not actually be needed 
-static void ksu_grab_init_session_keyring(const char *filename)
-{
-	if (init_session_keyring)
-		return;
-		
-	if (!strstr(filename, "init")) 
-		return;
-
-	if (!!strcmp(current->comm, "init"))
-		return;
-
-	if (!!!is_init(get_current_cred()))
-		return;
-
-	// thats surely some exclamation comedy
-	// and now we are sure that this is the key we want
-	// up to 5.1, struct key __rcu *session_keyring; /* keyring inherited over fork */
-	// so we need to grab this using rcu_dereference
-	struct key *keyring = rcu_dereference(current->cred->session_keyring);
-	if (!keyring)
-		return;
-
-	init_session_keyring = key_get(keyring);
-
-	pr_info("%s: init_session_keyring: 0x%p \n", __func__, init_session_keyring);
-
-}
-struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
-{
-	// normally we only put this on ((current->flags & PF_WQ_WORKER) || (current->flags & PF_KTHREAD))
-	// but in the grand scale of things, this does NOT matter.
-	// pr_info("installing init session keyring for older kernel\n");
-	if (init_session_keyring != NULL && !current_cred()->session_keyring) {
-		install_session_keyring(init_session_keyring);
-	}
-	return filp_open(filename, flags, mode);
-}
-#else
-struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
-{
-	return filp_open(filename, flags, mode);
-}
-#endif
-
-ssize_t ksu_kernel_read_compat(struct file *p, void *buf, size_t count, loff_t *pos)
-{
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-	return kernel_read(p, buf, count, pos);
-#else // https://elixir.bootlin.com/linux/v4.14.336/source/fs/read_write.c#L418
-	mm_segment_t old_fs;
-	old_fs = get_fs();
-	set_fs(get_ds());
-	ssize_t result = vfs_read(p, (void __user *)buf, count, pos);
-	set_fs(old_fs);
-	return result;
-#endif
-}
-
-ssize_t ksu_kernel_write_compat(struct file *p, const void *buf, size_t count, loff_t *pos)
-{
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-	return kernel_write(p, buf, count, pos);
-#else // https://elixir.bootlin.com/linux/v4.14.336/source/fs/read_write.c#L512
-	mm_segment_t old_fs;
-	old_fs = get_fs();
-	set_fs(get_ds());
-	ssize_t res = vfs_write(p, (__force const char __user *)buf, count, pos);
-	set_fs(old_fs);
-	return res;
-#endif
-}
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
 __weak int path_mount(const char *dev_name, struct path *path, 
 	const char *type_page, unsigned long flags, void *data_page)
@@ -130,7 +19,40 @@ __weak int path_mount(const char *dev_name, struct path *path,
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+__weak int path_umount(struct path *path, int flags)
+{
+	char buf[256] = {0};
+	int ret;
+
+	// -1 on the size as implicit null termination
+	// as we zero init the thing
+	char *usermnt = d_path(path, buf, sizeof(buf) - 1);
+	if (!(usermnt && usermnt != buf)) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	mm_segment_t old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+	ret = ksys_umount((char __user *)usermnt, flags);
+#else
+	ret = (int)sys_umount((char __user *)usermnt, flags);
+#endif
+
+	set_fs(old_fs);
+
+	// release ref here! user_path_at increases it
+	// then only cleans for itself
+out:
+	path_put(path); 
+	return ret;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0) || !defined(CONFIG_EXT4_FS)
 __weak void ext4_unregister_sysfs(struct super_block *sb)
 {
 	pr_info("%s: feature not implemented!\n", __func__);
@@ -148,7 +70,7 @@ __weak long copy_from_user_nofault(void *dst, const void __user *src, size_t siz
 
 	// normally theres an access_ok check here
 	// but for what we use it, it will always be true.
-
+	// so we skip it
 	pagefault_disable();
 	ret = __copy_from_user_inatomic(dst, src, size);
 	pagefault_enable();

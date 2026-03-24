@@ -1,7 +1,3 @@
-#include <linux/security.h>
-#include <linux/atomic.h>
-#include <linux/version.h>
-
 // sorry for the ifdef hell
 // but im too lazy to fragment this out.
 // theres only one feature so far anyway
@@ -77,7 +73,6 @@ static int get_sid()
 
 #if defined(CONFIG_KPROBES) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 #include <linux/kprobes.h>
-#include <linux/slab.h>
 static struct kprobe *slow_avc_audit_kp;
 
 static int ksu_handle_slow_avc_audit(u32 *tsid)

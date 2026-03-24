@@ -1,22 +1,3 @@
-#include <linux/anon_inodes.h>
-#include <linux/capability.h>
-#include <linux/cred.h>
-#include <linux/err.h>
-#include <linux/fdtable.h>
-#include <linux/file.h>
-#include <linux/fs.h>
-#include <linux/slab.h>
-#include <linux/syscalls.h>
-#include <linux/uaccess.h>
-#include <linux/version.h>
-#include <linux/utsname.h> // utsname() and uts_sem
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
-#include <linux/sched/task.h> // put_task_struct
-#else
-#include <linux/sched.h>
-#endif
-
 // Permission check functions
 bool only_manager(void)
 {
@@ -61,6 +42,7 @@ static int do_grant_root(void __user *arg)
 }
 
 static uint32_t ksuver_override = 0;
+static uint32_t ksuflags_override = 0;
 
 static int do_get_info(void __user *arg)
 {
@@ -69,11 +51,14 @@ static int do_get_info(void __user *arg)
 	if (ksuver_override)
 		cmd.version = ksuver_override;
 
+	// NOTE: we do not have LKM support so we don't bother with its flags or late-load
 	if (is_manager()) {
-		cmd.flags |= 0x2;
+		cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
 	}
 	cmd.features = KSU_FEATURE_MAX;
 
+	if (ksuflags_override)
+		cmd.flags = ksuflags_override;
 
 	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
 		pr_err("get_version: copy_to_user failed\n");
@@ -131,7 +116,7 @@ static int do_set_sepolicy(void __user *arg)
 		return -EFAULT;
 	}
 
-	return handle_sepolicy(cmd.cmd, (void __user *)cmd.arg);
+	return handle_sepolicy((void __user *)cmd.data, cmd.data_len);
 }
 
 static int do_check_safemode(void __user *arg)
@@ -651,6 +636,36 @@ static int add_try_umount(void __user *arg)
 	return 0;
 }
 
+static int do_set_init_pgrp(void __user *arg)
+{
+	int err;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+	struct pid *pids[PIDTYPE_MAX] = { 0 };
+#endif
+	write_lock_irq(&tasklist_lock);
+	struct task_struct *p = current->group_leader;
+	struct pid *init_group = task_pgrp(&init_task);
+
+	err = -EPERM;
+	if (task_session(p) != task_session(&init_task))
+		goto out;
+
+	err = 0;
+	if (task_pgrp(p) != init_group) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+		change_pid(pids, p, PIDTYPE_PGID, init_group);
+#else
+		change_pid(p, PIDTYPE_PGID, init_group);
+#endif
+	}
+out:
+	write_unlock_irq(&tasklist_lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+	free_pids(pids);
+#endif
+	return err;
+}
+
 // IOCTL handlers mapping table
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
 	{ .cmd = KSU_IOCTL_GRANT_ROOT, .name = "GRANT_ROOT", .handler = do_grant_root, .perm_check = allowed_for_su },
@@ -673,12 +688,11 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
 	{ .cmd = KSU_IOCTL_MANAGE_MARK, .name = "MANAGE_MARK", .handler = do_manage_mark, .perm_check = manager_or_root },
 	{ .cmd = KSU_IOCTL_NUKE_EXT4_SYSFS, .name = "NUKE_EXT4_SYSFS", .handler = do_nuke_ext4_sysfs, .perm_check = manager_or_root },
 	{ .cmd = KSU_IOCTL_ADD_TRY_UMOUNT, .name = "ADD_TRY_UMOUNT", .handler = add_try_umount, .perm_check = manager_or_root },
+	{ .cmd = KSU_IOCTL_SET_INIT_PGRP, .name = "SET_INIT_PGRP", .handler = do_set_init_pgrp, .perm_check = only_root },
 	{ .cmd = 0, .name = NULL, .handler = NULL, .perm_check = NULL } // Sentinel
 };
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0)
-#include <linux/task_work.h>
-#include <linux/fdtable.h>
 
 struct ksu_install_fd_tw {
 	struct callback_head cb;
@@ -784,6 +798,15 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 
 		pr_info("sys_reboot: ksu_change_ksuver to: %d\n", cmd);
 		ksuver_override = cmd;
+
+		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
+			return 0;
+	}
+
+	if (magic2 == CHANGE_KSUFLAGS) {
+
+		pr_info("sys_reboot: ksu_change_ksuflags to: %d\n", cmd);
+		ksuflags_override = cmd;
 
 		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
 			return 0;

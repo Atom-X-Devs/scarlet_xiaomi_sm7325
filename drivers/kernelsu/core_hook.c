@@ -1,32 +1,3 @@
-#include <linux/capability.h>
-#include <linux/cred.h>
-#include <linux/dcache.h>
-#include <linux/err.h>
-#include <linux/fs.h>
-#include <linux/init.h>
-#include <linux/init_task.h>
-#include <linux/kernel.h>
-#include <linux/mm.h>
-#include <linux/mount.h>
-#include <linux/namei.h>
-#include <linux/nsproxy.h>
-#include <linux/path.h>
-#include <linux/printk.h>
-#include <linux/sched.h>
-#include <linux/stddef.h>
-#include <linux/binfmts.h>
-#include <linux/nsproxy.h>
-#include <linux/path.h>
-#include <linux/printk.h>
-#include <linux/string.h>
-#include <linux/uaccess.h>
-#include <linux/uidgid.h>
-#include <linux/version.h>
-#include <linux/mount.h>
-#include <linux/fs.h>
-#include <linux/namei.h>
-#include <linux/syscalls.h> // sys_umount
-
 #ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
 #define LSM_HANDLER_TYPE static int
 #else
@@ -96,46 +67,11 @@ LSM_HANDLER_TYPE ksu_handle_rename(struct dentry *old_dentry, struct dentry *new
 	return 0;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
-__weak int path_umount(struct path *path, int flags)
-{
-	char buf[256] = {0};
-	int ret;
-
-	// -1 on the size as implicit null termination
-	// as we zero init the thing
-	char *usermnt = d_path(path, buf, sizeof(buf) - 1);
-	if (!(usermnt && usermnt != buf)) {
-		ret = -ENOENT;
-		goto out;
-	}
-
-	mm_segment_t old_fs = get_fs();
-	set_fs(KERNEL_DS);
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
-	ret = ksys_umount((char __user *)usermnt, flags);
-#else
-	ret = (int)sys_umount((char __user *)usermnt, flags);
-#endif
-
-	set_fs(old_fs);
-
-	// release ref here! user_path_at increases it
-	// then only cleans for itself
-out:
-	path_put(path); 
-	return ret;
-}
-#endif
+extern int path_umount(struct path *path, int flags);
 
 static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
 {
 	int err = path_umount(path, flags);
-
-	// upstream actually has a UAF here: path->dentry after dput
-	// but its fine as umount always succeeds
-	// that code path is very cold
 	if (err)
 		pr_info("umount %s failed: %d\n", mnt, err);
 }
@@ -238,33 +174,24 @@ LSM_HANDLER_TYPE ksu_handle_setuid(struct cred *new, const struct cred *old)
 	return 0;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
-static void ksu_grab_init_session_keyring(const char *filename);
-#endif
-
 LSM_HANDLER_TYPE ksu_bprm_check(struct linux_binprm *bprm)
 {
 	if (likely(!ksu_execveat_hook))
 		return 0;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
 	ksu_grab_init_session_keyring((const char *)bprm->filename);
-#endif
 
-	ksu_handle_pre_ksud((char *)bprm->filename);
+	ksu_handle_pre_ksud((const char *)bprm->filename);
 
 	return 0;
 }
-
-bool ksu_vfs_read_hook __read_mostly;
-static void ksu_handle_initrc(struct file *file);
 
 LSM_HANDLER_TYPE ksu_file_permission(struct file *file, int mask)
 {
 	if (likely(!ksu_vfs_read_hook))
 		return 0;
 
-	ksu_handle_initrc(file);
+	ksu_install_rc_hook(file);
 
 	return 0;
 }
@@ -283,7 +210,6 @@ static int ksu_task_fix_setuid(struct cred *new, const struct cred *old,
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
-#include <linux/lsm_hooks.h>
 static struct security_hook_list ksu_hooks[] = {
 	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
 	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
@@ -311,7 +237,7 @@ static void ksu_lsm_hook_init(void)
 extern struct security_operations selinux_ops;
 
 static int (*orig_inode_rename) (struct inode *old_dir, struct dentry *old_dentry,
-			     struct inode *new_dir, struct dentry *new_dentry);
+			     struct inode *new_dir, struct dentry *new_dentry) = NULL;
 static int hook_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
 			    struct inode *new_inode, struct dentry *new_dentry)
 {
@@ -319,21 +245,21 @@ static int hook_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
 	return orig_inode_rename(old_inode, old_dentry, new_inode, new_dentry);
 }
 
-static int (*orig_task_fix_setuid) (struct cred *new, const struct cred *old, int flags);
+static int (*orig_task_fix_setuid) (struct cred *new, const struct cred *old, int flags) = NULL;
 static int hook_task_fix_setuid(struct cred *new, const struct cred *old, int flags)
 {
 	ksu_task_fix_setuid(new, old, flags);
 	return orig_task_fix_setuid(new, old, flags);
 }
 
-static int (*orig_bprm_check_security)(struct linux_binprm *bprm);
+static int (*orig_bprm_check_security)(struct linux_binprm *bprm) = NULL;
 static int hook_bprm_check_security(struct linux_binprm *bprm)
 {
 	ksu_bprm_check(bprm);
 	return orig_bprm_check_security(bprm);
 }
 
-static int (*orig_file_permission) (struct file *file, int mask);
+static int (*orig_file_permission) (struct file *file, int mask) = NULL;
 static int hook_file_permission(struct file *file, int mask)
 {
 
@@ -436,10 +362,7 @@ static void ksu_lsm_hook_init(void)
 #endif // < 4.2
 
 #else
-void __init ksu_lsm_hook_init(void)
-{
-	// nothing, no-op
-}
+void __init ksu_lsm_hook_init(void) { } // nothing, no-op
 #endif // CONFIG_KSU_LSM_SECURITY_HOOKS
 
 void __init ksu_core_init(void)

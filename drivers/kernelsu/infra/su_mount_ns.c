@@ -1,36 +1,3 @@
-#include <linux/dcache.h>
-#include <linux/errno.h>
-#include <linux/fdtable.h>
-#include <linux/file.h>
-#include <linux/fs.h>
-#include <linux/fs_struct.h>
-#include <linux/limits.h>
-#include <linux/namei.h>
-#include <linux/pid.h>
-#include <linux/slab.h>
-#include <linux/syscalls.h>
-#include <linux/version.h>
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
-#include <linux/proc_ns.h>
-#else
-#include <linux/proc_fs.h>
-#endif
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
-#include <linux/sched/task.h>
-#else
-#include <linux/sched.h>
-#endif
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
-#include <uapi/linux/mount.h>
-#else
-#include <uapi/linux/fs.h>
-#endif
-#endif
-
 extern int path_mount(const char *dev_name, struct path *path,
 					  const char *type_page, unsigned long flags,
 					  void *data_page);
@@ -63,14 +30,8 @@ static long ksu_sys_setns(int fd, int flags)
 #endif
 }
 #else
-static long ksu_sys_setns(int fd, int flags)
-{
-	return sys_setns(fd, flags);
-}
-__weak int ksys_unshare(unsigned long unshare_flags)
-{
-	return sys_unshare(unshare_flags);
-}
+#define ksu_sys_setns sys_setns
+#define ksys_unshare sys_unshare
 #endif
 
 // global mode , need CAP_SYS_ADMIN and CAP_SYS_CHROOT to perform setns
@@ -127,11 +88,9 @@ try_setns:
 	}
 #else
 try_setns:
-	barrier(); // to shutup declaration after label
-
+	;
 	// on UL kernels we can try to just feed it with struct path of /proc/1/ns/mnt
 	// we do NOT have ns_get_path. if it works, GOOD. if it doesn't I don't care.
-
 	struct path ns_path;
 	const struct cred *saved = override_creds(ksu_cred);
 

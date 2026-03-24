@@ -1,5 +1,3 @@
-#include <asm/syscall.h>
-
 #ifndef CONFIG_ARM64
 #error "only meant for ARM64"
 #endif
@@ -291,6 +289,8 @@ static void read_and_replace_syscall(void *old_ptr, unsigned long syscall_nr, vo
 	smp_mb(); 
 }
 
+extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
+
 static void restore_syscall(void *old_ptr, unsigned long syscall_nr, void *new_ptr, void *target_table)
 {
 	void **sctable = (void **)target_table;
@@ -420,8 +420,12 @@ static void ksu_syscall_table_hook_init()
 	vfs_read_hook_wait_thread(); // start unreg kthread
 }
 
+static DEFINE_MUTEX(sucompat_toggle_mutex);
+
 static void syscall_table_sucompat_enable()
 {
+	mutex_lock(&sucompat_toggle_mutex);
+
 	read_and_replace_syscall((void *)&aarch64_execve, __AARCH64_execve, (void *)hook_aarch64_execve, (void *)sys_call_table);
 	read_and_replace_syscall((void *)&aarch64_faccessat, __AARCH64_faccessat, (void *)hook_aarch64_faccessat, (void *)sys_call_table);
 	read_and_replace_syscall((void *)&aarch64_newfstatat, __AARCH64_newfstatat, (void *)hook_aarch64_newfstatat, (void *)sys_call_table);
@@ -432,10 +436,13 @@ static void syscall_table_sucompat_enable()
 	read_and_replace_syscall((void *)&armeabi_fstatat64, __ARMEABI_fstatat64, (void *)hook_armeabi_fstatat64, (void *)compat_sys_call_table);
 #endif
 
+	mutex_unlock(&sucompat_toggle_mutex);
 }
 
 static void syscall_table_sucompat_disable()
 {
+	mutex_lock(&sucompat_toggle_mutex);
+
 	restore_syscall((void *)&aarch64_execve, __AARCH64_execve, (void *)hook_aarch64_execve, (void *)sys_call_table);
 	restore_syscall((void *)&aarch64_faccessat, __AARCH64_faccessat, (void *)hook_aarch64_faccessat, (void *)sys_call_table);
 	restore_syscall((void *)&aarch64_newfstatat, __AARCH64_newfstatat, (void *)hook_aarch64_newfstatat, (void *)sys_call_table);
@@ -446,78 +453,7 @@ static void syscall_table_sucompat_disable()
 	restore_syscall((void *)&armeabi_fstatat64, __ARMEABI_fstatat64, (void *)hook_armeabi_fstatat64, (void *)compat_sys_call_table);
 #endif
 
+	mutex_unlock(&sucompat_toggle_mutex);
 }
 
 // EOF
-
-#if 0 // these are kept for posterity
-static int override_security_head(void *head, const void *new_head, size_t len)
-{
-	unsigned long base = (unsigned long)head & PAGE_MASK;
-	unsigned long offset = offset_in_page(head);
-
-	// this is impossible for our case because the page alignment
-	// but be careful for other cases!
-	BUG_ON(offset + len > PAGE_SIZE);
-	struct page *page = phys_to_page(__pa(base));
-	if (!page) {
-		return -EFAULT;
-	}
-
-	void *addr = vmap(&page, 1, VM_MAP, PAGE_KERNEL);
-	if (!addr) {
-		return -ENOMEM;
-	}
-	local_irq_disable();
-	memcpy(addr + offset, new_head, len);
-	local_irq_enable();
-	vunmap(addr);
-	return 0;
-}
-
-// normally backported on msm 3.10, provide weak
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 0) 
-__weak int set_memory_ro(unsigned long addr, int numpages) { return 0; }
-__weak int set_memory_rw(unsigned long addr, int numpages) { return 0; }
-#endif
-
-// WARNING!!! void * abuse ahead! (type-punning, pointer-hiding!)
-// old_ptr is actually void **
-// target_table is void *target_table[];
-static void read_and_replace_syscall(void *old_ptr, unsigned long syscall_nr, void *new_ptr, void *target_table)
-{
-	// *old_ptr = READ_ONCE(*((void **)sys_call_table + syscall_nr));
-	// WRITE_ONCE(*((void **)sys_call_table + syscall_nr), new_ptr);
-
-	// the one from zx2c4 looks like above, but the issue is that we dont have 
-	// READ_ONCE and WRITE_ONCE on 3.x kernels, here we just force volatile everything
-	// since those are actually just forced-aligned-volatile-rw
-
-	// void **syscall_addr = (void **)(sys_call_table + syscall_nr);
-	// sugar: *(a + b) == a[b]; , a + b == &a[b];
-
-	void **sctable = (void **)target_table;
-	void **syscall_addr = (void **)&sctable[syscall_nr];
-
-	// dont hook non-existing syscall
-	if (!FORCE_VOLATILE(*syscall_addr))
-		return;
-
-	pr_info("%s: syscall: #%d slot: 0x%lx new_ptr: 0x%lx \n", __func__, syscall_nr, *(long *)syscall_addr, (long)new_ptr);
-
-	set_memory_rw(((unsigned long)syscall_addr & PAGE_MASK), 1);
-
-	barrier();
-	*(void **)old_ptr = FORCE_VOLATILE(*syscall_addr);
-
-	barrier();
-	preempt_disable();
-	FORCE_VOLATILE(*syscall_addr) = new_ptr;
-	preempt_enable();
-
-	set_memory_ro(((unsigned long)syscall_addr & PAGE_MASK), 1);
-	smp_mb();
-
-	return;
-}
-#endif

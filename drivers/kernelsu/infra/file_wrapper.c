@@ -1,19 +1,3 @@
-#include <linux/gfp.h>
-#include <linux/fdtable.h>
-#include <linux/export.h>
-#include <linux/anon_inodes.h>
-#include <linux/aio.h> // kernel 3.18
-#include <linux/capability.h>
-#include <linux/cred.h>
-#include <linux/err.h>
-#include <linux/file.h>
-#include <linux/fs.h>
-#include <linux/seq_file.h>
-#include <linux/slab.h>
-#include <linux/uaccess.h>
-#include <linux/version.h>
-#include <linux/mount.h>
-
 struct ksu_file_wrapper {
 	struct file *orig;
 	struct file_operations ops;

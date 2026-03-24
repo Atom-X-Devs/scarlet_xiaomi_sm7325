@@ -1,20 +1,3 @@
-#include <linux/err.h>
-#include <linux/fs.h>
-#include <linux/gfp.h>
-#include <linux/kernel.h>
-#include <linux/slab.h>
-#include <linux/version.h>
-#ifdef CONFIG_KSU_DEBUG
-#include <linux/moduleparam.h>
-#endif
-#include <crypto/hash.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
-#include <crypto/sha2.h>
-#else
-#include <crypto/sha.h>
-#endif
-#include <linux/delay.h>
-
 struct sdesc {
 	struct shash_desc shash;
 	char ctx[];
@@ -70,31 +53,34 @@ static int ksu_sha256(const unsigned char *data, unsigned int datalen,
 static bool check_block(struct file *fp, u32 *size4, loff_t *pos, u32 *offset,
 			unsigned expected_size, const char *expected_sha256)
 {
-	ksu_kernel_read_compat(fp, size4, 0x4, pos); // signer-sequence length
-	ksu_kernel_read_compat(fp, size4, 0x4, pos); // signer length
-	ksu_kernel_read_compat(fp, size4, 0x4, pos); // signed data length
+	kernel_read(fp, size4, 0x4, pos); // signer-sequence length
+	kernel_read(fp, size4, 0x4, pos); // signer length
+	kernel_read(fp, size4, 0x4, pos); // signed data length
 
 	*offset += 0x4 * 3;
 
-	ksu_kernel_read_compat(fp, size4, 0x4, pos); // digests-sequence length
+	kernel_read(fp, size4, 0x4, pos); // digests-sequence length
 
 	*pos += *size4;
 	*offset += 0x4 + *size4;
 
-	ksu_kernel_read_compat(fp, size4, 0x4, pos); // certificates length
-	ksu_kernel_read_compat(fp, size4, 0x4, pos); // certificate length
+	kernel_read(fp, size4, 0x4, pos); // certificates length
+	kernel_read(fp, size4, 0x4, pos); // certificate length
 	*offset += 0x4 * 2;
 
 	if (*size4 == expected_size) {
 		*offset += *size4;
 
 #define CERT_MAX_LENGTH 1024
-		char cert[CERT_MAX_LENGTH];
+		char *cert __attribute__((__cleanup__(ksu_kfree_byref))) = kzalloc(CERT_MAX_LENGTH, GFP_KERNEL);
+		if (!cert)
+			return false;
+
 		if (*size4 > CERT_MAX_LENGTH) {
 			pr_info("cert length overlimit\n");
 			return false;
 		}
-		ksu_kernel_read_compat(fp, cert, *size4, pos);
+		kernel_read(fp, cert, *size4, pos);
 		unsigned char digest[SHA256_DIGEST_SIZE];
 		if (ksu_sha256(cert, *size4, digest) < 0 ) {
 			pr_info("sha256 error\n");
@@ -136,7 +122,7 @@ static bool has_v1_signature_file(struct file *fp)
 
 	loff_t pos = 0;
 
-	while (ksu_kernel_read_compat(fp, &header,
+	while (kernel_read(fp, &header,
 				      sizeof(struct zip_entry_header), &pos) ==
 	       sizeof(struct zip_entry_header)) {
 		if (header.signature != 0x04034b50) {
@@ -146,7 +132,7 @@ static bool has_v1_signature_file(struct file *fp)
 		// Read the entry file name
 		if (header.file_name_length == sizeof(MANIFEST) - 1) {
 			char fileName[sizeof(MANIFEST)];
-			ksu_kernel_read_compat(fp, fileName,
+			kernel_read(fp, fileName,
 					       header.file_name_length, &pos);
 			fileName[header.file_name_length] = '\0';
 
@@ -183,6 +169,7 @@ static __always_inline bool check_v2_signature(char *path,
 	bool v3_1_signing_exist = false;
 
 	int i;
+
 	struct path kpath;
 	if (kern_path(path, 0, &kpath))
 		return false;
@@ -200,7 +187,7 @@ static __always_inline bool check_v2_signature(char *path,
 
 	path_put(&kpath);
 
-	struct file *fp = ksu_filp_open_compat(path, O_RDONLY, 0);
+	struct file *fp = filp_open(path, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		// pr_err("open %s error.\n", path);
 		return false;
@@ -213,10 +200,10 @@ static __always_inline bool check_v2_signature(char *path,
 	for (i = 0;; ++i) {
 		unsigned short n;
 		pos = vfs_llseek(fp, -i - 2, SEEK_END);
-		ksu_kernel_read_compat(fp, &n, 2, &pos);
+		kernel_read(fp, &n, 2, &pos);
 		if (n == i) {
 			pos -= 22;
-			ksu_kernel_read_compat(fp, &size4, 4, &pos);
+			kernel_read(fp, &size4, 4, &pos);
 			if ((size4 ^ 0xcafebabeu) == 0xccfbf1eeu) {
 				break;
 			}
@@ -229,18 +216,17 @@ static __always_inline bool check_v2_signature(char *path,
 
 	pos += 12;
 	// offset
-	ksu_kernel_read_compat(fp, &size4, 0x4, &pos);
+	kernel_read(fp, &size4, 0x4, &pos);
 	pos = size4 - 0x18;
 
-	ksu_kernel_read_compat(fp, &size8, 0x8, &pos);
-	ksu_kernel_read_compat(fp, buffer, 0x10, &pos);
-	// !! remove this casting to char just to strcmp
+	kernel_read(fp, &size8, 0x8, &pos);
+	kernel_read(fp, buffer, 0x10, &pos);
 	if (memcmp(buffer, "APK Sig Block 42", 16)) {
 		goto clean;
 	}
 
 	pos = size4 - (size8 + 0x8);
-	ksu_kernel_read_compat(fp, &size_of_block, 0x8, &pos);
+	kernel_read(fp, &size_of_block, 0x8, &pos);
 	if (size_of_block != size8) {
 		goto clean;
 	}
@@ -249,12 +235,11 @@ static __always_inline bool check_v2_signature(char *path,
 	while (loop_count++ < 10) {
 		uint32_t id;
 		uint32_t offset;
-		ksu_kernel_read_compat(fp, &size8, 0x8,
-				       &pos); // sequence length
+		kernel_read(fp, &size8, 0x8, &pos); // sequence length
 		if (size8 == size_of_block) {
 			break;
 		}
-		ksu_kernel_read_compat(fp, &id, 0x4, &pos); // id
+		kernel_read(fp, &id, 0x4, &pos); // id
 		offset = 4;
 		if (id == 0x7109871au) {
 			v2_signing_blocks++;
@@ -369,7 +354,7 @@ bool is_manager_apk(char *path)
 {
 	int tries = 0;
 
-	while (tries++ < 10) {
+	while (tries++ < 10 && (current->flags & PF_KTHREAD) ) {
 		if (!is_lock_held(path))
 			break;
 
@@ -399,6 +384,6 @@ bool is_manager_apk(char *path)
 	return (check_v2_signature(path, EXPECTED_SIZE, EXPECTED_HASH)  // kernelsu official
 		|| check_v2_signature(path, 0x375, "484fcba6e6c43b1fb09700633bf2fb4758f13cb0b2f4457b80d075084b26c588")  // KOWX712/KernelSU
 		|| check_v2_signature(path, 0x3e6, "79e590113c4c4c0c222978e413a5faa801666957b1212a328e46c00c69821bf7")  // rifsxd/KernelSU-Next
-		|| check_v2_signature(path, 0x396, "f415f4ed9435427e1fdf7f1fccd4dbc07b3d6b8751e4dbcec6f19671f427870b")  // rsuntk/KernelSU
+//		|| check_v2_signature(path, 0x396, "f415f4ed9435427e1fdf7f1fccd4dbc07b3d6b8751e4dbcec6f19671f427870b")  // rsuntk/KernelSU, temp remove, reason: old handle_sepolicy
 	);
 }

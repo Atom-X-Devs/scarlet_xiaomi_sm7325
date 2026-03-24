@@ -1,11 +1,10 @@
 menu "KernelSU"
 
 config KSU
-	select SECURITY_SELINUX
-	select SECCOMP
-	select EXT4_FS
-	select KEYS
 	bool "KernelSU function support"
+	depends on !CPU_BIG_ENDIAN
+	depends on SECURITY_SELINUX
+	select SECCOMP
 	help
 	  Enable kernel-level root privileges on Android System.
 
@@ -28,22 +27,13 @@ config KSU_KPROBES_KSUD
 
 config KSU_TAMPER_SYSCALL_TABLE
 	bool "EXPERIMENTAL: tamper sys_call_table for sucompat + sys_reboot"
-	depends on (ARM || ARM64) && !CFI_CLANG && !CFI && !KSU_KRETPROBES_SUCOMPAT
+	depends on (ARM || ARM64) && !CFI_CLANG && !CFI
 	default n
 	help
 	  EXPERIMENTAL: use syscall table hijacking method demonstrated on zx2c4's
 	  kernel-assisted-superuser. Replaces sys_reboot, sys_execve, sys_newfstatat,
 	  sys_faccessat, sys_newfstat_ret manual hooks.
 	  Personally tested on Linux 3.10 ~ 4.14, aarch64.
-
-config KSU_KRETPROBES_SUCOMPAT
-	bool "EXPERIMENTAL: kretprobes for sucompat"
-	depends on KRETPROBES
-	default n
-	help
-	  EXPERIMENTAL: Use kretprobes to hook getname_flags, mainly for
-	  sucompat. This method will hijack all fs-related syscalls, but
-	  thwarts timing based detections.
 
 config KSU_DEBUG
 	bool "KernelSU debug mode"
