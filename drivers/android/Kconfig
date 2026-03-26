@@ -124,7 +124,7 @@ if ANDROID_SIMPLE_LMK
 config ANDROID_SIMPLE_LMK_MINFREE
 	int "Minimum MiB of memory to free per reclaim"
 	range 8 512
-	default 128
+	default 256
 	help
 	  Simple LMK will try to free at least this much memory per reclaim.
 
@@ -152,7 +152,7 @@ config ANDROID_SIMPLE_LMK_PSI_THRESHOLD_US
 config ANDROID_SIMPLE_LMK_PSI_WINDOW_US
 	int "Simple LMK PSI monitoring window (usec)"
 	range 500000 10000000
-	default 1000000
+	default 750000
 	help
 	  Tracking window, in microseconds, for the PSI trigger used by
 	  Simple LMK.
@@ -171,7 +171,7 @@ config ANDROID_SIMPLE_LMK_PSI_MIN_EVENTS
 config ANDROID_SIMPLE_LMK_PSI_COOLDOWN_MSEC
 	int "Simple LMK cooldown after PSI-triggered reclaim (msec)"
 	range 0 60000
-	default 1500
+	default 750
 	help
 	  Minimum quiet period, in milliseconds, after kicking a reclaim
 	  pass from PSI before another PSI event may trigger another pass.
