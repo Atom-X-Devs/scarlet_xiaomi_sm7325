@@ -363,9 +363,8 @@ cause serious confusion. To prevent this (and much else besides),
       12 }
 
 The ``rcu_dereference()`` uses volatile casts and (for DEC Alpha) memory
-barriers in the Linux kernel. Should a `high-quality implementation of
-C11 ``memory_order_consume``
-[PDF] <http://www.rdrop.com/users/paulmck/RCU/consume.2015.07.13a.pdf>`__
+barriers in the Linux kernel. Should a |high-quality implementation of
+C11 memory_order_consume [PDF]|_
 ever appear, then ``rcu_dereference()`` could be implemented as a
 ``memory_order_consume`` load. Regardless of the exact implementation, a
 pointer fetched by ``rcu_dereference()`` may not be used outside of the
@@ -374,6 +373,9 @@ outermost RCU read-side critical section containing that
 element has been passed from RCU to some other synchronization
 mechanism, most commonly locking or `reference
 counting <https://www.kernel.org/doc/Documentation/RCU/rcuref.txt>`__.
+
+.. |high-quality implementation of C11 memory_order_consume [PDF]| replace:: high-quality implementation of C11 ``memory_order_consume`` [PDF]
+.. _high-quality implementation of C11 memory_order_consume [PDF]: http://www.rdrop.com/users/paulmck/RCU/consume.2015.07.13a.pdf
 
 In short, updaters use ``rcu_assign_pointer()`` and readers use
 ``rcu_dereference()``, and these two RCU API elements work together to
@@ -2569,6 +2571,24 @@ includes ``srcu_read_lock()``, ``srcu_read_unlock()``,
 also includes ``DEFINE_SRCU()``, ``DEFINE_STATIC_SRCU()``, and
 ``init_srcu_struct()`` APIs for defining and initializing
 ``srcu_struct`` structures.
+
+More recently, the SRCU API has added polling interfaces:
+
+#. start_poll_synchronize_srcu() returns a cookie identifying
+   the completion of a future SRCU grace period and ensures
+   that this grace period will be started.
+#. poll_state_synchronize_srcu() returns ``true`` iff the
+   specified cookie corresponds to an already-completed
+   SRCU grace period.
+#. get_state_synchronize_srcu() returns a cookie just like
+   start_poll_synchronize_srcu() does, but differs in that
+   it does nothing to ensure that any future SRCU grace period
+   will be started.
+
+These functions are used to avoid unnecessary SRCU grace periods in
+certain types of buffer-cache algorithms having multi-stage age-out
+mechanisms.  The idea is that by the time the block has aged completely
+from the cache, an SRCU grace period will be very likely to have elapsed.
 
 Tasks RCU
 ~~~~~~~~~

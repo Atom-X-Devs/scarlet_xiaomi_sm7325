@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Test cases for printf facility.
+ * Test cases for bitmap API.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -21,6 +21,28 @@ static unsigned failed_tests __initdata;
 
 static char pbl_buffer[PAGE_SIZE] __initdata;
 
+static const unsigned long exp1[] __initconst = {
+	BITMAP_FROM_U64(1),
+	BITMAP_FROM_U64(2),
+	BITMAP_FROM_U64(0x0000ffff),
+	BITMAP_FROM_U64(0xffff0000),
+	BITMAP_FROM_U64(0x55555555),
+	BITMAP_FROM_U64(0xaaaaaaaa),
+	BITMAP_FROM_U64(0x11111111),
+	BITMAP_FROM_U64(0x22222222),
+	BITMAP_FROM_U64(0xffffffff),
+	BITMAP_FROM_U64(0xfffffffe),
+	BITMAP_FROM_U64(0x3333333311111111ULL),
+	BITMAP_FROM_U64(0xffffffff77777777ULL),
+	BITMAP_FROM_U64(0),
+	BITMAP_FROM_U64(0x00008000),
+	BITMAP_FROM_U64(0x80000000),
+};
+
+static const unsigned long exp2[] __initconst = {
+	BITMAP_FROM_U64(0x3333333311111111ULL),
+	BITMAP_FROM_U64(0xffffffff77777777ULL),
+};
 
 static bool __init
 __check_eq_uint(const char *srcfile, unsigned int line,
@@ -216,63 +238,81 @@ struct test_bitmap_parselist{
 	const int flags;
 };
 
-static const unsigned long exp[] __initconst = {
-	BITMAP_FROM_U64(1),
-	BITMAP_FROM_U64(2),
-	BITMAP_FROM_U64(0x0000ffff),
-	BITMAP_FROM_U64(0xffff0000),
-	BITMAP_FROM_U64(0x55555555),
-	BITMAP_FROM_U64(0xaaaaaaaa),
-	BITMAP_FROM_U64(0x11111111),
-	BITMAP_FROM_U64(0x22222222),
-	BITMAP_FROM_U64(0xffffffff),
-	BITMAP_FROM_U64(0xfffffffe),
-	BITMAP_FROM_U64(0x3333333311111111ULL),
-	BITMAP_FROM_U64(0xffffffff77777777ULL),
-	BITMAP_FROM_U64(0),
-};
-
-static const unsigned long exp2[] __initconst = {
-	BITMAP_FROM_U64(0x3333333311111111ULL),
-	BITMAP_FROM_U64(0xffffffff77777777ULL)
-};
-
 static const struct test_bitmap_parselist parselist_tests[] __initconst = {
 #define step (sizeof(u64) / sizeof(unsigned long))
 
-	{0, "0",			&exp[0], 8, 0},
-	{0, "1",			&exp[1 * step], 8, 0},
-	{0, "0-15",			&exp[2 * step], 32, 0},
-	{0, "16-31",			&exp[3 * step], 32, 0},
-	{0, "0-31:1/2",			&exp[4 * step], 32, 0},
-	{0, "1-31:1/2",			&exp[5 * step], 32, 0},
-	{0, "0-31:1/4",			&exp[6 * step], 32, 0},
-	{0, "1-31:1/4",			&exp[7 * step], 32, 0},
-	{0, "0-31:4/4",			&exp[8 * step], 32, 0},
-	{0, "1-31:4/4",			&exp[9 * step], 32, 0},
-	{0, "0-31:1/4,32-63:2/4",	&exp[10 * step], 64, 0},
-	{0, "0-31:3/4,32-63:4/4",	&exp[11 * step], 64, 0},
-	{0, "  ,,  0-31:3/4  ,, 32-63:4/4  ,,  ",	&exp[11 * step], 64, 0},
+	{0, "0",			&exp1[0], 8, 0},
+	{0, "1",			&exp1[1 * step], 8, 0},
+	{0, "0-15",			&exp1[2 * step], 32, 0},
+	{0, "16-31",			&exp1[3 * step], 32, 0},
+	{0, "0-31:1/2",			&exp1[4 * step], 32, 0},
+	{0, "1-31:1/2",			&exp1[5 * step], 32, 0},
+	{0, "0-31:1/4",			&exp1[6 * step], 32, 0},
+	{0, "1-31:1/4",			&exp1[7 * step], 32, 0},
+	{0, "0-31:4/4",			&exp1[8 * step], 32, 0},
+	{0, "1-31:4/4",			&exp1[9 * step], 32, 0},
+	{0, "0-31:1/4,32-63:2/4",	&exp1[10 * step], 64, 0},
+	{0, "0-31:3/4,32-63:4/4",	&exp1[11 * step], 64, 0},
+	{0, "  ,,  0-31:3/4  ,, 32-63:4/4  ,,  ",	&exp1[11 * step], 64, 0},
 
 	{0, "0-31:1/4,32-63:2/4,64-95:3/4,96-127:4/4",	exp2, 128, 0},
 
 	{0, "0-2047:128/256", NULL, 2048, PARSE_TIME},
 
-	{0, "",				&exp[12 * step], 8, 0},
-	{0, "\n",			&exp[12 * step], 8, 0},
-	{0, ",,  ,,  , ,  ,",		&exp[12 * step], 8, 0},
-	{0, " ,  ,,  , ,   ",		&exp[12 * step], 8, 0},
-	{0, " ,  ,,  , ,   \n",		&exp[12 * step], 8, 0},
+	{0, "",				&exp1[12 * step], 8, 0},
+	{0, "\n",			&exp1[12 * step], 8, 0},
+	{0, ",,  ,,  , ,  ,",		&exp1[12 * step], 8, 0},
+	{0, " ,  ,,  , ,   ",		&exp1[12 * step], 8, 0},
+	{0, " ,  ,,  , ,   \n",		&exp1[12 * step], 8, 0},
+
+	{0, "0-0",			&exp1[0], 32, 0},
+	{0, "1-1",			&exp1[1 * step], 32, 0},
+	{0, "15-15",			&exp1[13 * step], 32, 0},
+	{0, "31-31",			&exp1[14 * step], 32, 0},
+
+	{0, "0-0:0/1",			&exp1[12 * step], 32, 0},
+	{0, "0-0:1/1",			&exp1[0], 32, 0},
+	{0, "0-0:1/31",			&exp1[0], 32, 0},
+	{0, "0-0:31/31",		&exp1[0], 32, 0},
+	{0, "1-1:1/1",			&exp1[1 * step], 32, 0},
+	{0, "0-15:16/31",		&exp1[2 * step], 32, 0},
+	{0, "15-15:1/2",		&exp1[13 * step], 32, 0},
+	{0, "15-15:31/31",		&exp1[13 * step], 32, 0},
+	{0, "15-31:1/31",		&exp1[13 * step], 32, 0},
+	{0, "16-31:16/31",		&exp1[3 * step], 32, 0},
+	{0, "31-31:31/31",		&exp1[14 * step], 32, 0},
+
+	{0, "N-N",			&exp1[14 * step], 32, 0},
+	{0, "0-0:1/N",			&exp1[0], 32, 0},
+	{0, "0-0:N/N",			&exp1[0], 32, 0},
+	{0, "0-15:16/N",		&exp1[2 * step], 32, 0},
+	{0, "15-15:N/N",		&exp1[13 * step], 32, 0},
+	{0, "15-N:1/N",			&exp1[13 * step], 32, 0},
+	{0, "16-N:16/N",		&exp1[3 * step], 32, 0},
+	{0, "N-N:N/N",			&exp1[14 * step], 32, 0},
+
+	{0, "0-N:1/3,1-N:1/3,2-N:1/3",		&exp1[8 * step], 32, 0},
+	{0, "0-31:1/3,1-31:1/3,2-31:1/3",	&exp1[8 * step], 32, 0},
+	{0, "1-10:8/12,8-31:24/29,0-31:0/3",	&exp1[9 * step], 32, 0},
+
+	{0,	  "all",		&exp1[8 * step], 32, 0},
+	{0,	  "0, 1, all,  ",	&exp1[8 * step], 32, 0},
+	{0,	  "all:1/2",		&exp1[4 * step], 32, 0},
+	{0,	  "ALL:1/2",		&exp1[4 * step], 32, 0},
+	{-EINVAL, "al", NULL, 8, 0},
+	{-EINVAL, "alll", NULL, 8, 0},
 
 	{-EINVAL, "-1",	NULL, 8, 0},
 	{-EINVAL, "-0",	NULL, 8, 0},
 	{-EINVAL, "10-1", NULL, 8, 0},
-	{-EINVAL, "0-31:", NULL, 8, 0},
-	{-EINVAL, "0-31:0", NULL, 8, 0},
-	{-EINVAL, "0-31:0/", NULL, 8, 0},
-	{-EINVAL, "0-31:0/0", NULL, 8, 0},
-	{-EINVAL, "0-31:1/0", NULL, 8, 0},
-	{-EINVAL, "0-31:10/1", NULL, 8, 0},
+	{-ERANGE, "8-8", NULL, 8, 0},
+	{-ERANGE, "0-31", NULL, 8, 0},
+	{-EINVAL, "0-31:", NULL, 32, 0},
+	{-EINVAL, "0-31:0", NULL, 32, 0},
+	{-EINVAL, "0-31:0/", NULL, 32, 0},
+	{-EINVAL, "0-31:0/0", NULL, 32, 0},
+	{-EINVAL, "0-31:1/0", NULL, 32, 0},
+	{-EINVAL, "0-31:10/1", NULL, 32, 0},
 	{-EOVERFLOW, "0-98765432123456789:10/1", NULL, 8, 0},
 
 	{-EINVAL, "a-31", NULL, 8, 0},
@@ -280,6 +320,8 @@ static const struct test_bitmap_parselist parselist_tests[] __initconst = {
 	{-EINVAL, "a-31:10/1", NULL, 8, 0},
 	{-EINVAL, "0-31:a/1", NULL, 8, 0},
 	{-EINVAL, "0-\n", NULL, 8, 0},
+
+#undef step
 };
 
 static void __init __test_bitmap_parselist(int is_user)
@@ -299,7 +341,7 @@ static void __init __test_bitmap_parselist(int is_user)
 
 			set_fs(KERNEL_DS);
 			time = ktime_get();
-			err = bitmap_parselist_user(ptest.in, len,
+			err = bitmap_parselist_user((__force const char __user *)ptest.in, len,
 						    bmap, ptest.nbits);
 			time = ktime_get() - time;
 			set_fs(orig_fs);
@@ -326,6 +368,8 @@ static void __init __test_bitmap_parselist(int is_user)
 		if (ptest.flags & PARSE_TIME)
 			pr_err("parselist%s: %d: input is '%s' OK, Time: %llu\n",
 					mode, i, ptest.in, time);
+
+#undef ptest
 	}
 }
 
@@ -339,20 +383,20 @@ static void __init test_bitmap_parselist_user(void)
 	__test_bitmap_parselist(1);
 }
 
-#define EXP_BYTES	(sizeof(exp) * 8)
+#define EXP1_IN_BITS	(sizeof(exp1) * 8)
 
 static void __init test_bitmap_arr32(void)
 {
 	unsigned int nbits, next_bit;
-	u32 arr[sizeof(exp) / 4];
-	DECLARE_BITMAP(bmap2, EXP_BYTES);
+	u32 arr[EXP1_IN_BITS / 32];
+	DECLARE_BITMAP(bmap2, EXP1_IN_BITS);
 
 	memset(arr, 0xa5, sizeof(arr));
 
-	for (nbits = 0; nbits < EXP_BYTES; ++nbits) {
-		bitmap_to_arr32(arr, exp, nbits);
+	for (nbits = 0; nbits < EXP1_IN_BITS; ++nbits) {
+		bitmap_to_arr32(arr, exp1, nbits);
 		bitmap_from_arr32(bmap2, arr, nbits);
-		expect_eq_bitmap(bmap2, exp, nbits);
+		expect_eq_bitmap(bmap2, exp1, nbits);
 
 		next_bit = find_next_bit(bmap2,
 				round_up(nbits, BITS_PER_LONG), nbits);
@@ -361,7 +405,7 @@ static void __init test_bitmap_arr32(void)
 				" tail is not safely cleared: %d\n",
 				nbits, next_bit);
 
-		if (nbits < EXP_BYTES - 32)
+		if (nbits < EXP1_IN_BITS - 32)
 			expect_eq_uint(arr[DIV_ROUND_UP(nbits, 32)],
 								0xa5a5a5a5);
 	}
