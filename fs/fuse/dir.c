@@ -620,6 +620,7 @@ static int create_new_entry(struct fuse_conn *fc, struct fuse_args *args,
 	struct dentry *d;
 	int err;
 	struct fuse_forget_link *forget;
+	unsigned int nofreeze = 0;
 
 	if (fuse_is_bad(dir))
 		return -EIO;
@@ -628,12 +629,19 @@ static int create_new_entry(struct fuse_conn *fc, struct fuse_args *args,
 	if (!forget)
 		return -ENOMEM;
 
+	if (!(current->flags & PF_NOFREEZE)) {
+		nofreeze = PF_NOFREEZE;
+		current->flags |= PF_NOFREEZE;
+	}
+
 	memset(&outarg, 0, sizeof(outarg));
 	args->nodeid = get_node_id(dir);
 	args->out_numargs = 1;
 	args->out_args[0].size = sizeof(outarg);
 	args->out_args[0].value = &outarg;
 	err = fuse_simple_request(fc, args);
+	if (nofreeze)
+		current->flags &= ~PF_NOFREEZE;
 	if (err)
 		goto out_put_forget_req;
 
