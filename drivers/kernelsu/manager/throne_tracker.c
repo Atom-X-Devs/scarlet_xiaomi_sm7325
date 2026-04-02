@@ -121,7 +121,7 @@ FILLDIR_RETURN_TYPE my_actor(MY_ACTOR_CTX_ARG, const char *name,
 			return FILLDIR_ACTOR_CONTINUE;
 		}
 
-		strncpy(data->dirpath, dirpath, DATA_PATH_LEN - 1 );
+		strscpy(data->dirpath, dirpath, DATA_PATH_LEN);
 		data->depth = my_ctx->depth - 1;
 		list_add_tail(&data->list, my_ctx->data_path_list);
 		
@@ -138,9 +138,9 @@ FILLDIR_RETURN_TYPE my_actor(MY_ACTOR_CTX_ARG, const char *name,
 
 // compat: https://elixir.bootlin.com/linux/v3.9/source/include/linux/fs.h#L771
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
-#define S_MAGIC_COMPAT(x) ((x)->f_inode->i_sb->s_magic)
+#define ksu_get_magic(x) ((x)->f_inode->i_sb->s_magic)
 #else
-#define S_MAGIC_COMPAT(x) ((x)->f_path.dentry->d_inode->i_sb->s_magic)
+#define ksu_get_magic(x) ((x)->f_path.dentry->d_inode->i_sb->s_magic)
 #endif
 
 void search_manager(const char *path, int depth, struct list_head *uid_data)
@@ -155,7 +155,7 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 	if (!data)
 		return;
 
-	strncpy(data->dirpath, path, DATA_PATH_LEN - 1 );
+	strscpy(data->dirpath, path, DATA_PATH_LEN);
 	data->depth = depth;
 	list_add_tail(&data->list, &data_path_list);
 
@@ -187,8 +187,8 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 
 			// grab magic on first folder, which is /data/app
 			if (!data_app_magic) {
-				if (S_MAGIC_COMPAT(file)) {
-					data_app_magic = S_MAGIC_COMPAT(file);
+				if (ksu_get_magic(file)) {
+					data_app_magic = ksu_get_magic(file);
 					pr_info("%s: dir: %s got magic! 0x%lx\n", __func__, pos->dirpath, data_app_magic);
 				} else {
 					filp_close(file, NULL);
@@ -196,8 +196,8 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
 				}
 			}
 				
-			if (S_MAGIC_COMPAT(file) != data_app_magic) {
-				pr_info("%s: skip: %s magic: 0x%lx expected: 0x%lx\n", __func__, pos->dirpath, S_MAGIC_COMPAT(file), data_app_magic);
+			if (ksu_get_magic(file) != data_app_magic) {
+				pr_info("%s: skip: %s magic: 0x%lx expected: 0x%lx\n", __func__, pos->dirpath, ksu_get_magic(file), data_app_magic);
 				filp_close(file, NULL);
 				goto skip_iterate;
 			}

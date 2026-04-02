@@ -1,7 +1,5 @@
-#ifndef __KSU_H_KSU_CORE
-#define __KSU_H_KSU_CORE
-
-void __init ksu_core_init(void);
+#ifndef __KSU_H_KERNEL_UMOUNT
+#define __KSU_H_KERNEL_UMOUNT
 
 // for the umount list
 struct mount_entry {

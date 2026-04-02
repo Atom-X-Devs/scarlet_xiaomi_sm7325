@@ -108,6 +108,18 @@ static bool profile_valid(struct app_profile *profile)
 		return false;
 	}
 
+	bool need_migrate_su_domain = false;
+
+	if (unlikely(profile->version == 2)) {
+		profile->version = KSU_APP_PROFILE_VER;
+		need_migrate_su_domain = true;
+	}
+
+	if (strnlen(profile->key, sizeof(profile->key)) >= sizeof(profile->key)) {
+		pr_err("invalid app_profile key\n");
+		return false;
+	}
+
 	if (profile->version < KSU_APP_PROFILE_VER) {
 		pr_info("Unsupported profile version: %d\n", profile->version);
 		return false;
@@ -115,10 +127,22 @@ static bool profile_valid(struct app_profile *profile)
 
 	if (profile->allow_su) {
 		if (profile->rp_config.profile.groups_count > KSU_MAX_GROUPS) {
+			pr_err("invalid groups_count in app_profile: %s\n", profile->key);
 			return false;
 		}
 
-		if (strlen(profile->rp_config.profile.selinux_domain) == 0) {
+		char *domain = profile->rp_config.profile.selinux_domain;
+		static const size_t domain_len = sizeof(profile->rp_config.profile.selinux_domain);
+		if (unlikely(need_migrate_su_domain)) {
+			if (strncmp(domain, "u:r:su:s0", domain_len) == 0) {
+				strscpy_pad(domain, KSU_DEFAULT_SELINUX_DOMAIN, domain_len);
+				pr_info("migrated profile domain: %s\n", profile->key);
+			}
+		}
+		size_t len = strnlen(domain, domain_len);
+
+		if (len == 0 || len >= domain_len) {
+			pr_err("invalid selinux_domain in app_profile: %s\n", profile->key);
 			return false;
 		}
 	}
@@ -273,6 +297,10 @@ bool ksu_uid_should_umount(uid_t uid)
 	if (likely(ksu_is_manager_appid_valid()) &&
 		unlikely(ksu_get_manager_appid() == uid % PER_USER_RANGE)) {
 		// we should not umount on manager!
+		return false;
+	}
+	if (unlikely(uid == WEBVIEW_ZYGOTE_UID)) {
+		// we should not umount for webview zygote
 		return false;
 	}
 	bool found = ksu_get_app_profile(&profile);
@@ -502,7 +530,7 @@ void ksu_prune_allowlist(bool (*is_uid_valid)(uid_t, char *, void *), void *data
 	}
 }
 
-void ksu_allowlist_init(void)
+void __init ksu_allowlist_init(void)
 {
 	int i;
 
@@ -517,7 +545,7 @@ void ksu_allowlist_init(void)
 	init_default_profiles();
 }
 
-void ksu_allowlist_exit(void)
+void __exit ksu_allowlist_exit(void)
 {
 	struct perm_data *np = NULL;
 	struct perm_data *n = NULL;

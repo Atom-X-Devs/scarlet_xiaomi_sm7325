@@ -20,11 +20,10 @@ static void __user *userspace_stack_buffer(const void *d, size_t len)
 
 	volatile unsigned long start_stack = current->mm->start_stack;
 	unsigned int step = 32;
-	char __user *p = NULL;
 	
 start_loop:
-	p = (void __user *)(start_stack - step - len);
-
+	;
+	char __user *p = (void __user *)(start_stack - step - len);
 	if (IS_ENABLED(CONFIG_KSU_DEBUG))
 		pr_info("%s: start_stack: %lx p: %lx len: %zu\n", __func__, start_stack, (unsigned long)p, len );
 
@@ -129,7 +128,7 @@ static inline void sys_execve_escape_ksud(const char __user **filename_user) { }
 static inline void kernel_execve_escape_ksud(void *filename_ptr) { } // no-op
 #endif
 
-static int ksu_sucompat_user_common(const char __user **filename_user,
+static noinline int ksu_sucompat_user_common(const char __user **filename_user,
 				const char *syscall_name,
 				const bool escalate,
 				const uint8_t sym)
@@ -151,6 +150,9 @@ static int ksu_sucompat_user_common(const char __user **filename_user,
 	if (!escalate)
 		goto no_escalate;
 
+#ifdef CONFIG_KSU_FEATURE_SULOG
+	ksu_sulog_emit(KSU_SULOG_EVENT_SUCOMPAT, NULL, NULL, GFP_KERNEL);
+#endif
 	if (!!escape_with_root_profile())
 		return 0;
 
@@ -205,7 +207,7 @@ int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 	return ksu_sucompat_user_common(filename_user, "sys_execve", true, 'x');
 }
 
-static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_name, bool escalate, const uint8_t sym)
+static noinline int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_name, bool escalate, const uint8_t sym)
 {
 
 	if (likely(memcmp(filename_ptr, SU_PATH, sizeof(SU_PATH))))
@@ -216,6 +218,9 @@ static int ksu_sucompat_kernel_common(void *filename_ptr, const char *function_n
 	if (!escalate)
 		goto no_escalate;
 
+#ifdef CONFIG_KSU_FEATURE_SULOG
+	ksu_sulog_emit(KSU_SULOG_EVENT_SUCOMPAT, NULL, NULL, GFP_KERNEL);
+#endif
 	if (!!escape_with_root_profile())
 		return 0;
 
@@ -247,6 +252,10 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 	if (unlikely(!ksu_boot_completed))
 		kernel_execve_escape_ksud((void *)(*filename_ptr)->name);
 
+#ifdef CONFIG_KSU_FEATURE_ADBROOT
+	ksu_adb_root_handle_execveat((void *)(*filename_ptr)->name, __never_use_envp);
+#endif
+
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
 
@@ -264,6 +273,9 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 	if (unlikely(!ksu_boot_completed))
 		kernel_execve_escape_ksud((void *)(*filename_ptr)->name);
 
+#ifdef CONFIG_KSU_FEATURE_ADBROOT
+	ksu_adb_root_handle_execveat((void *)(*filename_ptr)->name, envp);
+#endif
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
 
@@ -279,6 +291,9 @@ int ksu_legacy_execve_sucompat(const char **filename_ptr,
 	if (unlikely(!ksu_boot_completed))
 		kernel_execve_escape_ksud((void *)*filename_ptr);
 
+#ifdef CONFIG_KSU_FEATURE_ADBROOT
+	ksu_adb_root_handle_execveat((void *)*filename_ptr, __never_use_envp);
+#endif
 	if (!is_su_allowed((const void **)filename_ptr))
 		return 0;
 
@@ -347,14 +362,14 @@ static const struct ksu_feature_handler su_compat_handler = {
 };
 
 // sucompat: permited process can execute 'su' to gain root access.
-void ksu_sucompat_init()
+void __init ksu_sucompat_init()
 {
 	if (ksu_register_feature_handler(&su_compat_handler)) {
 		pr_err("Failed to register su_compat feature handler\n");
 	}
 }
 
-void ksu_sucompat_exit()
+void __exit ksu_sucompat_exit()
 {
 	ksu_unregister_feature_handler(KSU_FEATURE_SU_COMPAT);
 }

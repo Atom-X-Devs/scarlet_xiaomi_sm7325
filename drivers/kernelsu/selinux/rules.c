@@ -118,6 +118,12 @@ static int apply_kernelsu_rules_fn(void *ptr)
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
 
+	ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "read");
+	ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "write");
+	ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "connectto");
+	ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "getopt");
+	ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "getattr");
+
 	return 0;
 }
 
