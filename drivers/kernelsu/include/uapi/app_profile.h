@@ -1,7 +1,7 @@
 #ifndef __KSU_UAPI_APP_PROFILE_H
 #define __KSU_UAPI_APP_PROFILE_H
 
-#define KSU_APP_PROFILE_VER 2
+#define KSU_APP_PROFILE_VER 3
 #define KSU_MAX_PACKAGE_NAME 256
 /* NGROUPS_MAX for Linux is 65535 generally, but we only supports 32 groups. */
 #define KSU_MAX_GROUPS 32
@@ -11,7 +11,7 @@ struct root_profile {
 	__s32 uid;
 	__s32 gid;
 
-	__s32 groups_count;
+	__u32 groups_count;
 	__s32 groups[KSU_MAX_GROUPS];
 
 	/* kernel_cap_t is u32[2] for capabilities v3 */

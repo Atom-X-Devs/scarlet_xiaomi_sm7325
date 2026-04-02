@@ -11,6 +11,7 @@
 #include <linux/anon_inodes.h>
 #include <linux/atomic.h>
 #include <linux/binfmts.h>
+#include <linux/cache.h>
 #include <linux/capability.h>
 #include <linux/compat.h>
 #include <linux/compiler.h>
@@ -46,6 +47,7 @@
 #include <linux/nsproxy.h>
 #include <linux/path.h>
 #include <linux/pid.h>
+#include <linux/poll.h>
 #include <linux/printk.h>
 #include <linux/ptrace.h>
 #include <linux/rculist.h>
@@ -108,6 +110,10 @@
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 #include <linux/compiler_types.h>
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+#include <uapi/linux/eventpoll.h>
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)

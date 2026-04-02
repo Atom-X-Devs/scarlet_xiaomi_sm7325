@@ -32,7 +32,7 @@ static long ksu_sys_setns(int fd, int flags)
 #else
 #define ksu_sys_setns sys_setns
 #define ksys_unshare sys_unshare
-#endif
+#endif // > 4.17
 
 // global mode , need CAP_SYS_ADMIN and CAP_SYS_CHROOT to perform setns
 static void ksu_mnt_ns_global(void)
@@ -105,11 +105,7 @@ try_setns:
 	revert_creds(saved);
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0)
 	struct file *ns_file = dentry_open(&ns_path, O_RDONLY, ksu_cred);
-#else
-	struct file *ns_file = dentry_open(ns_path.dentry, ns_path.mnt, O_RDONLY, ksu_cred);
-#endif
 
 	path_put(&ns_path);
 	if (IS_ERR(ns_file)) {

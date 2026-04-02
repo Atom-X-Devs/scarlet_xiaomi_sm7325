@@ -21,11 +21,13 @@
 #define SYS_REBOOT_SYMBOL "__arm64_sys_reboot"
 #define SYS_NEWFSTAT_SYMBOL "__arm64_sys_newfstat"
 #define SYS_FSTAT64_SYMBOL "__arm64_sys_fstat64"
+#define SYS_READ_SYMBOL "__arm64_sys_read"
 #else
 #define SYS_EXECVE_SYMBOL "sys_execve"
 #define SYS_REBOOT_SYMBOL "sys_reboot"
 #define SYS_NEWFSTAT_SYMBOL "sys_newfstat"
 #define SYS_FSTAT64_SYMBOL "sys_fstat64"
+#define SYS_READ_SYMBOL "sys_read"
 #endif
 
 #elif defined(__arm__)
@@ -59,6 +61,7 @@
 #define SYS_REBOOT_SYMBOL "sys_reboot"
 #define SYS_NEWFSTAT_SYMBOL "sys_newfstat"
 #define SYS_FSTAT64_SYMBOL "sys_fstat64"
+#define SYS_READ_SYMBOL "sys_read"
 
 #elif defined(__x86_64__)
 
@@ -81,11 +84,13 @@
 #define SYS_REBOOT_SYMBOL "__x64_sys_reboot"
 #define SYS_NEWFSTAT_SYMBOL "__x64_sys_newfstat"
 #define SYS_FSTAT64_SYMBOL "__ia32_compat_sys_x86_fstat64"
+#define SYS_NEWFSTAT_SYMBOL "__x64_sys_read"
 #else
 #define SYS_EXECVE_SYMBOL "sys_execve"
 #define SYS_REBOOT_SYMBOL "sys_reboot"
 #define SYS_NEWFSTAT_SYMBOL "sys_newfstat"
 #define SYS_FSTAT64_SYMBOL "sys_fstat64"
+#define SYS_READ_SYMBOL "sys_read"
 #endif
 
 #else

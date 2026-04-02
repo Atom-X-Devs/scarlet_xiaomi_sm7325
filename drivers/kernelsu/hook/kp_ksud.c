@@ -146,7 +146,21 @@ static struct kretprobe sys_fstat64_rp = {
 };
 #endif
 
-#ifndef CONFIG_KSU_TAMPER_SYSCALL_TABLE
+// sys_read
+static int sys_read_handler_pre(struct kprobe *p, struct pt_regs *regs)
+{
+	struct pt_regs *real_regs = PT_REAL_REGS(regs);
+	unsigned int fd = (int)PT_REGS_PARM1(real_regs);
+
+	ksu_handle_sys_read_fd(fd);
+	return 0;
+}
+
+static struct kprobe sys_read_kp = {
+	.symbol_name = SYS_READ_SYMBOL,
+	.pre_handler = sys_read_handler_pre,
+};
+
 // sys_reboot
 extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);
 
@@ -165,7 +179,6 @@ static struct kprobe sys_reboot_kp = {
 	.symbol_name = SYS_REBOOT_SYMBOL,
 	.pre_handler = sys_reboot_handler_pre,
 };
-#endif
 
 static int unregister_kprobe_function(void *data)
 {
@@ -186,6 +199,9 @@ loop_start:
 	pr_info("kp_ksud: unregister sys_fstat64_rp!\n");
 #endif
 
+	unregister_kprobe(&sys_read_kp);
+	pr_info("kp_ksud: unregister sys_read_kp!\n");
+
 	return 0;
 }
 
@@ -197,10 +213,8 @@ static void unregister_kprobe_thread()
 static void kp_ksud_init()
 {
 
-#ifndef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 	int ret = register_kprobe(&sys_reboot_kp); // dont unreg this one
 	pr_info("kp_ksud: sys_reboot_kp: %d\n", ret);
-#endif
 
 	int ret2 = register_kretprobe(&sys_newfstat_rp);
 	pr_info("kp_ksud: sys_newfstat_rp: %d\n", ret2);
@@ -209,6 +223,9 @@ static void kp_ksud_init()
 	int ret3 = register_kretprobe(&sys_fstat64_rp);
 	pr_info("kp_ksud: sys_fstat64_rp: %d\n", ret3);
 #endif
+
+	int ret4 = register_kprobe(&sys_read_kp);
+	pr_info("kp_ksud: sys_read_kp: %d\n", ret4);
 
 	unregister_kprobe_thread();
 }

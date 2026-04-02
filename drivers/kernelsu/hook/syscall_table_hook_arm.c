@@ -13,6 +13,7 @@
 #define __ARMEABI_faccessat	334
 #define __ARMEABI_fstatat64	327
 #define __ARMEABI_fstat64	197
+#define __ARMEABI_read		3
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 
@@ -35,8 +36,9 @@ static syscall_fn_t armeabi_execve = NULL;
 static long hook_armeabi_execve(const struct pt_regs *regs)
 {
 	const char __user **filename = (const char __user **)&regs->regs[0];
+	void ***envp = (void ***)&regs->regs[2];
 
-	ksu_handle_execve_sucompat(NULL, filename, NULL, NULL, NULL);
+	ksu_handle_execve_sucompat(NULL, filename, NULL, envp, NULL);
 	return armeabi_execve(regs);
 }
 
@@ -70,6 +72,15 @@ static long hook_armeabi_fstat64_ret(const struct pt_regs *regs)
 	return ret;
 }
 
+static syscall_fn_t armeabi_read = NULL;
+static long hook_armeabi_read(const struct pt_regs *regs)
+{
+	unsigned int fd = (unsigned int)regs->regs[0];	
+
+	ksu_handle_sys_read_fd(fd);
+	return armeabi_read(regs);
+}
+
 #else // END OF 4.19+ SYSCALL HANDLERS
 
 static long (*armeabi_reboot)(int magic1, int magic2, unsigned int cmd, void __user *arg) = NULL;
@@ -86,7 +97,7 @@ static long hook_armeabi_execve(const char __user * filename,
 				const char __user *const __user * argv,
 				const char __user *const __user * envp)
 {
-	ksu_handle_execve_sucompat(NULL, &filename, NULL, NULL, NULL);
+	ksu_handle_execve_sucompat(NULL, &filename, NULL, (void ***)&envp, NULL);
 	return armeabi_execve(filename, argv, envp);
 }
 
@@ -113,6 +124,12 @@ static long hook_armeabi_fstat64_ret(unsigned long fd, struct stat64 __user * st
 	return ret;
 }
 
+static long (*armeabi_read)(unsigned int fd, char __user *buf, size_t count) = NULL;
+static long hook_armeabi_read(unsigned int fd, char __user *buf, size_t count)
+{
+	ksu_handle_sys_read_fd(fd);
+	return armeabi_read(fd, buf, count);
+}
 
 #endif // SYSCALL HANDLERS
 
@@ -274,9 +291,8 @@ loop_start:
 	if (FORCE_VOLATILE(ksu_vfs_read_hook))
 		goto loop_start;
 
-#ifndef CONFIG_KSU_KPROBES_KSUD
 	restore_syscall((void *)&armeabi_fstat64, __ARMEABI_fstat64, (void *)hook_armeabi_fstat64_ret, (void *)sys_call_table);
-#endif
+	restore_syscall((void *)&armeabi_read, __ARMEABI_read, (void *)hook_armeabi_read, (void *)compat_sys_call_table);
 	
 	return 0;
 }
@@ -294,9 +310,9 @@ static void ksu_syscall_table_hook_init()
 	read_and_replace_syscall((void *)&armeabi_faccessat, __ARMEABI_faccessat, (void *)hook_armeabi_faccessat, (void *)sys_call_table);
 	read_and_replace_syscall((void *)&armeabi_fstatat64, __ARMEABI_fstatat64, (void *)hook_armeabi_fstatat64, (void *)sys_call_table);
 
-#ifndef CONFIG_KSU_KPROBES_KSUD
+	// will be unregged
 	read_and_replace_syscall((void *)&armeabi_fstat64, __ARMEABI_fstat64, (void *)hook_armeabi_fstat64_ret, (void *)sys_call_table);
-#endif
+	read_and_replace_syscall((void *)&armeabi_read, __ARMEABI_read, (void *)hook_armeabi_read, (void *)compat_sys_call_table);
 
 	vfs_read_hook_wait_thread(); // start unreg kthread
 }

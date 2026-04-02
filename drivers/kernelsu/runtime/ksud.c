@@ -312,7 +312,7 @@ static bool is_init_rc(struct file *fp)
 		return false;
 	}
 
-	if (!S_ISREG(fp->f_path.dentry->d_inode->i_mode)) {
+	if (!d_is_reg(fp->f_path.dentry)) {
 		return false;
 	}
 
@@ -382,6 +382,24 @@ static noinline void ksu_install_rc_hook(struct file *file)
 	file->f_op = &fops_proxy;
 
 	return;
+}
+
+// for sys_read kp / syscall table
+__attribute__((cold))
+static noinline void ksu_handle_sys_read_fd(unsigned int fd)
+{
+	if (likely(!ksu_vfs_read_hook))
+		return;
+
+	if (!is_init(current_cred()))
+		return;
+
+	struct file *file = fget(fd);
+	if (!file) {
+		return;
+	}
+	ksu_install_rc_hook(file);
+	fput(file);
 }
 
 #define STAT_NATIVE 0
@@ -617,7 +635,7 @@ static void stop_input_hook()
 	vol_detector_exit();
 }
 
-void ksu_ksud_init()
+void __init ksu_ksud_init()
 {
 	vol_detector_init();
 }

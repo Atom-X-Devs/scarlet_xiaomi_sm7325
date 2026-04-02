@@ -5,6 +5,7 @@
 #include "include/uapi/feature.h"
 #include "include/uapi/selinux.h"
 #include "include/uapi/supercall.h"
+#include "include/uapi/sulog.h"
 
 // includes
 #include "include/klog.h"
@@ -20,13 +21,18 @@
 #include "manager/apk_sign.h"
 #include "manager/manager_identity.h"
 #include "manager/throne_tracker.h"
+#include "supercall/internal.h"
 #include "supercall/supercall.h"
 #include "infra/su_mount_ns.h"
 #include "infra/file_wrapper.h"
-
-#include "ksud.h"
-#include "core_hook.h"
-#include "sucompat.h"
+#include "infra/event_queue.h"
+#include "feature/adb_root.h"
+#include "feature/kernel_umount.h"
+#include "feature/sucompat.h"
+#include "feature/sulog.h"
+#include "runtime/ksud.h"
+#include "sulog/event.h"
+#include "sulog/fd.h"
 
 #include "selinux/selinux.h"
 #include "selinux/sepolicy.h"
@@ -48,13 +54,25 @@
 #include "policy/feature.c"
 #include "manager/apk_sign.c"
 #include "manager/throne_tracker.c"
+
+#include "supercall/perm.c"
+#include "supercall/dispatch.c"
 #include "supercall/supercall.c"
+
 #include "infra/su_mount_ns.c"
 #include "infra/file_wrapper.c"
+#include "infra/event_queue.c"
 
-#include "ksud.c"	// early boot
-#include "core_hook.c"	// lsm
-#include "sucompat.c"	// sucomapt, generic hooks
+#include "feature/adb_root.c"
+#include "feature/kernel_umount.c"
+#include "feature/sucompat.c"
+#include "feature/sulog.c"
+#include "runtime/ksud.c"
+
+#include "sulog/event.c"
+#include "sulog/fd.c"
+
+#include "hook/core_hook.c"	// lsm
 
 #include "selinux/selinux.c"
 #include "selinux/sepolicy.c"
@@ -62,14 +80,14 @@
 
 #ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 #ifdef CONFIG_ARM64
-#include "syscall_table_hook.c"
+#include "hook/syscall_table_hook_arm64.c"
 #elif CONFIG_ARM
-#include "syscall_table_hook_arm.c"
+#include "hook/syscall_table_hook_arm.c"
 #endif
 #endif
 
-#ifdef CONFIG_KSU_KPROBES_KSUD
-#include "kp_ksud.c"
+#if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+#include "hook/kp_ksud.c"
 #endif
 
 #ifdef CONFIG_KSU_EXTRAS
@@ -86,13 +104,13 @@ extern void ksu_supercalls_init();
 // track backports and other quirks here
 // ref: kernel_compat.c, Makefile
 // yes looks nasty
-#if defined(CONFIG_KSU_KPROBES_KSUD)
-	#define FEAT_1 " +kp_ksud"
+#if defined(CONFIG_KSU_DEBUG)
+	#define FEAT_1 " +debug"
 #else
 	#define FEAT_1 ""
 #endif
-#if defined(CONFIG_KSU_KRETPROBES_SUCOMPAT)
-	#define FEAT_2 " +rp_sucompat"
+#if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+	#define FEAT_2 " +kp_ksud"
 #else
 	#define FEAT_2 ""
 #endif
@@ -144,6 +162,16 @@ int __init kernelsu_init(void)
 
 	ksu_sucompat_init(); // so the feature is registered
 
+	ksu_kernel_umount_init(); // so the feature is registered
+
+#ifdef CONFIG_KSU_FEATURE_SULOG	
+	ksu_sulog_init(); // so the feature is registered
+#endif
+
+#ifdef CONFIG_KSU_FEATURE_ADBROOT
+	ksu_adb_root_init(); // so the feature is registered
+#endif
+
 	ksu_core_init();
 
 	ksu_allowlist_init();
@@ -158,7 +186,7 @@ int __init kernelsu_init(void)
 	ksu_syscall_table_hook_init();
 #endif
 
-#ifdef CONFIG_KSU_KPROBES_KSUD
+#if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
 	kp_ksud_init();
 #endif
 
