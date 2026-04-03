@@ -280,14 +280,15 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
  * This macro *does not* affect normal code generation, but is a hint
  * to tooling that data races here are to be ignored.
  */
-#define data_race(expr)                                                        \
-	({                                                                     \
-		typeof(({ expr; })) __val;                                     \
-		kcsan_disable_current();                                       \
-		__val = ({ expr; });                                           \
-		kcsan_enable_current();                                        \
-		__val;                                                         \
-	})
+#define data_race(expr)							\
+({									\
+	__kcsan_disable_current();					\
+	({								\
+		__unqual_scalar_typeof(({ expr; })) __v = ({ expr; });	\
+		__kcsan_enable_current();				\
+		__v;							\
+	});								\
+})
 
 /*
  * Use __READ_ONCE() instead of READ_ONCE() if you do not require any
