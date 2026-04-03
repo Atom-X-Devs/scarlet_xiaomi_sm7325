@@ -456,7 +456,7 @@ static void set_other_info_task_blocking(unsigned long *flags,
 	 * We may be instrumenting a code-path where current->state is already
 	 * something other than TASK_RUNNING.
 	 */
-	const bool is_running = current->state == TASK_RUNNING;
+	const bool is_running = READ_ONCE((current)->__state) == TASK_RUNNING;
 	/*
 	 * To avoid deadlock in case we are in an interrupt here and this is a
 	 * race with a task on the same CPU (KCSAN_INTERRUPT_WATCHER), provide a
