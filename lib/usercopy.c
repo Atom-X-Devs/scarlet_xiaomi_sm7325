@@ -3,6 +3,7 @@
 #include <linux/nospec.h>
 #include <linux/instrumented.h>
 #include <linux/kernel.h>
+#include <linux/uaccess.h>
 
 /* out-of-line parts */
 
