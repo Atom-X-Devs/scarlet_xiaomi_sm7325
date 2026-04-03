@@ -2,6 +2,7 @@
 #include <linux/bitops.h>
 #include <linux/nospec.h>
 #include <linux/instrumented.h>
+#include <linux/kernel.h>
 
 /* out-of-line parts */
 
