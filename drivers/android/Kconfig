@@ -142,7 +142,7 @@ config ANDROID_SIMPLE_LMK_TIMEOUT_MSEC
 config ANDROID_SIMPLE_LMK_PSI_THRESHOLD_US
 	int "Simple LMK PSI memory SOME threshold (usec)"
 	range 1 10000000
-	default 70000
+	default 50000
 	help
 	  Cumulative memory SOME stall threshold, in microseconds, for the
 	  PSI trigger used by Simple LMK.
@@ -152,7 +152,7 @@ config ANDROID_SIMPLE_LMK_PSI_THRESHOLD_US
 config ANDROID_SIMPLE_LMK_PSI_WINDOW_US
 	int "Simple LMK PSI monitoring window (usec)"
 	range 500000 10000000
-	default 750000
+	default 500000
 	help
 	  Tracking window, in microseconds, for the PSI trigger used by
 	  Simple LMK.
