@@ -485,6 +485,9 @@ int vmpressure_register_event(struct mem_cgroup *memcg,
 	char *token;
 	int ret = 0;
 
+	if (unlikely(!vmpr))
+		return -EINVAL;
+
 	spec_orig = spec = kstrndup(args, MAX_VMPRESSURE_ARGS_LEN, GFP_KERNEL);
 	if (!spec)
 		return -ENOMEM;
