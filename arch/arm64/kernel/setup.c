@@ -215,9 +215,9 @@ static void __init request_standard_resources(void)
 	size_t res_size;
 
 	kernel_code.start   = __pa_symbol(_text);
-	kernel_code.end     = __pa_symbol(__init_begin - 1);
+	kernel_code.end     = __pa_symbol(__init_begin) - 1;
 	kernel_data.start   = __pa_symbol(_sdata);
-	kernel_data.end     = __pa_symbol(_end - 1);
+	kernel_data.end     = __pa_symbol(_end) - 1;
 
 	num_standard_resources = memblock.memory.cnt;
 	res_size = num_standard_resources * sizeof(*standard_resources);
