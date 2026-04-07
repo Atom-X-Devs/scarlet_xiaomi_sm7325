@@ -2714,6 +2714,11 @@ static int rx_macro_enable_interp_clk(struct snd_soc_component *component,
 		return -EINVAL;
 	}
 
+	if (interp_idx < 0 || interp_idx >= INTERP_MAX) {
+		pr_err("%s: invalid interp_idx %d\n", __func__, interp_idx);
+		return -EINVAL;
+	}
+
 	if (!rx_macro_get_data(component, &rx_dev, &rx_priv, __func__))
 		return -EINVAL;
 
