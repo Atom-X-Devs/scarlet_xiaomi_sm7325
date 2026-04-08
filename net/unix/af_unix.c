@@ -1027,6 +1027,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	err = -EINVAL;
 	if (addr_len < offsetofend(struct sockaddr_un, sun_family) ||
+	    addr_len > sizeof(struct sockaddr_un) ||
 	    sunaddr->sun_family != AF_UNIX)
 		goto out;
 
