@@ -153,6 +153,7 @@ struct swr_mstr_ctrl {
 			void *data), void *swr_handle, int type);
 	int irq;
 	int wake_irq;
+	bool wake_irq_disabled;
 	int version;
 	int mclk_freq;
 	int bus_clk;
