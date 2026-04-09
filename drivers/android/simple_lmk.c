@@ -538,11 +538,6 @@ static int simple_lmk_init_set(const char *val, const struct kernel_param *kp)
 	if (!atomic_cmpxchg(&init_done, 0, 1)) {
 		char trigger[32];
 
-		if (!IS_ENABLED(CONFIG_PSI)) {
-			pr_err("CONFIG_PSI is required for PSI-based LMK triggering\n");
-			return -EOPNOTSUPP;
-		}
-
 		if (CONFIG_ANDROID_SIMPLE_LMK_PSI_THRESHOLD_US >
 		    CONFIG_ANDROID_SIMPLE_LMK_PSI_WINDOW_US) {
 			pr_err("PSI threshold must be <= PSI window\n");
