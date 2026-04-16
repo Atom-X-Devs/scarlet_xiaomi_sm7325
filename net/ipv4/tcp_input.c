@@ -946,7 +946,7 @@ static void tcp_dsack_seen(struct tcp_sock *tp)
 {
 	tp->rx_opt.sack_ok |= TCP_DSACK_SEEN;
 	tp->rack.dsack_seen = 1;
-	tp->dsack_dups++;
+	WRITE_ONCE(tp->dsack_dups, tp->dsack_dups + 1);
 }
 
 /* It's reordering when higher sequence was delivered (i.e. sacked) before
