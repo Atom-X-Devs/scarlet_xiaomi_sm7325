@@ -31,6 +31,7 @@ static long is_libadbroot_ok()
 		} else {
 			pr_err("access libadbroot.so failed: %ld, skip adb root\n", ret);
 		}
+		return ret;
 	} else {
 		ret = 1;
 	}
@@ -137,37 +138,31 @@ out_release_env_p:
 	return ret;
 }
 
-__attribute__((cold))
-static noinline long do_ksu_adb_root_handle_execve(const char __user **filename_user, void ***envp)
+static noinline void do_ksu_adb_root_handle_execve(void *filename, void *envp_in)
 {
+	if (likely(!!current->seccomp.mode))
+		return;
+
+	uid_t uid = current_euid().val;
+	if (uid != 0 && uid != 2000)
+        	return;
+
+	// filename is void * char __user *
+	const char __user **filename_user = (const char __user **)filename;
+
 	if (likely(!is_exec_adbd(filename_user)))
-		return 0;
+		return;
 
 	if (unlikely(!is_libadbroot_ok()))
-		return 0;
+		return;
 
-	long ret = setup_ld_preload(envp);
-	if (ret)
-		return ret;
+	if (setup_ld_preload((void ***)envp_in))
+		return;
 
 	pr_info("escape to root for adb\n");
 	escape_to_root_for_adb_root();
 	escape_with_root_profile(); // why is this needed for 3.x?
-	return 0;
-}
-
-// sys_execve, syscall hooks
-static __always_inline long ksu_adb_root_handle_execve(const char __user **filename_user, void ***envp)
-{
-	if (likely(!ksu_adb_root))
-		return 0;
-
-	if (likely(!!current->seccomp.mode))
-		return 0;
-
-	do_ksu_adb_root_handle_execve(filename_user, envp);
-	
-	return 0;
+	return;
 }
 
 struct user_arg_ptr {
@@ -182,14 +177,30 @@ struct user_arg_ptr {
 	} ptr;
 };
 
-__attribute__((cold))
-static noinline long do_ksu_adb_root_handle_execveat(char *filename, void *envp_in)
+static noinline void do_ksu_adb_root_handle_execveat(void *filename, void *envp_in)
 {
-	if (!!endswith(filename, "/adbd"))
-		return 0;
+	if (likely(!!current->seccomp.mode))
+		return;
+
+	uid_t uid = current_euid().val;
+	if (uid != 0 && uid != 2000)
+        	return;
+
+	if (!filename)
+		return;
+
+	// filename is char **
+	if (!*(void **)filename)
+		return;
+
+	if (!!endswith(*(char **)filename, "/adbd"))
+		return;
 
 	if (unlikely(!is_libadbroot_ok()))
-		return 0;
+		return;
+
+	if (!envp_in)
+		return;
 
 	struct user_arg_ptr *envp = (struct user_arg_ptr *)envp_in;
 
@@ -201,35 +212,46 @@ static noinline long do_ksu_adb_root_handle_execveat(char *filename, void *envp_
 
 	pr_info("%s: envp 0x%lx \n", __func__, (uintptr_t)*envp_addr );
 
-	long ret = setup_ld_preload(envp_addr);
-	if (ret)
-		return ret;
+	if (setup_ld_preload(envp_addr))
+		return; 
 
 	pr_info("escape to root for adb\n");
 	escape_to_root_for_adb_root();
 	escape_with_root_profile(); // why is this needed?
-	return 0;
+	return;
 }
 
-// do_execve, do_execve_common, do_execveat_common
-static __always_inline long ksu_adb_root_handle_execveat(char *filename, void *envp_in)
+#ifdef KSU_CAN_USE_JUMP_LABEL // see kernel_compat.h
+
+DEFINE_STATIC_KEY_FALSE(ksu_adb_root_key);
+
+static inline void ksu_adb_root_handle_execve(void *filename, void *envp_in)
 {
-	if (likely(!ksu_adb_root))
-		return 0;
-
-	if (likely(!!current->seccomp.mode))
-		return 0;
-
-	if (!filename)
-		return 0;
-
-	if (!envp_in)
-		return 0;
-
-	do_ksu_adb_root_handle_execveat(filename, envp_in);
-
-	return 0;
+	if (static_branch_unlikely(&ksu_adb_root_key))
+		do_ksu_adb_root_handle_execve(filename, envp_in);
 }
+static inline void ksu_adb_root_handle_execveat(void *filename, void *envp_in)
+{
+	if (static_branch_unlikely(&ksu_adb_root_key))
+		do_ksu_adb_root_handle_execveat(filename, envp_in);
+}
+
+static inline void ksu_static_branch_enable() { static_branch_enable(&ksu_adb_root_key); smp_mb(); }
+static inline void ksu_static_branch_disable() { static_branch_disable(&ksu_adb_root_key); smp_mb(); }
+#else /* ! KSU_CAN_USE_JUMP_LABEL */
+static inline void ksu_adb_root_handle_execve(void *filename, void *envp_in)
+{
+	if (unlikely(ksu_adb_root))
+		do_ksu_adb_root_handle_execve(filename, envp_in);
+}
+static inline void ksu_adb_root_handle_execveat(void *filename, void *envp_in)
+{
+	if (unlikely(ksu_adb_root))
+		do_ksu_adb_root_handle_execveat(filename, envp_in);
+}
+#define ksu_static_branch_enable()  do { } while (0)
+#define ksu_static_branch_disable() do { } while (0)
+#endif // KSU_CAN_USE_JUMP_LABEL
 
 static int kernel_adb_root_feature_get(u64 *value)
 {
@@ -240,10 +262,18 @@ static int kernel_adb_root_feature_get(u64 *value)
 static int kernel_adb_root_feature_set(u64 value)
 {
 	bool enable = value != 0;
+
+	// prevent double enable / double disable
+	// as old api does ref inc / dec, its a 'lil risky
+	if (enable == ksu_adb_root)
+		return 0;
+
 	if (enable) {
 		ksu_adb_root = true;
+		ksu_static_branch_enable();
 	} else {
 		ksu_adb_root = false;
+		ksu_static_branch_disable();
 	}
 	pr_info("adb_root: set to %d\n", enable);
 	return 0;

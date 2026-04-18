@@ -31,8 +31,10 @@
 #include <linux/init_task.h>
 #include <linux/input.h>
 #include <linux/ioctl.h>
+#include <linux/jump_label.h>
 #include <linux/kernel.h>
 #include <linux/kobject.h>
+#include <linux/kref.h>
 #include <linux/kthread.h>
 #include <linux/limits.h>
 #include <linux/list.h>
@@ -127,6 +129,10 @@
 #include <linux/sched/user.h>
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0)
+#include <linux/hashtable.h>
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0)
 #include <linux/task_work.h>
 #endif
@@ -145,16 +151,25 @@
  */
 #if !defined(CONFIG_FORTIFY_SOURCE)
 
+#define memchr		__builtin_memchr
 #define memcmp		__builtin_memcmp
 #define memcpy		__builtin_memcpy
 #define memmove		__builtin_memmove
 #define memset		__builtin_memset
+#define strcasecmp	__builtin_strcasecmp
+#define strcat		__builtin_strcat
 #define strchr		__builtin_strchr
 #define strcmp		__builtin_strcmp
 #define strcpy		__builtin_strcpy
+#define strcspn		__builtin_strcspn
 #define strlen		__builtin_strlen
+#define strncasecmp	__builtin_strncasecmp
+#define strncat		__builtin_strncat
 #define strncmp		__builtin_strncmp
 #define strncpy		__builtin_strncpy
+#define strpbrk		__builtin_strpbrk
+#define strrchr		__builtin_strrchr
+#define strspn		__builtin_strspn
 #define strstr		__builtin_strstr
 
 #endif // !CONFIG_FORTIFY_SOURCE

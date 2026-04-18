@@ -11,8 +11,8 @@ MDIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 $(info -- KDIR: $(KDIR))
 $(info -- MDIR: $(MDIR))
 
-# compliant to last upstream kernel change as of f6374a2
-CFLAGS_ksu.o += -DKSU_VERSION=32450
+# compliant to last upstream kernel change as of 99739a52
+CFLAGS_ksu.o += -DKSU_VERSION=32473
 
 ifndef KSU_EXPECTED_SIZE
 KSU_EXPECTED_SIZE := 0x033b
@@ -49,6 +49,11 @@ endif
 ifeq ($(shell grep -q "cpus_ptr;" $(srctree)/include/linux/sched.h; echo $$?),0)
 $(info -- KernelSU/compat: backported cpus_ptr found!)
 CFLAGS_ksu.o += -DKSU_COMPAT_HAS_BACKPORTED_CPUS_PTR
+endif
+
+ifeq ($(shell grep -q "^struct security_operations selinux_ops" $(srctree)/security/selinux/hooks.c; echo $$?),0)
+$(info -- KernelSU/compat: exported selinux_ops found!)
+CFLAGS_ksu.o += -DKSU_HAS_EXPORTED_SELINUX_OPS
 endif
 
 # UL, look for read_iter on f_op struct

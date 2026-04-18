@@ -352,9 +352,11 @@ int get_pkg_from_apk_path(char *pkg, const char *path)
 
 bool is_manager_apk(char *path)
 {
-	int tries = 0;
+	if (!(current->flags & PF_KTHREAD))
+		goto not_kthread;
 
-	while (tries++ < 10 && (current->flags & PF_KTHREAD) ) {
+	int tries = 0;
+	while (tries++ < 10) {
 		if (!is_lock_held(path))
 			break;
 
@@ -367,6 +369,8 @@ bool is_manager_apk(char *path)
 		pr_info("%s: timeout for %s\n", __func__, path);
 		return false;
 	}
+
+not_kthread:
 
 #ifdef KSU_MANAGER_PACKAGE
 	char pkg[KSU_MAX_PACKAGE_NAME];

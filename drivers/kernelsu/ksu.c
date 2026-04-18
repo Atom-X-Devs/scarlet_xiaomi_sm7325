@@ -12,6 +12,16 @@
 #include "include/arch.h"
 #include "include/ksu.h"
 
+// selinux includes
+#include "avc_ss.h"
+#include "objsec.h"
+#include "ss/services.h"
+#include "ss/symtab.h"
+#include "xfrm.h"
+#ifndef KSU_COMPAT_USE_SELINUX_STATE
+#include "avc.h"
+#endif
+
 // kernel compat, lite ones
 #include "kernel_compat.h"
 
@@ -31,21 +41,12 @@
 #include "feature/sucompat.h"
 #include "feature/sulog.h"
 #include "runtime/ksud.h"
+#include "runtime/ksud_escape.h"
 #include "sulog/event.h"
 #include "sulog/fd.h"
 
 #include "selinux/selinux.h"
 #include "selinux/sepolicy.h"
-
-// selinux includes
-#include "avc_ss.h"
-#include "objsec.h"
-#include "ss/services.h"
-#include "ss/symtab.h"
-#include "xfrm.h"
-#ifndef KSU_COMPAT_USE_SELINUX_STATE
-#include "avc.h"
-#endif
 
 // unity build
 #include "tiny_sulog.c"
@@ -68,6 +69,7 @@
 #include "feature/sucompat.c"
 #include "feature/sulog.c"
 #include "runtime/ksud.c"
+#include "runtime/ksud_escape.c"
 
 #include "sulog/event.c"
 #include "sulog/fd.c"

@@ -6,8 +6,6 @@
 // ref: https://elixir.bootlin.com/linux/v4.14.1/source/arch/arm64/include/asm/unistd32.h
 // ref: https://elixir.bootlin.com/linux/v4.14.1/source/arch/arm64/include/asm/unistd.h
 
-#define FORCE_VOLATILE(x) *(volatile typeof(x) *)&(x)
-
 #define __AARCH64_reboot	142
 #define __AARCH64_execve	221
 #define __AARCH64_faccessat	48
@@ -327,8 +325,6 @@ static void read_and_replace_syscall(void *old_ptr, unsigned long syscall_nr, vo
 	smp_mb(); 
 }
 
-extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
-
 static void restore_syscall(void *old_ptr, unsigned long syscall_nr, void *new_ptr, void *target_table)
 {
 	void **sctable = (void **)target_table;
@@ -409,11 +405,13 @@ out:
 
 static int ksu_syscall_table_restore()
 {
+	set_user_nice(current, 19); // low prio
+
 loop_start:
 
 	msleep(1000);
 
-	if (FORCE_VOLATILE(ksu_vfs_read_hook))
+	if (*(volatile bool *)&ksu_vfs_read_hook)
 		goto loop_start;
 
 	restore_syscall((void *)&aarch64_newfstat, __AARCH64_newfstat, (void *)hook_aarch64_newfstat_ret, (void *)sys_call_table);
@@ -425,11 +423,6 @@ loop_start:
 #endif
 	
 	return 0;
-}
-
-static void vfs_read_hook_wait_thread()
-{
-	kthread_run(ksu_syscall_table_restore, NULL, "unhook");
 }
 
 static void ksu_syscall_table_hook_init()
@@ -455,7 +448,8 @@ static void ksu_syscall_table_hook_init()
 
 #endif // COMPAT
 
-	vfs_read_hook_wait_thread(); // start unreg kthread
+	// start unreg kthread
+	kthread_run(ksu_syscall_table_restore, NULL, "unhook");
 }
 
 static DEFINE_MUTEX(sucompat_toggle_mutex);

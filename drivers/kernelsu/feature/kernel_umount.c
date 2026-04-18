@@ -23,7 +23,7 @@ static const struct ksu_feature_handler kernel_umount_handler = {
 
 extern int path_umount(struct path *path, int flags);
 
-static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
+static inline void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
 {
 	int err = path_umount(path, flags);
 	if (err)

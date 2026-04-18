@@ -3,77 +3,25 @@
 // sys_newfstat rp
 // upstream: https://github.com/tiann/KernelSU/commit/df640917d11dd0eff1b34ea53ec3c0dc49667002
 
-// this is a bit different from copy_from_user_retry
-// here we just enable preempt and try again
-// we use this inside context that can't sleep
-static __always_inline long ksu_copy_from_user_fuck_faults(void *to, const void __user *from, unsigned long count)
-{
-	long ret = copy_from_user_nofault(to, from, count);
-	if (likely(!ret))
-		return ret;
-
-	bool got_flipped = false;
-	if (!preemptible()) {
-		preempt_enable();
-		got_flipped = true;
-	}
-
-	ret = copy_from_user(to, from, count);
-
-	if (got_flipped)
-		preempt_disable();
-
-	return ret;
-}
-
 static int sys_newfstat_handler_pre(struct kretprobe_instance *p, struct pt_regs *regs)
 {
 	struct pt_regs *real_regs = PT_REAL_REGS(regs);
-	unsigned int fd = PT_REGS_PARM1(real_regs);
-	void *statbuf = PT_REGS_PARM2(real_regs);
-	*(void **)&p->data = NULL;
 
-	if (!is_init(current_cred()))
-		return 0;
-
-	struct file *file = fget(fd);
-	if (!file)
-		return 0;
-
-	if (is_init_rc(file)) {
-		pr_info("kp_ksud: newfstat: stat init.rc \n");
-		fput(file);
-		*(void **)&p->data = statbuf;
-		return 0;
-	}
-	fput(file);
+	// grab ptr on entry
+	uintptr_t *arg = (uintptr_t *)p->data;
+	arg[0] = (uintptr_t)PT_REGS_PARM1(regs); 
+	arg[1] = (uintptr_t)PT_REGS_PARM2(regs); 
 
 	return 0;
 }
 
 static int sys_newfstat_handler_post(struct kretprobe_instance *p, struct pt_regs *regs)
 {
-	void __user *statbuf = *(void **)&p->data;
-	if (!statbuf)
-		return 0;
+	uintptr_t *arg = (uintptr_t *)p->data;
+	unsigned int fd = (unsigned int)arg[0];
+	struct stat __user *statbuf = (struct stat __user *)arg[1];
 
-	void __user *st_size_ptr = statbuf + offsetof(struct stat, st_size);
-	long size, new_size;
-
-	if (ksu_copy_from_user_fuck_faults(&size, st_size_ptr, sizeof(long))) {
-		pr_info("kp_ksud: sys_newfstat: read statbuf 0x%lx failed \n", (unsigned long)st_size_ptr);
-		return 0;
-	}
-
-	new_size = size + ksu_rc_len;
-	pr_info("kp_ksud: sys_newfstat: adding ksu_rc_len: %ld -> %ld \n", size, new_size);
-
-	// I do NOT think this matters much for now, we can use copy_to_user
-	// if SHTF then we backport cope_to_user_nofault
-	if (!copy_to_user(st_size_ptr, &new_size, sizeof(long)))
-		pr_info("kp_ksud: sys_newfstat: added ksu_rc_len \n");
-	else
-		pr_info("kp_ksud: sys_newfstat: add ksu_rc_len failed: statbuf 0x%lx \n", (unsigned long)st_size_ptr);
+	ksu_handle_newfstat_ret(&fd, &statbuf);
 
 	return 0;
 }
@@ -82,58 +30,29 @@ static struct kretprobe sys_newfstat_rp = {
 	.kp.symbol_name = SYS_NEWFSTAT_SYMBOL,
 	.entry_handler = sys_newfstat_handler_pre,
 	.handler = sys_newfstat_handler_post,
-	.data_size = sizeof(void *),
+	.data_size = sizeof(uintptr_t) * 2, // int + ptr, should fit
 };
 
 #if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
 static int sys_fstat64_handler_pre(struct kretprobe_instance *p, struct pt_regs *regs)
 {
 	struct pt_regs *real_regs = PT_REAL_REGS(regs);
-	unsigned long fd = PT_REGS_PARM1(real_regs); // long, but I don't think it matters.
-	void *statbuf = PT_REGS_PARM2(real_regs);
-	*(void **)&p->data = NULL;
 
-	if (!is_init(current_cred()))
-		return 0;
-
-	// WARNING: LE-only!!!
-	struct file *file = fget(*(unsigned int *)&fd);
-	if (!file)
-		return 0;
-
-	if (is_init_rc(file)) {
-		pr_info("kp_ksud: fstat64: stat init.rc \n");
-		fput(file);
-		*(void **)&p->data = statbuf;
-		return 0;
-	}
-	fput(file);
+	// grab ptr on entry
+	uintptr_t *arg = (uintptr_t *)p->data;
+	arg[0] = (uintptr_t)PT_REGS_PARM1(regs); 
+	arg[1] = (uintptr_t)PT_REGS_PARM2(regs); 
 
 	return 0;
 }
 
 static int sys_fstat64_handler_post(struct kretprobe_instance *p, struct pt_regs *regs)
 {
-	void __user *statbuf = *(void **)&p->data;
-	if (!statbuf)
-		return 0;
+	uintptr_t *arg = (uintptr_t *)p->data;
+	unsigned long fd = (unsigned long)arg[0];
+	struct stat64 __user *statbuf = (struct stat64 __user *)arg[1];
 
-	// compat_stat
-	void __user *st_size_ptr = statbuf + offsetof(struct stat64, st_size);
-	long size, new_size;
-
-	if (ksu_copy_from_user_fuck_faults(&size, st_size_ptr, sizeof(long long))) {
-		pr_info("kp_ksud: sys_fstat64: read statbuf 0x%lx failed \n", (unsigned long)st_size_ptr);
-		return 0;
-	}
-
-	new_size = size + ksu_rc_len;
-	pr_info("kp_ksud: sys_fstat64: adding ksu_rc_len: %ld -> %ld \n", size, new_size);
-
-	if (!copy_to_user(st_size_ptr, &new_size, sizeof(long)))
-		pr_info("kp_ksud: sys_fstat64: added ksu_rc_len \n");
-	else
-		pr_info("kp_ksud: sys_fstat64: add ksu_rc_len failed: statbuf 0x%lx \n", (unsigned long)st_size_ptr);
+	ksu_handle_fstat64_ret(&fd, &statbuf);
 
 	return 0;
 }
@@ -142,37 +61,44 @@ static struct kretprobe sys_fstat64_rp = {
 	.kp.symbol_name = SYS_FSTAT64_SYMBOL,
 	.entry_handler = sys_fstat64_handler_pre,
 	.handler = sys_fstat64_handler_post,
-	.data_size = sizeof(void *),
+	.data_size = sizeof(uintptr_t) * 2, // long + ptr, should fit
 };
 #endif
 
-// sys_read
-static int sys_read_handler_pre(struct kprobe *p, struct pt_regs *regs)
-{
-	struct pt_regs *real_regs = PT_REAL_REGS(regs);
-	unsigned int fd = (int)PT_REGS_PARM1(real_regs);
-
-	ksu_handle_sys_read_fd(fd);
-	return 0;
-}
-
-static struct kprobe sys_read_kp = {
-	.symbol_name = SYS_READ_SYMBOL,
-	.pre_handler = sys_read_handler_pre,
-};
-
 // sys_reboot
-extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);
-
 static int sys_reboot_handler_pre(struct kprobe *p, struct pt_regs *regs)
 {
 	struct pt_regs *real_regs = PT_REAL_REGS(regs);
-	int magic1 = (int)PT_REGS_PARM1(real_regs);
+	int *magic1 = (int *)&PT_REGS_PARM1(real_regs); // ptr so we can mutate this
 	int magic2 = (int)PT_REGS_PARM2(real_regs);
 	int cmd = (int)PT_REGS_PARM3(real_regs);
 	void __user **arg = (void __user **)&PT_REGS_SYSCALL_PARM4(real_regs);
 
-	return ksu_handle_sys_reboot(magic1, magic2, cmd, arg);
+	if (*magic1 != KSU_INSTALL_MAGIC1)
+		return 0;
+
+	// HACK: flip preempt status inside kp
+	// checking not really needed but its cool
+	bool got_flipped = false;
+	if (likely(!preemptible())) {
+		preempt_enable();
+		got_flipped = true;
+	}
+
+	// jack priority in illeggal state
+	int old_nice = task_nice(current);
+	set_user_nice(current, -10);
+
+	ksu_handle_sys_reboot(*magic1, magic2, cmd, arg);
+	set_user_nice(current, old_nice);
+
+	if (got_flipped)
+		preempt_disable();
+
+	// to prevent double hooking
+	*magic1 = 0;
+
+	return 0;
 }
 
 static struct kprobe sys_reboot_kp = {
@@ -182,11 +108,13 @@ static struct kprobe sys_reboot_kp = {
 
 static int unregister_kprobe_function(void *data)
 {
+	set_user_nice(current, 19); // low prio
+
 loop_start:
 
 	msleep(1000);
 
-	if ((volatile bool)ksu_execveat_hook)
+	if (*(volatile bool *)&ksu_vfs_read_hook)
 		goto loop_start;
 
 	pr_info("kp_ksud: unregistering kprobes...\n");
@@ -199,15 +127,7 @@ loop_start:
 	pr_info("kp_ksud: unregister sys_fstat64_rp!\n");
 #endif
 
-	unregister_kprobe(&sys_read_kp);
-	pr_info("kp_ksud: unregister sys_read_kp!\n");
-
 	return 0;
-}
-
-static void unregister_kprobe_thread()
-{
-	kthread_run(unregister_kprobe_function, NULL, "kp_unreg");
 }
 
 static void kp_ksud_init()
@@ -224,8 +144,5 @@ static void kp_ksud_init()
 	pr_info("kp_ksud: sys_fstat64_rp: %d\n", ret3);
 #endif
 
-	int ret4 = register_kprobe(&sys_read_kp);
-	pr_info("kp_ksud: sys_read_kp: %d\n", ret4);
-
-	unregister_kprobe_thread();
+	kthread_run(unregister_kprobe_function, NULL, "kp_unreg");
 }

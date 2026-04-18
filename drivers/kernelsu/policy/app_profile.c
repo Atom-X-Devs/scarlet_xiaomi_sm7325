@@ -103,7 +103,7 @@ static int escape_to_root(bool is_forced)
 {
 	int ret = 0;
 	struct cred *cred;
-	struct root_profile profile;
+	struct root_profile *profile = NULL;
 	struct user_struct *new_user;
 
 	cred = prepare_creds();
@@ -117,20 +117,20 @@ static int escape_to_root(bool is_forced)
 		goto out_abort_creds;
 	}
 
-	ksu_get_root_profile(ksu_get_uid_t(cred->uid), &profile);
+	profile = ksu_get_root_profile(ksu_get_uid_t(cred->uid));
 
-	ksu_get_uid_t(cred->uid) = profile.uid;
-	ksu_get_uid_t(cred->suid) = profile.uid;
-	ksu_get_uid_t(cred->euid) = profile.uid;
-	ksu_get_uid_t(cred->fsuid) = profile.uid;
+	ksu_get_uid_t(cred->uid) = profile->uid;
+	ksu_get_uid_t(cred->suid) = profile->uid;
+	ksu_get_uid_t(cred->euid) = profile->uid;
+	ksu_get_uid_t(cred->fsuid) = profile->uid;
 
-	ksu_get_uid_t(cred->gid) = profile.gid;
-	ksu_get_uid_t(cred->fsgid) = profile.gid;
-	ksu_get_uid_t(cred->sgid) = profile.gid;
-	ksu_get_uid_t(cred->egid) = profile.gid;
+	ksu_get_uid_t(cred->gid) = profile->gid;
+	ksu_get_uid_t(cred->fsgid) = profile->gid;
+	ksu_get_uid_t(cred->sgid) = profile->gid;
+	ksu_get_uid_t(cred->egid) = profile->gid;
 	cred->securebits = 0;
 
-	BUILD_BUG_ON(sizeof(profile.capabilities.effective) != sizeof(kernel_cap_t));
+	BUILD_BUG_ON(sizeof(profile->capabilities.effective) != sizeof(kernel_cap_t));
 
 	/*
 	 * Mirror the kernel set*uid path: update cred->user first, then
@@ -164,23 +164,26 @@ static int escape_to_root(bool is_forced)
 	// setup capabilities
 	// we need CAP_DAC_READ_SEARCH becuase `/data/adb/ksud` is not accessible for non root process
 	// we add it here but don't add it to cap_inhertiable, it would be dropped automaticly after exec!
-	u64 cap_for_ksud = profile.capabilities.effective | CAP_DAC_READ_SEARCH;
+	u64 cap_for_ksud = profile->capabilities.effective | CAP_DAC_READ_SEARCH;
 	memcpy(&cred->cap_effective, &cap_for_ksud, sizeof(cred->cap_effective));
-	memcpy(&cred->cap_permitted, &profile.capabilities.effective, sizeof(cred->cap_permitted));
-	memcpy(&cred->cap_bset, &profile.capabilities.effective, sizeof(cred->cap_bset));
+	memcpy(&cred->cap_permitted, &profile->capabilities.effective, sizeof(cred->cap_permitted));
+	memcpy(&cred->cap_bset, &profile->capabilities.effective, sizeof(cred->cap_bset));
 
-	setup_groups(&profile, cred);
-	setup_selinux(profile.selinux_domain, cred);
+	setup_groups(profile, cred);
+	setup_selinux(profile->selinux_domain, cred);
 
 	commit_creds(cred);
 
 	if (!!current->seccomp.mode)
 		disable_seccomp();
 	
-	setup_mount_ns(profile.namespaces);
+	setup_mount_ns(profile->namespaces);
+	ksu_put_root_profile(profile);
 	return 0;
 
 out_abort_creds:
+	if (profile)
+		ksu_put_root_profile(profile);
 	abort_creds(cred);
 	return ret;
 }

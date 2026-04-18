@@ -114,7 +114,7 @@ FILLDIR_RETURN_TYPE my_actor(MY_ACTOR_CTX_ARG, const char *name,
 
 	if (d_type == DT_DIR && my_ctx->depth > 0 &&
 	    (my_ctx->stop && !*my_ctx->stop)) {
-		struct data_path *data = kzalloc(sizeof(struct data_path), GFP_ATOMIC);
+		struct data_path *data = kzalloc(sizeof(struct data_path), GFP_KERNEL);
 
 		if (!data) {
 			pr_err("Failed to allocate memory for %s\n", dirpath);
@@ -289,9 +289,13 @@ skip_retry:
 		if (chr != '\n')
 			continue;
 
-		count = kernel_read(fp, buf, sizeof(buf), &line_start);
+		count = kernel_read(fp, buf, sizeof(buf) - 1, &line_start);
+		if (count <= 0) {
+			break;
+		}
+		buf[count] = '\0';
 
-		struct uid_data *data = kzalloc(sizeof(struct uid_data), GFP_ATOMIC);
+		struct uid_data *data = kzalloc(sizeof(struct uid_data), GFP_KERNEL);
 		if (!data) {
 			filp_close(fp, 0);
 			goto out;
@@ -371,11 +375,7 @@ static int throne_tracker_thread(void *data)
 	mutex_lock(&throne_tracker_mutex);
 
 	// lessen that window where user opens manager right away, yet its not crowned
-	// we are async/non-blocking in these kthreads
-	// sched_set_fifo_low
-	struct sched_param param = { 0 };
-	param.sched_priority = 1;
-	sched_setscheduler_nocheck(current, 1, &param);
+	set_user_nice(current, -20);
 
 	escape_to_root_forced();
 	throne_tracker_fn(prune_only);
@@ -400,7 +400,7 @@ void track_throne(bool prune_only)
 #endif
 
 	// HACK: force cast prune_only to be a void *
-	kthread_run(throne_tracker_thread, (void *)prune_only, "thronetracker");
+	kthread_run(throne_tracker_thread, (void *)prune_only, "ksu_throne");
 }
 
 void ksu_throne_tracker_init()

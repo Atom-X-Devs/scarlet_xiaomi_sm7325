@@ -156,7 +156,6 @@ out_unlock:
 	mutex_unlock(&selinux_state.policy_mutex);
 #else
 
-	cpumask_t old_mask;
 	db = get_policydb();
 
 	rwlock_t *lock = ksu_get_policy_rwlock();
@@ -169,6 +168,7 @@ out_unlock:
 	 * set_cpus_allowed_ptr() can sleep, use raw_smp_processor_id() to get
 	 * current CPU and bypass preemption checks.
 	 */
+	cpumask_t old_mask;
 	cpumask_copy(&old_mask, ksu_get_current_cpumask_t());
 	set_cpus_allowed_ptr(current, cpumask_of(raw_smp_processor_id()));
 
@@ -185,14 +185,13 @@ out_unlock:
 
 has_current_mm:
 	;
-	// HACK: raise priority of this to the heavens
-	int old_policy = current->policy;
-	struct sched_param old_param = { .sched_priority = current->rt_priority };
-	struct sched_param new_param = { .sched_priority = 50 };
+	// raise priority of this to the heavens
+	// yes, using CFS is now chosen over setscheduler FIFO
+	int old_nice = task_nice(current);
+	set_user_nice(current, -20);
 
-	sched_setscheduler_nocheck(current, 1, &new_param); // raise, fifo, 50
 	apply_kernelsu_rules_fn((void *)db);
-	sched_setscheduler_nocheck(current, old_policy, &old_param); // restore
+	set_user_nice(current, old_nice);
 
 out_unlock:
 	preempt_disable();
@@ -649,7 +648,6 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 	u8 *payload;
 	int ret = 0;
 	int success_cmd_count = 0;
-	cpumask_t old_mask;
 
 	if (!user_data || !data_len)
     		return -EINVAL;
@@ -679,12 +677,7 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 	if (!lock)
 		goto do_stop_machine;
 
-	/*
-	 * HACK: write_lock() is held with preempt enabled. DO NOT let the
-	 * task be migrated to any other CPU than the current CPU. And since
-	 * set_cpus_allowed_ptr() can sleep, use raw_smp_processor_id() to get
-	 * current CPU and bypass preemption checks.
-	 */
+	cpumask_t old_mask;
 	cpumask_copy(&old_mask, ksu_get_current_cpumask_t());
 	set_cpus_allowed_ptr(current, cpumask_of(raw_smp_processor_id()));
 
@@ -699,13 +692,12 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 
 has_current_mm:
 	;
-	int old_policy = current->policy;
-	struct sched_param old_param = { .sched_priority = current->rt_priority };
-	struct sched_param new_param = { .sched_priority = 50 };
+	int old_nice = task_nice(current);
+	set_user_nice(current, -20);
 
-	sched_setscheduler_nocheck(current, 1, &new_param);
 	ret = handle_sepolicy_fn((void *)&ctx);
-	sched_setscheduler_nocheck(current, old_policy, &old_param);
+
+	set_user_nice(current, old_nice);
 
 out_unlock:
 	preempt_disable();

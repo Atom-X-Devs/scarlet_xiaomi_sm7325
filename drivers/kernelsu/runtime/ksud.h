@@ -14,14 +14,13 @@ bool ksu_is_safe_mode(void);
 
 int nuke_ext4_sysfs(const char* mnt);
 
-bool ksu_execveat_hook __read_mostly;
-static noinline int ksu_handle_pre_ksud(const char *filename);
-
-bool ksu_vfs_read_hook __read_mostly;
 static noinline void ksu_install_rc_hook(struct file *file);
 
 extern u32 ksu_file_sid;
-extern bool ksu_module_mounted;
-extern bool ksu_boot_completed;
+
+static bool ksu_module_mounted __read_mostly;
+static bool ksu_boot_completed __read_mostly;
+static bool ksu_vfs_read_hook __read_mostly;
+static bool ksu_input_hook __read_mostly;
 
 #endif
