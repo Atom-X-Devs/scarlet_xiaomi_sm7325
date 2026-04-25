@@ -136,3 +136,10 @@ config ZRAM_MULTI_COMP
 	  re-compress pages using a potentially slower but more effective
 	  compression algorithm. Note, that IDLE page recompression
 	  requires ZRAM_MEMORY_TRACKING.
+
+config KCOMPRESSD
+	tristate "Kcompressd: Accelerated zram compression"
+	depends on ZRAM
+	help
+	Kcompressd creates multiple daemons to accelerate compression
+	of pages in zram, offloading this from kswapd/direct reclaim.
