@@ -250,9 +250,11 @@ module_param_cb(queue_size_per_kcompressd, &param_ops_change_queue_size_per_kcom
 MODULE_PARM_DESC(queue_size_per_kcompressd,
 		"Size of queue for kcompressd");
 
+static atomic_t next_kcompressd_idx = ATOMIC_INIT(0);
+
 int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 {
-	int i;
+	int i, start_idx, idx;
 	bool submit_success = false;
 	size_t sz_work = sizeof(struct write_work);
 
@@ -262,34 +264,38 @@ int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 		.cb = cb
 	};
 
+	unsigned int local_nr = READ_ONCE(nr_kcompressd);
+
 	if (unlikely(!atomic_read(&enable_kcompressd)))
 		return -EBUSY;
 
-	if (!nr_kcompressd || !current_is_kswapd())
+	if (!local_nr || !current_is_kswapd())
 		return -EBUSY;
 
+	start_idx = atomic_fetch_inc(&next_kcompressd_idx) % local_nr;
 
-	for (i = 0; i < nr_kcompressd; i++) {
+	for (i = 0; i < local_nr; i++) {
+		idx = (start_idx + i) % local_nr;
 		submit_success =
-			(kfifo_avail(&kcompress[i].write_fifo) >= sz_work) &&
-			(sz_work == kfifo_in(&kcompress[i].write_fifo, &entry, sz_work));
+			(kfifo_avail(&kcompress[idx].write_fifo) >= sz_work) &&
+			(sz_work == kfifo_in(&kcompress[idx].write_fifo, &entry, sz_work));
 
 		if (submit_success) {
-			switch (atomic_read(&kcompress[i].running)) {
+			switch (atomic_read(&kcompress[idx].running)) {
 			case KCOMPRESSD_NOT_STARTED:
-				atomic_set(&kcompress[i].running, KCOMPRESSD_RUNNING);
-				kcompress[i].kcompressd = kthread_run(kcompressd,
-						&kcompressd_para[i], "kcompressd:%d", i);
-				if (IS_ERR(kcompress[i].kcompressd)) {
-					atomic_set(&kcompress[i].running, KCOMPRESSD_NOT_STARTED);
-					pr_warn("Failed to start kcompressd:%d\n", i);
-					clean_bio_queue(i);
+				atomic_set(&kcompress[idx].running, KCOMPRESSD_RUNNING);
+				kcompress[idx].kcompressd = kthread_run(kcompressd,
+						&kcompressd_para[idx], "kcompressd:%d", idx);
+				if (IS_ERR(kcompress[idx].kcompressd)) {
+					atomic_set(&kcompress[idx].running, KCOMPRESSD_NOT_STARTED);
+					pr_warn("Failed to start kcompressd:%d\n", idx);
+					clean_bio_queue(idx);
 				}
 				break;
 			case KCOMPRESSD_RUNNING:
 				break;
 			case KCOMPRESSD_SLEEPING:
-				wake_up_interruptible(&kcompress[i].kcompressd_wait);
+				wake_up_interruptible(&kcompress[idx].kcompressd_wait);
 				break;
 			}
 			return 0;
