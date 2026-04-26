@@ -51,48 +51,24 @@ int kcompressd_enabled(void)
 }
 EXPORT_SYMBOL(kcompressd_enabled);
 
-static void kcompressd_try_to_sleep(struct kcompressd_para *p)
-{
-	DEFINE_WAIT(wait);
-
-	if (!kfifo_is_empty(p->write_fifo))
-		return;
-
-	if (freezing(current) || kthread_should_stop())
-		return;
-
-	atomic_set(p->running, KCOMPRESSD_SLEEPING);
-	prepare_to_wait(p->kcompressd_wait, &wait, TASK_INTERRUPTIBLE);
-
-	/*
-	 * After a short sleep, check if it was a premature sleep. If not, then
-	 * go fully to sleep until explicitly woken up.
-	 */
-	if (!kthread_should_stop() && kfifo_is_empty(p->write_fifo))
-		schedule();
-
-	finish_wait(p->kcompressd_wait, &wait);
-	atomic_set(p->running, KCOMPRESSD_RUNNING);
-}
-
 static int kcompressd(void *para)
 {
 	struct task_struct *tsk = current;
 	struct kcompressd_para *p = (struct kcompressd_para *)para;
 
 	tsk->flags |= PF_MEMALLOC | PF_KSWAPD;
-	set_freezable();
 
 	while (!kthread_should_stop()) {
-		bool ret;
+		if (kfifo_is_empty(p->write_fifo)) {
+			atomic_set(p->running, KCOMPRESSD_SLEEPING);
+			wait_event_interruptible(*p->kcompressd_wait,
+						 !kfifo_is_empty(p->write_fifo) ||
+						 kthread_should_stop());
+			atomic_set(p->running, KCOMPRESSD_RUNNING);
+		}
 
-		kcompressd_try_to_sleep(p);
-		ret = try_to_freeze();
 		if (kthread_should_stop())
 			break;
-
-		if (ret)
-			continue;
 
 		while (!kfifo_is_empty(p->write_fifo)) {
 			struct write_work entry;
