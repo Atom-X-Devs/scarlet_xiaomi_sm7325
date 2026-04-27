@@ -63,7 +63,7 @@ static void kp_ksud_transition_routine_start()
 	already_ran = true;
 }
 #else
-static noinline void sys_execve_escape_ksud_internal(void *filename)
+__attribute__((cold)) static noinline void sys_execve_escape_ksud_internal(void *filename)
 {
 #ifdef KSU_CAN_USE_JUMP_LABEL
 	if (ksu_boot_completed) {
@@ -96,7 +96,7 @@ static noinline void sys_execve_escape_ksud_internal(void *filename)
 	return;
 }
 
-static noinline void kernel_execve_escape_ksud_internal(void *filename)
+__attribute__((cold)) static noinline void kernel_execve_escape_ksud_internal(void *filename)
 {
 #ifdef KSU_CAN_USE_JUMP_LABEL
 	if (ksu_boot_completed) {
@@ -131,10 +131,19 @@ static noinline void kernel_execve_escape_ksud_internal(void *filename)
 static uintptr_t selinux_ops_addr;
 static int (*orig_bprm_set_creds)(struct linux_binprm *bprm) = NULL;
 
+static void ksu_unregister_bprm_set_creds(void *data)
+{
+	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
+	if (orig_bprm_set_creds) {
+		pr_info("%s: restoring: bprm_set_creds 0x%lx -> 0x%lx\n", __func__, (long)ops->bprm_set_creds, (long)orig_bprm_set_creds);
+		ops->bprm_set_creds = orig_bprm_set_creds;
+	}
+}
+
 static int hook_bprm_set_creds(struct linux_binprm *bprm)
 {
-	if (likely(ksu_boot_completed))
-		goto bprm_set_creds;
+	if (ksu_boot_completed)
+		goto unreg_bprm_set_creds;
 
 	if (!is_init(current_cred()))
 		goto bprm_set_creds;
@@ -170,44 +179,13 @@ static int hook_bprm_set_creds(struct linux_binprm *bprm)
 	pr_info("bprm_set_creds: allow init executing %s with pid: %d\n", bprm->filename, current->pid);
 	return 0;
 
+unreg_bprm_set_creds:
+	stop_machine(ksu_unregister_bprm_set_creds, NULL, NULL);
+
 bprm_set_creds:
 	return orig_bprm_set_creds(bprm);
-}
 
-static int bprm_set_creds_restore(void *data)
-{
-	static bool ran_once = false;
 
-	if (ran_once)
-		return 0;
-
-	ran_once = true;
-
-	msleep(1000);
-	
-	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
-
-	if (!ops)
-		return 0;
-
-	if (!!strcmp((char *)ops, "selinux"))
-		return 0;
-
-	pr_info("%s: selinux_ops: 0x%lx .name = %s\n", __func__, (long)ops, (const char *)ops );
-
-	preempt_disable();
-	local_irq_disable();
-
-	if (orig_bprm_set_creds) {
-		pr_info("%s: restoring: 0x%lx to 0x%lx\n", __func__, (long)ops->bprm_set_creds, (long)orig_bprm_set_creds);
-		ops->bprm_set_creds = orig_bprm_set_creds;
-	}
-
-	smp_mb();
-
-	local_irq_enable();
-	preempt_enable();
-	return 0;
 }
 #endif
 
@@ -220,19 +198,14 @@ static void ksud_escape_init()
 
 static void ksud_escape_exit()
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0) && defined(CONFIG_KRETPROBES)
 	static bool already_ran = false;
 	if (already_ran)
 		return;
 
 	already_ran = true;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
-	kthread_run(bprm_set_creds_restore, NULL, "unhook");
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0) && defined(CONFIG_KRETPROBES)
 	kthread_run(kp_ksud_transition_unregister, NULL, "rp_unhook");
 #endif
 
 }
-

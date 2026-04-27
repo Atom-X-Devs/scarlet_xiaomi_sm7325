@@ -48,13 +48,9 @@ static void setup_groups(struct root_profile *profile, struct cred *cred)
 	put_group_info(group_info);
 }
 
-static void disable_seccomp()
-{
-
-// for < 5.9 lets have free_task do it for us (put_seccomp_filter)
-// we risk a double free / double decrement which isn't safe on old kernels
-// I'm not even sure if this thing is needed on newer kernels
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+static void disable_seccomp(void)
+{
 	struct task_struct *fake;
 
 	fake = kmalloc(sizeof(*fake), GFP_KERNEL);
@@ -62,12 +58,10 @@ static void disable_seccomp()
 		pr_warn("failed to alloc fake task_struct\n");
 		return;
 	}
-#endif
 
 	// Refer to kernel/seccomp.c: seccomp_set_mode_strict
 	// When disabling Seccomp, ensure that current->sighand->siglock is held during the operation.
 	spin_lock_irq(&current->sighand->siglock);
-
 	// disable seccomp
 #if defined(CONFIG_GENERIC_ENTRY) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 	clear_syscall_work(SECCOMP);
@@ -75,17 +69,13 @@ static void disable_seccomp()
 	clear_thread_flag(TIF_SECCOMP);
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 	memcpy(fake, current, sizeof(*fake));
-	atomic_set(&current->seccomp.filter_count, 0);
-#endif
 
 	current->seccomp.mode = 0;
 	current->seccomp.filter = NULL;
-
+	atomic_set(&current->seccomp.filter_count, 0);
 	spin_unlock_irq(&current->sighand->siglock);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
 	// https://github.com/torvalds/linux/commit/bfafe5efa9754ebc991750da0bcca2a6694f3ed3#diff-45eb79a57536d8eccfc1436932f093eb5c0b60d9361c39edb46581ad313e8987R576-R577
 	fake->flags |= PF_EXITING;
@@ -96,8 +86,25 @@ static void disable_seccomp()
 
 	seccomp_filter_release(fake);
 	kfree(fake);
-#endif // 5.9
 }
+#else /* ! LINUX_VERSION_CODE < 5.9 */
+/*
+ * for < 5.9 lets have free_task do it for us (put_seccomp_filter)
+ * we risk a double free / double decrement which isn't safe on old kernels
+ * I'm not even sure if this thing is needed on newer kernels
+ *
+ */
+static void disable_seccomp(void)
+{
+	spin_lock_irq(&current->sighand->siglock);
+
+	clear_thread_flag(TIF_SECCOMP);
+	current->seccomp.mode = 0;
+	current->seccomp.filter = NULL;
+
+	spin_unlock_irq(&current->sighand->siglock);
+}
+#endif // 5.9
 
 static int escape_to_root(bool is_forced)
 {
@@ -174,7 +181,7 @@ static int escape_to_root(bool is_forced)
 
 	commit_creds(cred);
 
-	if (!!current->seccomp.mode)
+	if (test_thread_flag(TIF_SECCOMP))
 		disable_seccomp();
 	
 	setup_mount_ns(profile->namespaces);

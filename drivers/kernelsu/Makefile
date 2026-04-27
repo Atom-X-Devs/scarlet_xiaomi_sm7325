@@ -11,8 +11,8 @@ MDIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 $(info -- KDIR: $(KDIR))
 $(info -- MDIR: $(MDIR))
 
-# compliant to last upstream kernel change as of 99739a52
-CFLAGS_ksu.o += -DKSU_VERSION=32473
+# compliant to last upstream kernel change as of 7fb5fd3
+CFLAGS_ksu.o += -DKSU_VERSION=32479
 
 ifndef KSU_EXPECTED_SIZE
 KSU_EXPECTED_SIZE := 0x033b
@@ -90,6 +90,7 @@ endif
 CFLAGS_ksu.o += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-missing-prototypes
 CFLAGS_ksu.o += -Wno-declaration-after-statement -Wno-unused-function -Wno-format -Wno-incompatible-pointer-types
 CFLAGS_ksu.o += -Wno-unused-variable -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast
+CFLAGS_ksu.o += -Wno-macro-redefined
 
 # so we can see stack use atleast, as we disable all stack safety here
 CFLAGS_ksu.o += $(call cc-option, -Wframe-larger-than=1024)

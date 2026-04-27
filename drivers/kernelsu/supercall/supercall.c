@@ -65,7 +65,12 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 	if (magic1 != KSU_INSTALL_MAGIC1)
 		return 0;
 
-	pr_info("sys_reboot: intercepted call! magic: 0x%x id: %d\n", magic1, magic2);
+	// when ternary on fmt?
+	// cold syscall, we can splurge xD
+	if (magic2 == KSU_INSTALL_MAGIC2)
+		pr_info("sys_reboot: magic: 0x%x id: 0x%x pid: %d comm: %s \n", magic1, magic2, current->pid, current->comm);
+	else
+		pr_info("sys_reboot: magic: 0x%x id: %d pid: %d pid: %s \n", magic1, magic2, current->pid, current->comm);
 
 	// arg4 = (unsigned long)PT_REGS_SYSCALL_PARM4(real_regs);
 	// downstream: dereference arg as arg4 so we can be inline to upstream

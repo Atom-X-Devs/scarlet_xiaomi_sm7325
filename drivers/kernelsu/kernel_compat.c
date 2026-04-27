@@ -52,10 +52,21 @@ out:
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0) || !defined(CONFIG_EXT4_FS)
-__weak void ext4_unregister_sysfs(struct super_block *sb)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+__weak long copy_from_kernel_nofault(void *dst, const void *src, size_t size)
 {
-	pr_info("%s: feature not implemented!\n", __func__);
+	// https://elixir.bootlin.com/linux/v5.2.21/source/mm/maccess.c#L27
+	long ret;
+	mm_segment_t old_fs = get_fs();
+
+	set_fs(KERNEL_DS);
+	pagefault_disable();
+	ret = __copy_from_user_inatomic(dst,
+			(__force const void __user *)src, size);
+	pagefault_enable();
+	set_fs(old_fs);
+
+	return ret ? -EFAULT : 0;
 }
 #endif
 
@@ -83,20 +94,9 @@ __weak long copy_from_user_nofault(void *dst, const void __user *src, size_t siz
 }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
-__weak long copy_from_kernel_nofault(void *dst, const void *src, size_t size)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0) || !defined(CONFIG_EXT4_FS)
+__weak void ext4_unregister_sysfs(struct super_block *sb)
 {
-	// https://elixir.bootlin.com/linux/v5.2.21/source/mm/maccess.c#L27
-	long ret;
-	mm_segment_t old_fs = get_fs();
-
-	set_fs(KERNEL_DS);
-	pagefault_disable();
-	ret = __copy_from_user_inatomic(dst,
-			(__force const void __user *)src, size);
-	pagefault_enable();
-	set_fs(old_fs);
-
-	return ret ? -EFAULT : 0;
+	pr_info("%s: feature not implemented!\n", __func__);
 }
 #endif

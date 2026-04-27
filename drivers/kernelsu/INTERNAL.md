@@ -10,8 +10,8 @@
 
 ## sucompat
 - tweaked for downstream
-- copy_from_user instead of strncpy_from_user
-- this is faster
+- last word first, per word compare, this is faster
+- sucompat gate is tweaked too
 
 ## task_fix_setuid LSM
 - upstream was on this before
