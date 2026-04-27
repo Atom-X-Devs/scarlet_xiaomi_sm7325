@@ -106,6 +106,16 @@ static noinline ssize_t ksu_kernel_write_compat(struct file *p, const void *buf,
 #define kernel_write ksu_kernel_write_compat
 #endif // < 4.14
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+#define d_inode(dentry) ((dentry)->d_inode)
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0) && defined(CONFIG_ARM64)
+#ifndef TIF_SECCOMP
+#define TIF_SECCOMP		11
+#endif
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
 static inline void *ksu_kvmalloc(size_t size, gfp_t flags)
 {
@@ -196,6 +206,8 @@ static inline void ksu_static_key_disable(struct static_key *key)
 #endif // < 4.3
 #endif // >= 3.4 && CONFIG_JUMP_LABEL
 
+extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
+
 /**
  * ksu_copy_from_user_retry
  * try nofault copy first, if it fails, try with plain
@@ -212,8 +224,6 @@ static __always_inline long ksu_copy_from_user_retry(void *to, const void __user
 	// we faulted! fallback to slow path
 	return copy_from_user(to, from, count);
 }
-
-extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) // caller is reponsible for sanity!
 static inline void ksu_zeroed_strncpy(char *dest, const char *src, size_t count)

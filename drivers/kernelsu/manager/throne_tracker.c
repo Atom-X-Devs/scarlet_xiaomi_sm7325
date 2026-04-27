@@ -8,7 +8,7 @@ struct uid_data {
 	char package[KSU_MAX_PACKAGE_NAME];
 };
 
-static void crown_manager(const char *apk, struct list_head *uid_data)
+static __always_inline void crown_manager(const char *apk, struct list_head *uid_data)
 {
 	char pkg[KSU_MAX_PACKAGE_NAME];
 	if (get_pkg_from_apk_path(pkg, apk) < 0) {
@@ -129,7 +129,7 @@ FILLDIR_RETURN_TYPE my_actor(MY_ACTOR_CTX_ARG, const char *name,
 	}
 
 	// now put this on candidate_path
-	if (d_type == DT_REG && !strncmp(name, "base.apk", 8)) {
+	if (d_type == DT_REG && namelen == 8 && !memcmp(name, "base.apk", 8)) {
 		snprintf(candidate_path, DATA_PATH_LEN, "%s/%.*s", my_ctx->parent_dir, namelen, name);
 	}
 
@@ -248,32 +248,11 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
 
 static void throne_tracker_fn(bool prune_only)
 {
-	struct file *fp = NULL;
-	int tries = 0;
-
-	if (unlikely(!(current->flags & PF_KTHREAD))) {
-		pr_info("%s: not a kthread! skip retry for: %s\n", __func__, SYSTEM_PACKAGES_LIST_PATH);
-		fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
-		goto skip_retry;
-	}
-
-	while (tries++ < 10) {
-		if (!is_lock_held(SYSTEM_PACKAGES_LIST_PATH)) {
-			fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
-			if (!IS_ERR(fp)) 
-				break;
-		}
-		
-		pr_info("%s: waiting for %s\n", __func__, SYSTEM_PACKAGES_LIST_PATH);
-		msleep(100); // migth as well add a delay
-	};
-
-skip_retry:
+	struct file *fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		pr_err("%s: open " SYSTEM_PACKAGES_LIST_PATH " failed: %ld\n", __func__, PTR_ERR(fp));
 		return;
-	} else
-		pr_info("%s: %s found!\n", __func__, SYSTEM_PACKAGES_LIST_PATH);
+	}
 
 	struct list_head uid_list;
 	INIT_LIST_HEAD(&uid_list);
@@ -374,6 +353,27 @@ static int throne_tracker_thread(void *data)
 
 	mutex_lock(&throne_tracker_mutex);
 
+test_tmp:
+	if (!is_file_existing("/data/system/packages.list.tmp"))
+		goto test_list;
+
+	if (IS_ENABLED(CONFIG_KSU_DEBUG))
+		pr_info("throne_tracker: rename not finished! retry!\n");
+
+	msleep(20); // yield
+	goto test_tmp;
+
+test_list:
+	if (is_file_stable(SYSTEM_PACKAGES_LIST_PATH))
+		goto start_tt;
+
+	if (IS_ENABLED(CONFIG_KSU_DEBUG))
+		pr_info("throne_tracker: rename not finished! retry!\n");
+
+	msleep(20); // yield
+	goto test_list;	
+
+start_tt:
 	// lessen that window where user opens manager right away, yet its not crowned
 	set_user_nice(current, -20);
 

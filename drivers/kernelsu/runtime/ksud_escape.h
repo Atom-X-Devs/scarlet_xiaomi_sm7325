@@ -2,8 +2,8 @@
 #define __KSU_H_KSUD_ESCAPE
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0) && !defined(CONFIG_KRETPROBES)
-static noinline void sys_execve_escape_ksud_internal(void *filename);
-static noinline void kernel_execve_escape_ksud_internal(void *filename);
+__attribute__((cold)) static noinline void sys_execve_escape_ksud_internal(void *filename);
+__attribute__((cold)) static noinline void kernel_execve_escape_ksud_internal(void *filename);
 
 #ifdef KSU_CAN_USE_JUMP_LABEL
 DEFINE_STATIC_KEY_TRUE(ksud_escape_key);

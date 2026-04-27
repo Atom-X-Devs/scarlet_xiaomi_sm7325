@@ -140,7 +140,7 @@ out_release_env_p:
 
 static noinline void do_ksu_adb_root_handle_execve(void *filename, void *envp_in)
 {
-	if (likely(!!current->seccomp.mode))
+	if (likely(test_thread_flag(TIF_SECCOMP)))
 		return;
 
 	uid_t uid = current_euid().val;
@@ -179,7 +179,7 @@ struct user_arg_ptr {
 
 static noinline void do_ksu_adb_root_handle_execveat(void *filename, void *envp_in)
 {
-	if (likely(!!current->seccomp.mode))
+	if (likely(test_thread_flag(TIF_SECCOMP)))
 		return;
 
 	uid_t uid = current_euid().val;
@@ -249,8 +249,8 @@ static inline void ksu_adb_root_handle_execveat(void *filename, void *envp_in)
 	if (unlikely(ksu_adb_root))
 		do_ksu_adb_root_handle_execveat(filename, envp_in);
 }
-#define ksu_static_branch_enable()  do { } while (0)
-#define ksu_static_branch_disable() do { } while (0)
+static inline void ksu_static_branch_enable() { } // no-op
+static inline void ksu_static_branch_disable() { } // no-op
 #endif // KSU_CAN_USE_JUMP_LABEL
 
 static int kernel_adb_root_feature_get(u64 *value)

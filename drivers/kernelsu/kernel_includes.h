@@ -74,6 +74,10 @@
 
 // versioned / conditional
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
+#include <linux/hex.h>
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
 #include <linux/stop_machine.h>
 #endif
@@ -149,7 +153,7 @@
  * https://github.com/gcc-mirror/gcc/blob/releases/gcc-4.9/gcc/builtins.def#L562
  *
  */
-#if !defined(CONFIG_FORTIFY_SOURCE)
+#if !defined(CONFIG_KSU_DEBUG)
 
 #define memchr		__builtin_memchr
 #define memcmp		__builtin_memcmp
@@ -170,7 +174,7 @@
 #define strpbrk		__builtin_strpbrk
 #define strrchr		__builtin_strrchr
 #define strspn		__builtin_strspn
-#define strstr		__builtin_strstr
+//#define strstr		__builtin_strstr
 
 #endif // !CONFIG_FORTIFY_SOURCE
 

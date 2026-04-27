@@ -38,7 +38,7 @@ static inline void ksu_disable_vfs_read_branch()
 	smp_mb();
 }
 #else
-#define ksu_disable_vfs_read_branch()	do { } while (0)
+static inline void ksu_disable_vfs_read_branch() { } // no-op
 #endif
 
 void on_post_fs_data(void)
@@ -510,37 +510,41 @@ static int vol_detector_exit()
 	return 0;
 }
 
-// we do this so that if theres no ksud to call on_post_fs_data/ksu_is_safe_mode,
-// there will be no input handler that stays around
-// 30s is more than enough time from second_stage to decrypt/post_fs_data
-static int unregister_vol_detector_fn(void *data)
+// we do this so that if theres no ksud to call on_post_fs_data/ksu_is_safe_mode/on_boot_completed
+// there will be no input handler / extra execve branch that stays around
+// 60s is more than enough time from second_stage to decrypt/post_fs_data
+// if theres no ksud that does that, we trigger the closing of hooks ourselves
+static int ksu_hook_watchdog(void *data)
 {
 	unsigned int i = 0;
 
-	pr_info("vol_detector: unreg kthread init!\n");
 	set_user_nice(current, 19); // low prio
+	pr_info("%s: kthread init!\n", __func__);
 
 start:
 	if (!*(volatile bool *)&ksu_input_hook)
 		goto bail;
 
-	msleep(10000);
+	msleep(5000);
 
 	i++;
 
-	if (i < 3)
+	if (i < 12)
 		goto start;
 
+	// if this path gets triggerred, it means theres no ksud
+	pr_info("%s: ksud probably absent, closing hooks!\n", __func__);
+
+	// close down input hook
 	stop_input_hook();
 
-bail:
-	pr_info("vol_detector: unreg kthread exit!\n");
-	return 0;
-}
+	// close down ksud escape
+	ksud_escape_exit();
+	ksu_boot_completed = true;
 
-static void unregister_vol_detector_thread()
-{
-	kthread_run(unregister_vol_detector_fn, NULL, "vol_detector");
+bail:
+	pr_info("%s: kthread exit!\n", __func__);
+	return 0;
 }
 
 static void stop_vfs_read_hook()
@@ -548,7 +552,8 @@ static void stop_vfs_read_hook()
 	ksu_vfs_read_hook = false;
 	pr_info("stop vfs_read_hook\n");
 	ksu_disable_vfs_read_branch();
-	unregister_vol_detector_thread();
+
+	kthread_run(ksu_hook_watchdog, NULL, "watchdog");
 }
 
 static void stop_input_hook()

@@ -38,6 +38,23 @@ static struct policydb *get_policydb(void) { return &policydb; }
 static inline rwlock_t *ksu_get_policy_rwlock() { return &selinux_state.ss->policy_rwlock; }
 #elif defined(KSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK)
 static inline rwlock_t *ksu_get_policy_rwlock() { extern rwlock_t policy_rwlock; return &policy_rwlock; }
+#elif defined(CONFIG_KALLSYMS)
+static noinline rwlock_t *ksu_get_policy_rwlock()
+{
+	static bool already_ran = false;
+
+	static rwlock_t *policy_rwlock_ksym = NULL;
+
+	if (likely(already_ran))
+		return policy_rwlock_ksym;
+
+	policy_rwlock_ksym = (rwlock_t *)kallsyms_lookup_name("policy_rwlock");
+	if (policy_rwlock_ksym)
+		pr_info("apply_kernelsu_rules: policy_rwlock: 0x%lx via ksym\n", (uintptr_t)policy_rwlock_ksym);
+
+	already_ran = true;
+	return policy_rwlock_ksym;
+}
 #else
 static inline rwlock_t *ksu_get_policy_rwlock() { return NULL; }
 #endif
