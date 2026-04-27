@@ -100,7 +100,6 @@ static int kcompressd(void *para)
 			if (sizeof(struct write_work) == kfifo_out(p->write_fifo,
 						&entry, sizeof(struct write_work))) {
 				entry.cb(entry.mem, entry.bio);
-				bio_put(entry.bio);
 			}
 		}
 
@@ -132,7 +131,6 @@ static void clean_bio_queue(int idx)
 
 	while (sizeof(struct write_work) == kfifo_out(&kcompress[idx].write_fifo,
 				&entry, sizeof(struct write_work))) {
-		bio_put(entry.bio);
 		entry.cb(entry.mem, entry.bio);
 	}
 	kfifo_free(&kcompress[idx].write_fifo);
@@ -270,7 +268,6 @@ int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 	if (!nr_kcompressd || !current_is_kswapd())
 		return -EBUSY;
 
-	bio_get(bio);
 
 	for (i = 0; i < nr_kcompressd; i++) {
 		submit_success =
@@ -299,7 +296,6 @@ int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 		}
 	}
 
-	bio_put(bio);
 	return -EBUSY;
 }
 EXPORT_SYMBOL(schedule_bio_write);
