@@ -161,9 +161,9 @@ static int do_nr_kcompressd_handler(const char *val,
 	stop_all_kcompressd_thread();
 
 	ret = param_set_int(val, kp);
-	if (!ret) {
+	if (ret < 0) {
 		pr_err("Invalid number of kcompressd.\n");
-		return -EINVAL;
+		return ret;
 	}
 
 	ret = init_write_queue();
@@ -197,9 +197,9 @@ static int do_queue_size_per_kcompressd_handler(const char *val,
 	stop_all_kcompressd_thread();
 
 	ret = param_set_int(val, kp);
-	if (!ret) {
+	if (ret < 0) {
 		pr_err("Invalid queue size for kcompressd.\n");
-		return -EINVAL;
+		return ret;
 	}
 
 	ret = init_write_queue();
