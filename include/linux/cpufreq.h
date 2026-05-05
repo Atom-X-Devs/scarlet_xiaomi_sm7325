@@ -216,7 +216,6 @@ void refresh_frequency_limits(struct cpufreq_policy *policy);
 void cpufreq_update_policy(unsigned int cpu);
 void cpufreq_update_limits(unsigned int cpu);
 bool have_governor_per_policy(void);
-bool cpufreq_supports_freq_invariance(void);
 struct kobject *get_governor_parent_kobj(struct cpufreq_policy *policy);
 void cpufreq_enable_fast_switch(struct cpufreq_policy *policy);
 void cpufreq_disable_fast_switch(struct cpufreq_policy *policy);
@@ -232,10 +231,6 @@ static inline unsigned int cpufreq_quick_get(unsigned int cpu)
 static inline unsigned int cpufreq_quick_get_max(unsigned int cpu)
 {
 	return 0;
-}
-static inline bool cpufreq_supports_freq_invariance(void)
-{
-	return false;
 }
 static inline void disable_cpufreq(void) { }
 #endif
