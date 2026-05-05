@@ -27,7 +27,7 @@ DEFINE_PER_CPU(unsigned long, max_cpu_freq);
 DEFINE_PER_CPU(unsigned long, max_freq_scale) = SCHED_CAPACITY_SCALE;
 static DEFINE_PER_CPU(u32, freq_factor) = 1;
 
-void arch_set_freq_scale(const struct cpumask *cpus, unsigned long cur_freq,
+void arch_set_freq_scale(struct cpumask *cpus, unsigned long cur_freq,
 			 unsigned long max_freq)
 {
 	unsigned long scale;
@@ -46,7 +46,7 @@ void arch_set_freq_scale(const struct cpumask *cpus, unsigned long cur_freq,
 	}
 }
 
-void arch_set_max_freq_scale(const struct cpumask *cpus,
+void arch_set_max_freq_scale(struct cpumask *cpus,
 			     unsigned long policy_max_freq)
 {
 	unsigned long scale, max_freq;
