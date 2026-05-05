@@ -178,15 +178,11 @@ release_pevs:
  */
 static u64 read_cpu_cycles(void)
 {
-#ifdef SYS_AMEVCNTR0_CORE_EL0
-	return read_sysreg_s(SYS_AMEVCNTR0_CORE_EL0);
-#else
 	struct cpu_pmu_evt *cpev = this_cpu_ptr(&pevt_pcpu);
 	struct perf_event *event = cpev->pev[CPU_CYCLES];
 
 	event->pmu->read(event);
 	return local64_read(&event->count);
-#endif
 }
 
 static void fie_read_counters(struct pmu_stat *stat)
