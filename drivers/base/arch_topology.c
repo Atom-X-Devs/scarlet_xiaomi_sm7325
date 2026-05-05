@@ -33,9 +33,6 @@ void arch_set_freq_scale(struct cpumask *cpus, unsigned long cur_freq,
 	unsigned long scale;
 	int i;
 
-	if (WARN_ON_ONCE(!cur_freq || !max_freq))
-		return;
-
 	scale = (cur_freq << SCHED_CAPACITY_SHIFT) / max_freq;
 
 	trace_android_vh_arch_set_freq_scale(cpus, cur_freq, max_freq, &scale);
