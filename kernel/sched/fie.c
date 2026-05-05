@@ -8,6 +8,7 @@
 #include <linux/reboot.h>
 #include <linux/sched/topology.h>
 #include <asm/arch_timer.h>
+#include <asm/sysreg.h>
 #include "sched.h"
 
 /* Minimum sample time in nanoseconds */
@@ -174,11 +175,7 @@ release_pevs:
  */
 static u64 read_cpu_cycles(void)
 {
-	struct cpu_pmu_evt *cpev = this_cpu_ptr(&pevt_pcpu);
-	struct perf_event *event = cpev->pev[CPU_CYCLES];
-
-	event->pmu->read(event);
-	return local64_read(&event->count);
+	return read_sysreg(pmccntr_el0);
 }
 
 static void fie_read_counters(struct pmu_stat *stat)
