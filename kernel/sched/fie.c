@@ -353,7 +353,6 @@ void fie_idle_exit(void)
 {
 	int cpu = raw_smp_processor_id();
 	struct cpu_pmu *pmu = &per_cpu(cpu_pmu_evs, cpu);
-	struct pmu_stat cur;
 
 	/* Don't race with reboot */
 	if (!static_branch_unlikely(&fie_ready))
@@ -364,13 +363,11 @@ void fie_idle_exit(void)
 		return;
 
 	/*
-	 * Reset the baseline without accumulating idle time.
-	 * CNTPCT kept running while the CPU was idle, but CPU cycles
-	 * were gated; starting a fresh baseline discards that skew.
+	 * Only advance CNTPCT. CPU cycles were gated during idle so
+	 * they haven't changed. Re-reading the PMU here is unnecessary
+	 * and could be problematic if the hardware isn't fully restored.
 	 */
-	fie_read_counters(&cur);
-
-	pmu->cur = cur;
+	pmu->cur.cntpct = get_cntpct();
 }
 
 static int fie_cpuhp_up(unsigned int cpu)
