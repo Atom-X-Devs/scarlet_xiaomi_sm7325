@@ -8,8 +8,6 @@
 #include <linux/reboot.h>
 #include <linux/sched/topology.h>
 #include <asm/arch_timer.h>
-#include <trace/hooks/cpuidle.h>
-#include <trace/hooks/sched.h>
 #include "sched.h"
 
 /* Minimum sample time in nanoseconds */
@@ -329,7 +327,7 @@ static struct scale_freq_data fie_sfd = {
 	.set_freq_scale = fie_tick
 };
 
-static void fie_idle_enter(void *data, int *state, struct cpuidle_device *dev)
+void fie_idle_enter(void)
 {
 	int cpu = raw_smp_processor_id();
 	struct cpu_pmu *pmu = &per_cpu(cpu_pmu_evs, cpu);
@@ -357,7 +355,7 @@ static void fie_idle_enter(void *data, int *state, struct cpuidle_device *dev)
 	raw_spin_unlock(&pmu->sfd.lock);
 }
 
-static void fie_idle_exit(void *data, int state, struct cpuidle_device *dev)
+void fie_idle_exit(void)
 {
 	int cpu = raw_smp_processor_id();
 	struct cpu_pmu *pmu = &per_cpu(cpu_pmu_evs, cpu);
@@ -440,8 +438,6 @@ static void fie_shutdown(void)
 					 cpu_possible_mask);
 	kick_all_cpus_sync();
 	cpuhp_remove_state_nocalls(cpuhp_state);
-	unregister_trace_android_vh_cpu_idle_enter(fie_idle_enter, NULL);
-	unregister_trace_android_vh_cpu_idle_exit(fie_idle_exit, NULL);
 }
 
 static int fie_reboot(struct notifier_block *nb, unsigned long val, void *cmd)
@@ -496,28 +492,17 @@ static int __init fie_monitoring_init(void)
 	if (cpuhp_state <= 0)
 		return -EINVAL;
 
-	/* Register cpuidle hooks */
-	ret = register_trace_android_vh_cpu_idle_enter(fie_idle_enter, NULL);
-	if (ret)
-		goto err_cpuhp;
-
-	ret = register_trace_android_vh_cpu_idle_exit(fie_idle_exit, NULL);
-	if (ret)
-		goto err_idle_enter;
-
 	/* Register reboot notifier */
-	register_reboot_notifier(&fie_reboot_nb);
+	ret = register_reboot_notifier(&fie_reboot_nb);
+	if (ret) {
+		cpuhp_remove_state_nocalls(cpuhp_state);
+		return ret;
+	}
 
 	/* Begin updating CPU scheduler statistics from update_rq_clock() */
 	static_branch_enable(&fie_ready);
 
 	pr_info("FIE: Frequency invariance engine initialized\n");
 	return 0;
-
-err_idle_enter:
-	unregister_trace_android_vh_cpu_idle_enter(fie_idle_enter, NULL);
-err_cpuhp:
-	cpuhp_remove_state_nocalls(cpuhp_state);
-	return ret;
 }
 late_initcall(fie_monitoring_init);
