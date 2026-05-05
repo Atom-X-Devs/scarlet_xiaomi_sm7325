@@ -90,14 +90,12 @@ struct sfd_data {
 };
 
 struct cpu_pmu {
-	raw_spinlock_t lock; /* protects cur/prev */
 	struct pmu_stat cur;
 	struct pmu_stat prev;
 	struct sfd_data sfd;
 };
 
 static DEFINE_PER_CPU(struct cpu_pmu, cpu_pmu_evs) = {
-	.lock = __RAW_SPIN_LOCK_UNLOCKED(cpu_pmu_evs.lock),
 	.sfd.lock = __RAW_SPIN_LOCK_UNLOCKED(cpu_pmu_evs.sfd.lock)
 };
 
@@ -219,10 +217,8 @@ static void update_freq_scale(int cpu, struct rq *rq, bool local_cpu)
 
 	if (local_cpu) {
 		fie_read_counters(&cur);
-		raw_spin_lock(&pmu->lock);
 		prev = pmu->cur;
 		pmu->cur = cur;
-		raw_spin_unlock(&pmu->lock);
 	}
 
 	/*
@@ -343,10 +339,8 @@ void fie_idle_enter(void)
 
 	/* Update the current counters one last time before idling */
 	fie_read_counters(&cur);
-	raw_spin_lock(&pmu->lock);
 	prev = pmu->cur;
 	pmu->cur = cur;
-	raw_spin_unlock(&pmu->lock);
 
 	/* Accumulate data for calculating the CPU's frequency */
 	raw_spin_lock(&pmu->sfd.lock);
@@ -376,9 +370,7 @@ void fie_idle_exit(void)
 	 */
 	fie_read_counters(&cur);
 
-	raw_spin_lock(&pmu->lock);
 	pmu->cur = cur;
-	raw_spin_unlock(&pmu->lock);
 }
 
 static int fie_cpuhp_up(unsigned int cpu)
