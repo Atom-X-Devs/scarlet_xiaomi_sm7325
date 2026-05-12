@@ -39,6 +39,7 @@ struct kcompressd_para {
 
 static struct kcompressd_para *kcompressd_para;
 static BLOCKING_NOTIFIER_HEAD(kcompressd_notifier_list);
+static DECLARE_RWSEM(kcompressd_config_sem);
 
 struct write_work {
 	void *mem;
@@ -177,6 +178,36 @@ static void stop_all_kcompressd_thread(void)
 	}
 }
 
+static int kcompress_reconfig(unsigned int *param, unsigned int new_val)
+{
+	int ret = 0;
+
+	down_write(&kcompressd_config_sem);
+
+	if (new_val == *param)
+		goto out;
+
+	atomic_set(&enable_kcompressd, false);
+	stop_all_kcompressd_thread();
+
+	kvfree(kcompress);
+	kvfree(kcompressd_para);
+	kcompress = NULL;
+	kcompressd_para = NULL;
+
+	*param = new_val;
+
+	ret = kcompress_update();
+	if (ret)
+		pr_err("Reconfiguration failed for value %u\n", new_val);
+	else
+		atomic_set(&enable_kcompressd, true);
+
+out:
+	up_write(&kcompressd_config_sem);
+	return ret;
+}
+
 static int do_nr_kcompressd_handler(const char *val,
 		const struct kernel_param *kp)
 {
@@ -195,29 +226,11 @@ static int do_nr_kcompressd_handler(const char *val,
 	if (new_nr == 0)
 		return -EINVAL;
 
-	if (new_nr == nr_kcompressd)
-		return 0;
+	ret = kcompress_reconfig(&nr_kcompressd, new_nr);
+	if (!ret)
+		pr_info("Number of threads for kcompressd was changed: %u\n", new_nr);
 
-	atomic_set(&enable_kcompressd, false);
-	stop_all_kcompressd_thread();
-
-	kvfree(kcompress);
-	kvfree(kcompressd_para);
-	kcompress = NULL;
-	kcompressd_para = NULL;
-
-	nr_kcompressd = new_nr;
-
-	ret = kcompress_update();
-	if (ret) {
-		pr_err("Initialization of writing to FIFOs failed for nr=%u\n", new_nr);
-		return ret;
-	}
-
-	atomic_set(&enable_kcompressd, true);
-	pr_info("Number of threads for kcompressd was changed: %u\n", new_nr);
-
-	return 0;
+	return ret;
 }
 
 static const struct kernel_param_ops param_ops_change_nr_kcompressd = {
@@ -248,29 +261,11 @@ static int do_queue_size_per_kcompressd_handler(const char *val,
 	if (new_sz == 0)
 		return -EINVAL;
 
-	if (new_sz == queue_size_per_kcompressd)
-		return 0;
+	ret = kcompress_reconfig(&queue_size_per_kcompressd, new_sz);
+	if (!ret)
+		pr_info("Queue size for kcompressd was changed: %u\n", new_sz);
 
-	atomic_set(&enable_kcompressd, false);
-	stop_all_kcompressd_thread();
-
-	kvfree(kcompress);
-	kvfree(kcompressd_para);
-	kcompress = NULL;
-	kcompressd_para = NULL;
-
-	queue_size_per_kcompressd = new_sz;
-
-	ret = kcompress_update();
-	if (ret) {
-		pr_err("Initialization of writing to FIFOs failed for sz=%u\n", new_sz);
-		return ret;
-	}
-
-	atomic_set(&enable_kcompressd, true);
-	pr_info("Queue size for kcompressd was changed: %u\n", new_sz);
-
-	return 0;
+	return ret;
 }
 
 static const struct kernel_param_ops param_ops_change_queue_size_per_kcompressd = {
@@ -288,7 +283,8 @@ static atomic_t next_kcompressd_idx = ATOMIC_INIT(0);
 
 int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 {
-	unsigned int i, start_idx, idx;
+	unsigned int i, start_idx, idx, local_nr;
+	int ret = -EBUSY;
 	bool submit_success = false;
 	size_t sz_work = sizeof(struct write_work);
 
@@ -298,13 +294,17 @@ int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 		.cb = cb
 	};
 
-	unsigned int local_nr = READ_ONCE(nr_kcompressd);
+	if (!current_is_kswapd())
+		return -EBUSY;
+
+	down_read(&kcompressd_config_sem);
 
 	if (unlikely(!atomic_read(&enable_kcompressd)))
-		return -EBUSY;
+		goto out;
 
-	if (!local_nr || !current_is_kswapd())
-		return -EBUSY;
+	local_nr = READ_ONCE(nr_kcompressd);
+	if (!local_nr)
+		goto out;
 
 	start_idx = (unsigned int)atomic_fetch_inc(&next_kcompressd_idx) % local_nr;
 
@@ -330,11 +330,15 @@ int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 			} else {
 				wake_up_interruptible(&kcompress[idx].kcompressd_wait);
 			}
-			return 0;
+
+			ret = 0;
+			goto out;
 		}
 	}
 
-	return -EBUSY;
+out:
+	up_read(&kcompressd_config_sem);
+	return ret;
 }
 EXPORT_SYMBOL(schedule_bio_write);
 
