@@ -103,17 +103,22 @@ static int init_write_queue(void)
 	return 0;
 }
 
-static void clean_bio_queue(int idx)
+static void drain_bio_queue(int idx)
 {
 	struct write_work entry;
-
-	if (kcompressd_para[idx].fifo_freed)
-		return;
 
 	while (sizeof(struct write_work) == kfifo_out(&kcompress[idx].write_fifo,
 				&entry, sizeof(struct write_work))) {
 		entry.cb(entry.mem, entry.bio);
 	}
+}
+
+static void clean_bio_queue(int idx)
+{
+	if (kcompressd_para[idx].fifo_freed)
+		return;
+
+	drain_bio_queue(idx);
 	kfifo_free(&kcompress[idx].write_fifo);
 	kcompressd_para[idx].fifo_freed = true;
 }
@@ -319,8 +324,7 @@ int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 				if (IS_ERR(kcompress[idx].kcompressd)) {
 					atomic_set(&kcompress[idx].running, KCOMPRESSD_NOT_STARTED);
 					pr_warn("Failed to start kcompressd:%d\n", idx);
-					clean_bio_queue(idx);
-					kcompressd_para[idx].fifo_freed = true;
+					drain_bio_queue(idx);
 					kcompress[idx].kcompressd = NULL;
 				}
 			} else {
