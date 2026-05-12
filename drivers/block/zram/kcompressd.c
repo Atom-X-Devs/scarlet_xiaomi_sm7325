@@ -9,6 +9,7 @@
 #include <linux/bitops.h>
 #include <linux/freezer.h>
 #include <linux/kernel.h>
+#include <linux/cgroup-defs.h>
 #include <linux/psi.h>
 #include <linux/kfifo.h>
 #include <linux/swap.h>
