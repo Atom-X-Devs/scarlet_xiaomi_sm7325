@@ -211,13 +211,10 @@ out:
 static int do_nr_kcompressd_handler(const char *val,
 		const struct kernel_param *kp)
 {
-	struct kernel_param tmp_kp = *kp;
 	unsigned int new_nr;
 	int ret;
 
-	tmp_kp.arg = &new_nr;
-
-	ret = param_set_int(val, &tmp_kp);
+	ret = kstrtouint(val, 10, &new_nr);
 	if (ret < 0) {
 		pr_err("Invalid number of kcompressd.\n");
 		return ret;
@@ -246,13 +243,10 @@ MODULE_PARM_DESC(nr_kcompressd, "Number of pre-created daemon for page compressi
 static int do_queue_size_per_kcompressd_handler(const char *val,
 		const struct kernel_param *kp)
 {
-	struct kernel_param tmp_kp = *kp;
 	unsigned int new_sz;
 	int ret;
 
-	tmp_kp.arg = &new_sz;
-
-	ret = param_set_int(val, &tmp_kp);
+	ret = kstrtouint(val, 10, &new_sz);
 	if (ret < 0) {
 		pr_err("Invalid queue size for kcompressd.\n");
 		return ret;
