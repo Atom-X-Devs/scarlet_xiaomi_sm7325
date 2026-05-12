@@ -146,6 +146,7 @@ static int kcompress_update(void)
 
 	for (i = 0; i < nr_kcompressd; i++) {
 		init_waitqueue_head(&kcompress[i].kcompressd_wait);
+		spin_lock_init(&kcompress[i].fifo_lock);
 		kcompressd_para[i].kcompressd_wait = &kcompress[i].kcompressd_wait;
 		kcompressd_para[i].write_fifo = &kcompress[i].write_fifo;
 		kcompressd_para[i].running = &kcompress[i].running;
@@ -304,9 +305,11 @@ int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 
 	for (i = 0; i < local_nr; i++) {
 		idx = (start_idx + i) % local_nr;
+		spin_lock(&kcompress[idx].fifo_lock);
 		submit_success =
 			(kfifo_avail(&kcompress[idx].write_fifo) >= sz_work) &&
 			(sz_work == kfifo_in(&kcompress[idx].write_fifo, &entry, sz_work));
+		spin_unlock(&kcompress[idx].fifo_lock);
 
 		if (submit_success) {
 			if (atomic_read(&kcompress[idx].running) == KCOMPRESSD_NOT_STARTED) {
