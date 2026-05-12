@@ -95,6 +95,8 @@ static int init_write_queue(void)
 		if (kfifo_alloc(&kcompress[i].write_fifo,
 					queue_len, GFP_KERNEL)) {
 			pr_err("Failed to alloc kfifo %d\n", i);
+			while (i-- > 0)
+				kfifo_free(&kcompress[i].write_fifo);
 			return -ENOMEM;
 		}
 	}
