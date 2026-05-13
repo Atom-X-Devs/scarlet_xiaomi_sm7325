@@ -125,6 +125,8 @@ static void clean_bio_queue(int idx)
 	kcompressd_para[idx].fifo_freed = true;
 }
 
+static void stop_all_kcompressd_thread(void);
+
 static int kcompress_update(void)
 {
 	int i;
@@ -158,6 +160,20 @@ static int kcompress_update(void)
 		kcompressd_para[i].write_fifo = &kcompress[i].write_fifo;
 		kcompressd_para[i].running = &kcompress[i].running;
 		kcompressd_para[i].fifo_freed = false;
+
+		atomic_set(&kcompress[i].running, KCOMPRESSD_SLEEPING);
+		kcompress[i].kcompressd = kthread_run(kcompressd,
+						&kcompressd_para[i], "kcompressd:%d", i);
+		if (IS_ERR(kcompress[i].kcompressd)) {
+			pr_err("Failed to create kcompressd:%d\n", i);
+			kcompress[i].kcompressd = NULL;
+			stop_all_kcompressd_thread();
+			kvfree(kcompressd_para);
+			kcompressd_para = NULL;
+			kvfree(kcompress);
+			kcompress = NULL;
+			return -ENOMEM;
+		}
 	}
 
 	return 0;
@@ -312,20 +328,7 @@ int schedule_bio_write(void *mem, struct bio *bio, compress_callback cb)
 		spin_unlock(&kcompress[idx].fifo_lock);
 
 		if (submit_success) {
-			if (atomic_read(&kcompress[idx].running) == KCOMPRESSD_NOT_STARTED) {
-				atomic_set(&kcompress[idx].running, KCOMPRESSD_RUNNING);
-				kcompress[idx].kcompressd = kthread_run(kcompressd,
-						&kcompressd_para[idx], "kcompressd:%d", idx);
-				if (IS_ERR(kcompress[idx].kcompressd)) {
-					atomic_set(&kcompress[idx].running, KCOMPRESSD_NOT_STARTED);
-					pr_warn("Failed to start kcompressd:%d\n", idx);
-					drain_bio_queue(idx);
-					kcompress[idx].kcompressd = NULL;
-				}
-			} else {
-				wake_up_interruptible(&kcompress[idx].kcompressd_wait);
-			}
-
+			wake_up_interruptible(&kcompress[idx].kcompressd_wait);
 			ret = 0;
 			goto out;
 		}
