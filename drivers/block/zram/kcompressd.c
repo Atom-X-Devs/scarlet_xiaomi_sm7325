@@ -39,7 +39,6 @@ struct kcompressd_para {
 };
 
 static struct kcompressd_para *kcompressd_para;
-static BLOCKING_NOTIFIER_HEAD(kcompressd_notifier_list);
 static DECLARE_RWSEM(kcompressd_config_sem);
 
 struct write_work {
@@ -354,7 +353,6 @@ static int __init kcompressd_init(void)
 	}
 
 	atomic_set(&enable_kcompressd, true);
-	blocking_notifier_call_chain(&kcompressd_notifier_list, 0, NULL);
 	return 0;
 }
 
