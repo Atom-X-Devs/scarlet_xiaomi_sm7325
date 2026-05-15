@@ -1,21 +1,12 @@
 menu "KernelSU"
 
 config KSU
-	select SECURITY_SELINUX
-	select SECCOMP
-	select EXT4_FS
-	select KEYS
 	bool "KernelSU function support"
+	depends on !CPU_BIG_ENDIAN
+	depends on SECURITY_SELINUX
+	select SECCOMP
 	help
 	  Enable kernel-level root privileges on Android System.
-
-config KSU_EXTRAS
-	bool "Enable custom stuff"
-	depends on KSU
-	default n
-	help
-	  Custom extensions. Experimental.
-	  Currently, only avc log spoofing is implemented.
 
 config KSU_KPROBES_KSUD
 	bool "Enable dynamic kprobes for early boot hooks"
@@ -28,7 +19,7 @@ config KSU_KPROBES_KSUD
 
 config KSU_TAMPER_SYSCALL_TABLE
 	bool "EXPERIMENTAL: tamper sys_call_table for sucompat + sys_reboot"
-	depends on (ARM || ARM64) && !CFI_CLANG && !CFI && !KSU_KRETPROBES_SUCOMPAT
+	depends on (ARM || ARM64) && !CFI_CLANG && !CFI
 	default n
 	help
 	  EXPERIMENTAL: use syscall table hijacking method demonstrated on zx2c4's
@@ -36,14 +27,27 @@ config KSU_TAMPER_SYSCALL_TABLE
 	  sys_faccessat, sys_newfstat_ret manual hooks.
 	  Personally tested on Linux 3.10 ~ 4.14, aarch64.
 
-config KSU_KRETPROBES_SUCOMPAT
-	bool "EXPERIMENTAL: kretprobes for sucompat"
-	depends on KRETPROBES
-	default n
+config KSU_FEATURE_SULOG
+	bool "KernelSU SU Logging feature"
+	depends on KSU
+	default y
 	help
-	  EXPERIMENTAL: Use kretprobes to hook getname_flags, mainly for
-	  sucompat. This method will hijack all fs-related syscalls, but
-	  thwarts timing based detections.
+	  Build KernelSU's SU Log.
+
+config KSU_FEATURE_ADBROOT
+	bool "KernelSU ADB Root feature"
+	depends on KSU
+	default y
+	help
+	  Build KernelSU's adb root feature.
+
+config KSU_FEATURE_SELINUX_HIDE
+	bool "KernelSU SELinux hide feature"
+	depends on KSU
+	default y
+	help
+	  Build KernelSU's SELinux hide feature.
+	  This is a dumber implementation, but it should be fine for most cases.
 
 config KSU_DEBUG
 	bool "KernelSU debug mode"

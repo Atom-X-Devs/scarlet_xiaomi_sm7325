@@ -13,7 +13,7 @@ static uint8_t sulog_index_next = 0;
 
 static DEFINE_SPINLOCK(sulog_lock);
 
-void sulog_init_heap()
+static void tiny_sulog_init_heap()
 {
 	sulog_buf_ptr = kzalloc(SULOG_BUFSIZ, GFP_KERNEL);
 	if (!sulog_buf_ptr)
@@ -22,7 +22,7 @@ void sulog_init_heap()
 	pr_info("sulog_init: allocated %lu bytes on 0x%p \n", SULOG_BUFSIZ, sulog_buf_ptr);
 }
 
-/*
+/**
  *
  *  boottime_s_get, get kernel uptime in seconds
  *
@@ -48,19 +48,17 @@ static inline uint32_t boottime_s_get()
 	return (uint32_t)boottime_s;
 }
 
-void write_sulog(uint8_t sym)
+static void write_sulog(uint8_t sym)
 {
 	if (!sulog_buf_ptr)
 		return;
 
 	unsigned int offset = sulog_index_next * sizeof(struct sulog_entry);
 	struct sulog_entry entry = {0};
-	
-	kuid_t current_uid = current_uid();
 
 	// WARNING!!! this is LE only!
 	entry.s_time = boottime_s_get();
-	entry.data = (uint32_t)ksu_get_uid_t(current_uid);
+	entry.data = (uint32_t)current_uid().val;
 	*((char *)&entry.data + 3) = sym;
 
 	// we can perform this write atomic on 64-bit
@@ -73,13 +71,16 @@ void write_sulog(uint8_t sym)
 #else
 	__builtin_memcpy(sulog_buf_ptr + offset, &entry, sizeof(entry));
 #endif
-	spin_unlock(&sulog_lock);
 
 	// move ptr for next iteration
 	sulog_index_next = sulog_index_next + 1;
 
 	if (sulog_index_next >= SULOG_ENTRY_MAX)
 		sulog_index_next = 0;
+
+	spin_unlock(&sulog_lock);
+
+	return;
 }
 
 struct sulog_entry_rcv_ptr {
@@ -88,7 +89,7 @@ struct sulog_entry_rcv_ptr {
 	uint64_t uptime_ptr; // uptime
 };
 
-int send_sulog_dump(void __user *uptr)
+static int send_sulog_dump(void __user *uptr)
 {
 	if (!sulog_buf_ptr)
 		return 1;
