@@ -8905,7 +8905,9 @@ int sched_cpu_deactivate(unsigned int cpu)
 	 * Remove CPU from nohz.idle_cpus_mask to prevent participating in
 	 * load balancing when not active
 	 */
+	rcu_read_lock();
 	nohz_balance_exit_idle(rq);
+	rcu_read_unlock();
 
 	set_cpu_active(cpu, false);
 
