@@ -1377,6 +1377,7 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	}
 
 	curr->sum_exec_runtime += delta_exec;
+	curr->delta_exec += delta_exec;
 	schedstat_add(cfs_rq->exec_clock, delta_exec);
 
 	curr->vruntime += calc_delta_fair(delta_exec, curr);
@@ -4588,6 +4589,28 @@ static inline void util_est_update(struct sched_entity *se, bool task_sleep)
 	ewma = READ_ONCE(se->avg.util_est);
 
 	/*
+	 * If a task is running, update util_est ignoring utilization
+	 * invariance so that if the task suddenly becomes busy we will rampup
+	 * quickly to settle down to our new util_avg.
+	 */
+	if (!task_sleep) {
+		u64 delta = se->delta_exec;
+		unsigned int prev_ewma = ewma & ~UTIL_AVG_UNCHANGED;
+
+		do_div(delta, 1000);
+		ewma = approximate_util_avg(prev_ewma, delta);
+		/*
+		 * Keep accumulating delta_exec if it is too small to cause
+		 * a change.
+		 */
+		if (ewma != prev_ewma)
+			se->delta_exec = 0;
+		goto done;
+	} else {
+		se->delta_exec = 0;
+	}
+
+	/*
 	 * If the PELT values haven't changed since enqueue time,
 	 * skip the util_est update.
 	 */
@@ -4643,6 +4666,14 @@ static inline void util_est_update(struct sched_entity *se, bool task_sleep)
 done:
 	ewma |= UTIL_AVG_UNCHANGED;
 	WRITE_ONCE(se->avg.util_est, ewma);
+}
+
+static inline void util_est_update_running(struct cfs_rq *cfs_rq,
+					   struct task_struct *p)
+{
+	util_est_dequeue(cfs_rq, p);
+	util_est_update(&p->se, false);
+	util_est_enqueue(cfs_rq, p);
 }
 
 /*
@@ -8403,6 +8434,8 @@ again:
 simple:
 #endif
 	put_prev_set_next_task(rq, prev, p);
+	if (prev->on_rq)
+		util_est_update_running(&rq->cfs, prev);
 	return p;
 
 idle:
@@ -12526,6 +12559,8 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 		cfs_rq = cfs_rq_of(se);
 		entity_tick(cfs_rq, se, queued);
 	}
+
+	util_est_update_running(&rq->cfs, curr);
 
 	if (queued)
 		return;

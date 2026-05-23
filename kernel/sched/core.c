@@ -4166,6 +4166,7 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 
 	p->se.on_rq			= 0;
 	p->se.exec_start		= 0;
+	p->se.delta_exec		= 0;
 	p->se.sum_exec_runtime		= 0;
 	p->se.prev_sum_exec_runtime	= 0;
 	p->se.nr_migrations		= 0;
