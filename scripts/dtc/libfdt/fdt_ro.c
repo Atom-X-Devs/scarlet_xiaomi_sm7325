@@ -191,6 +191,8 @@ int fdt_num_mem_rsv(const void *fdt)
 	int i;
 	const struct fdt_reserve_entry *re;
 
+	FDT_RO_PROBE(fdt);
+
 	for (i = 0; (re = fdt_mem_rsv(fdt, i)) != NULL; i++) {
 		if (fdt64_ld_(&re->size) == 0)
 			return i;
@@ -306,8 +308,8 @@ const char *fdt_get_name(const void *fdt, int nodeoffset, int *len)
 	const char *nameptr;
 	int err;
 
-	if (((err = fdt_ro_probe_(fdt)) < 0)
-	    || ((err = fdt_check_node_offset_(fdt, nodeoffset)) < 0))
+	if (!can_assume(VALID_DTB) && (((err = fdt_ro_probe_(fdt)) < 0)
+	    || ((err = fdt_check_node_offset_(fdt, nodeoffset)) < 0)))
 			goto fail;
 
 	nameptr = nh->name;
