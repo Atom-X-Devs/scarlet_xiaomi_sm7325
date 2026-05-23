@@ -4578,8 +4578,57 @@ static void detach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *s
 
 #define UTIL_EST_MARGIN (SCHED_CAPACITY_SCALE / 100)
 
+static inline unsigned long task_util(struct task_struct *p)
+{
+	return READ_ONCE(p->se.avg.util_avg);
+}
+
+static inline unsigned long task_util_dequeued(struct task_struct *p)
+{
+	return READ_ONCE(p->util_avg_dequeued);
+}
+
+static inline unsigned long _task_util_est(struct task_struct *p)
+{
+	return READ_ONCE(p->se.avg.util_est) & ~UTIL_AVG_UNCHANGED;
+}
+
+static inline unsigned long task_util_est(struct task_struct *p)
+{
+	return max(task_util(p), _task_util_est(p));
+}
+
+static inline void util_est_enqueue(struct cfs_rq *cfs_rq,
+				    struct task_struct *p)
+{
+	unsigned int enqueued;
+
+	if (!sched_feat(UTIL_EST))
+		return;
+
+	/* Update root cfs_rq's estimated utilization */
+	enqueued  = cfs_rq->avg.util_est;
+	enqueued += _task_util_est(p);
+	WRITE_ONCE(cfs_rq->avg.util_est, enqueued);
+}
+
+static inline void util_est_dequeue(struct cfs_rq *cfs_rq,
+				    struct task_struct *p)
+{
+	unsigned int enqueued;
+
+	if (!sched_feat(UTIL_EST))
+		return;
+
+	/* Update root cfs_rq's estimated utilization */
+	enqueued  = cfs_rq->avg.util_est;
+	enqueued -= min_t(unsigned int, enqueued, _task_util_est(p));
+	WRITE_ONCE(cfs_rq->avg.util_est, enqueued);
+}
+
 static inline void util_est_update(struct sched_entity *se, bool task_sleep)
 {
+	struct task_struct *p = task_of(se);
 	unsigned int ewma, dequeued, last_ewma_diff;
 
 	if (!sched_feat(UTIL_EST))
@@ -4594,18 +4643,22 @@ static inline void util_est_update(struct sched_entity *se, bool task_sleep)
 	 * quickly to settle down to our new util_avg.
 	 */
 	if (!task_sleep) {
-		u64 delta = se->delta_exec;
-		unsigned int prev_ewma = ewma & ~UTIL_AVG_UNCHANGED;
+		if (READ_ONCE(se->avg.util_avg) > task_util_dequeued(p) &&
+		    READ_ONCE(se->avg.util_avg) - task_util_dequeued(p) > UTIL_EST_MARGIN) {
+			u64 delta = se->delta_exec;
+			unsigned int prev_ewma = ewma & ~UTIL_AVG_UNCHANGED;
 
-		do_div(delta, 1000);
-		ewma = approximate_util_avg(prev_ewma, delta);
-		/*
-		 * Keep accumulating delta_exec if it is too small to cause
-		 * a change.
-		 */
-		if (ewma != prev_ewma)
-			se->delta_exec = 0;
-		goto done;
+			do_div(delta, 1000);
+			ewma = approximate_util_avg(prev_ewma, delta);
+			/*
+			 * Keep accumulating delta_exec if it is too small to cause
+			 * a change.
+			 */
+			if (ewma != prev_ewma)
+				se->delta_exec = 0;
+			goto done_running;
+		}
+		return;
 	} else {
 		se->delta_exec = 0;
 	}
@@ -4619,6 +4672,9 @@ static inline void util_est_update(struct sched_entity *se, bool task_sleep)
 
 	/* Get utilization at dequeue */
 	dequeued = READ_ONCE(se->avg.util_avg);
+
+	if (!task_on_rq_migrating(p))
+		p->util_avg_dequeued = dequeued;
 
 	/*
 	 * Reset EWMA on utilization increases, the moving average is used only
@@ -4665,6 +4721,7 @@ static inline void util_est_update(struct sched_entity *se, bool task_sleep)
 	ewma >>= UTIL_EST_WEIGHT_SHIFT;
 done:
 	ewma |= UTIL_AVG_UNCHANGED;
+done_running:
 	WRITE_ONCE(se->avg.util_est, ewma);
 }
 
@@ -4780,49 +4837,6 @@ static inline unsigned long cfs_rq_load_avg(struct cfs_rq *cfs_rq)
 }
 
 static int newidle_balance(struct rq *this_rq, struct rq_flags *rf);
-
-static inline unsigned long task_util(struct task_struct *p)
-{
-	return READ_ONCE(p->se.avg.util_avg);
-}
-
-static inline unsigned long _task_util_est(struct task_struct *p)
-{
-	return READ_ONCE(p->se.avg.util_est) & ~UTIL_AVG_UNCHANGED;
-}
-
-static inline unsigned long task_util_est(struct task_struct *p)
-{
-	return max(task_util(p), _task_util_est(p));
-}
-
-static inline void util_est_enqueue(struct cfs_rq *cfs_rq,
-				    struct task_struct *p)
-{
-	unsigned int enqueued;
-
-	if (!sched_feat(UTIL_EST))
-		return;
-
-	/* Update root cfs_rq's estimated utilization */
-	enqueued  = cfs_rq->avg.util_est;
-	enqueued += _task_util_est(p);
-	WRITE_ONCE(cfs_rq->avg.util_est, enqueued);
-}
-
-static inline void util_est_dequeue(struct cfs_rq *cfs_rq,
-				    struct task_struct *p)
-{
-	unsigned int enqueued;
-
-	if (!sched_feat(UTIL_EST))
-		return;
-
-	/* Update root cfs_rq's estimated utilization */
-	enqueued  = cfs_rq->avg.util_est;
-	enqueued -= min_t(unsigned int, enqueued, _task_util_est(p));
-	WRITE_ONCE(cfs_rq->avg.util_est, enqueued);
-}
 
 static inline int util_fits_cpu(unsigned long util,
 				unsigned long uclamp_min,
