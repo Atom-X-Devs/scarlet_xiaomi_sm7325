@@ -87,8 +87,6 @@ void on_module_mounted(void)
 
 void on_boot_completed(void)
 {
-	ksud_escape_exit();
-
 	ksu_boot_completed = true;
 	pr_info("on_boot_completed!\n");
 	track_throne(true);
@@ -528,8 +526,6 @@ start:
 	// close down input hook
 	stop_input_hook();
 
-	// close down ksud escape
-	ksud_escape_exit();
 	ksu_boot_completed = true;
 
 bail:
@@ -557,7 +553,6 @@ static void stop_input_hook()
 
 void __init ksu_ksud_init()
 {
-	ksud_escape_init();
 	vol_detector_init();
 }
 

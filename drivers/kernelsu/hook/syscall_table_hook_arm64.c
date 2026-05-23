@@ -508,6 +508,5 @@ static __init int ksu_syscall_table_hook_init()
 	kthread_run(ksu_syscall_table_restore, NULL, "unhook");
 	return 0;
 }
-late_initcall(ksu_syscall_table_hook_init);
 
 // EOF

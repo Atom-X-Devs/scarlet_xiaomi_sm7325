@@ -85,6 +85,25 @@ static inline void ksu_grab_init_session_keyring() {} // no-op
 #define __ro_after_init
 #endif
 
+extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
+
+/**
+ * ksu_copy_from_user_retry
+ * try nofault copy first, if it fails, try with plain
+ * paramters are the same as copy_from_user
+ * 0 = success
+ */
+extern long copy_from_user_nofault(void *dst, const void __user *src, size_t size);
+static __always_inline long ksu_copy_from_user_retry(void *to, const void __user *from, unsigned long count)
+{
+	long ret = copy_from_user_nofault(to, from, count);
+	if (likely(!ret))
+		return ret;
+
+	// we faulted! fallback to slow path
+	return copy_from_user(to, from, count);
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
 #define d_inode(dentry) ((dentry)->d_inode)
 #endif
@@ -197,24 +216,13 @@ struct user_arg_ptr {
 	} ptr;
 };
 
-extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
+#ifndef untagged_addr
+#define untagged_addr(addr) (addr)
+#endif
 
-/**
- * ksu_copy_from_user_retry
- * try nofault copy first, if it fails, try with plain
- * paramters are the same as copy_from_user
- * 0 = success
- */
-extern long copy_from_user_nofault(void *dst, const void __user *src, size_t size);
-static __always_inline long ksu_copy_from_user_retry(void *to, const void __user *from, unsigned long count)
-{
-	long ret = copy_from_user_nofault(to, from, count);
-	if (likely(!ret))
-		return ret;
-
-	// we faulted! fallback to slow path
-	return copy_from_user(to, from, count);
-}
+#ifndef __nocfi
+#define __nocfi
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) // caller is reponsible for sanity!
 static inline void ksu_zeroed_strncpy(char *dest, const char *src, size_t count)
@@ -308,10 +316,6 @@ static inline u64 ksu_ktime_get_ns(void) { return ktime_to_ns(ktime_get()); }
 #ifndef ALIGN_DOWN
 #define ALIGN_DOWN(x, a) __ALIGN_KERNEL((x) - ((a) - 1), (a))
 #endif
-#endif
-
-#ifndef untagged_addr
-#define untagged_addr(addr) (addr)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)

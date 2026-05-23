@@ -134,18 +134,17 @@ static __always_inline void ksu_sucompat_user_common(const char __user **filenam
 				const uint8_t sym)
 {
 	uintptr_t buf;
-	const char su[] = SU_PATH;
+	const char su[16] = SU_PATH;
 
 	// sugar prep
 	uintptr_t *su_p = (uintptr_t *)su;
-	uintptr_t __user *fn_p = (uintptr_t *)*(char **)filename_user;
+	uintptr_t __user *fn_p = (uintptr_t *)untagged_addr(*(char **)filename_user);
 
 	// assert /system/bin/su\0 = 15 bytes.
-	BUILD_BUG_ON(sizeof(su) > 16); // compielr might to pad
-	BUILD_BUG_ON(sizeof(su) < 15);
+	BUILD_BUG_ON(sizeof(SU_PATH) + 1 != 16);
 
 	/*
-	 * it seems this is actually the slowest part, we peek last word first to speed it up
+	 * it seems this is actually the slowest part, so we peek last word first to speed it up
 	 * NOTE: get_user rets EFAULT on err, so if we are copying a pointer
 	 * that goes to nothing, we also detect that and ret fast
 	 *
@@ -153,10 +152,7 @@ static __always_inline void ksu_sucompat_user_common(const char __user **filenam
 	 * but this is fine as we are guaranteed alignment, hardware provides trailing garbeg
 	 * if it is specially crafted and hits a page guard, we just get EFAULT anyway
 	 *
-	 * on 64-bit we do this in 2 word compare, 4 on 32-bit
-	 *
-	 * we can do some bitmasking 0xFFFFFF blah blah to do that tail compare (7 or 3 bytes), 
-	 * but hot damn I hate that shit, lets just have __builtin_memcmp do it for us
+	 * on 64-bit we do this in 2 word compare, 4 on 32-bit, little endian only!
 	 *
 	 */
 
@@ -164,13 +160,14 @@ static __always_inline void ksu_sucompat_user_common(const char __user **filenam
 	if (get_user(buf, &fn_p[1]))
 		return;
 
-	if (likely(!!__builtin_memcmp(&buf, su + sizeof(uintptr_t), sizeof(su) - sizeof(uintptr_t) )))
+	if (likely((buf & 0x00FFFFFFFFFFFFFFUL) != (su_p[1] & 0x00FFFFFFFFFFFFFFUL)))
 		return;
+
 #else
 	if (get_user(buf, &fn_p[3]))
 		return;
 
-	if (likely(!!__builtin_memcmp(&buf, su +  (3 * sizeof(uintptr_t)), sizeof(su) - (3 * sizeof(uintptr_t)) )))
+	if (likely((buf & 0x00FFFFFFUL) != (su_p[3] & 0x00FFFFFFUL)))
 		return;
 
 	if (unlikely(get_user(buf, &fn_p[2])))
@@ -244,7 +241,6 @@ SUCOMPAT_HOOK_TYPE ksu_handle_stat(int *dfd, const char __user **filename_user, 
 // sys_execve, compat_sys_execve
 SUCOMPAT_HOOK_TYPE ksu_handle_execve(const char __user **filename_user, void *argv, void *envp)
 {
-	sys_execve_escape_ksud((void *)filename_user);
 
 #ifdef CONFIG_KSU_FEATURE_ADBROOT
 	ksu_adb_root_handle_execve((void *)filename_user, (void *)envp);
@@ -260,7 +256,6 @@ SUCOMPAT_HOOK_TYPE ksu_handle_execve(const char __user **filename_user, void *ar
 #ifndef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 static __always_inline void ksu_sucompat_kernel_common(void **filename_ptr, void *argv, void *envp, const char *function_name)
 {
-	kernel_execve_escape_ksud((void *)filename_ptr);
 
 #ifdef CONFIG_KSU_FEATURE_ADBROOT
 	ksu_adb_root_handle_execveat((void *)filename_ptr, (void *)envp);
@@ -271,20 +266,16 @@ static __always_inline void ksu_sucompat_kernel_common(void **filename_ptr, void
 
 	// it seems this is actually the slowest part, we peek last word first to speed it up
 	// sugar prep
-	const char su[] = SU_PATH;
+	const char su[16] = SU_PATH;
 	uintptr_t *su_p = (uintptr_t *)su;
 	uintptr_t *fn_p = (uintptr_t *)*(char **)filename_ptr;
 
-	// assert /system/bin/su\0 = 15 bytes.
-	BUILD_BUG_ON(sizeof(su) > 16); // compielr might to pad
-	BUILD_BUG_ON(sizeof(su) < 15);
-
 	// getname_flags pads this so nothing to worry about, dereference with confidence!
 #ifdef CONFIG_64BIT
-	if (likely(!!__builtin_memcmp(&fn_p[1], &su_p[1], sizeof(su) - sizeof(uintptr_t) )))
+	if (likely((fn_p[1] & 0x00FFFFFFFFFFFFFFUL) != (su_p[1] & 0x00FFFFFFFFFFFFFFUL)))
 		return;
 #else
-	if (likely(!!__builtin_memcmp(&fn_p[3], &su_p[3], sizeof(su) - (3 * sizeof(uintptr_t)) )))
+	if (likely((fn_p[3] & 0x00FFFFFFUL) != (su_p[3] & 0x00FFFFFFUL)))
 		return;
 
 	if (fn_p[2] != su_p[2])
