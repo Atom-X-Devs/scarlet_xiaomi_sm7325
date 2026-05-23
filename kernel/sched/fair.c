@@ -6781,10 +6781,13 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
  */
 static bool dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 {
+	int ret;
+
 	if (!p->se.sched_delayed)
 		util_est_dequeue(&rq->cfs, p);
 
-	if (dequeue_entities(rq, &p->se, flags) < 0)
+	ret = dequeue_entities(rq, &p->se, flags);
+	if (ret < 0)
 		return false;
 
 	/*
