@@ -5290,9 +5290,6 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	bool sleep = flags & DEQUEUE_SLEEP;
 	int action = UPDATE_TG;
 
-	if (entity_is_task(se) && task_on_rq_migrating(task_of(se)))
-		action |= DO_DETACH;
-
 	update_curr(cfs_rq);
 	clear_buddies(cfs_rq, se);
 
@@ -5317,6 +5314,9 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 			return false;
 		}
 	}
+
+	if (entity_is_task(se) && task_on_rq_migrating(task_of(se)))
+		action |= DO_DETACH;
 
 	/*
 	 * When dequeuing a sched_entity, we must:
