@@ -4577,7 +4577,7 @@ static void detach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *s
 
 #define UTIL_EST_MARGIN (SCHED_CAPACITY_SCALE / 100)
 
-static inline void util_est_update(struct sched_entity *se)
+static inline void util_est_update(struct sched_entity *se, bool task_sleep)
 {
 	unsigned int ewma, dequeued, last_ewma_diff;
 
@@ -4695,7 +4695,7 @@ static inline void update_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *s
 	}
 
 	if (flags & UPDATE_UTIL_EST)
-		util_est_update(se);
+		util_est_update(se, true);
 
 	cfs_rq_util_change(cfs_rq, 0);
 }
@@ -4981,7 +4981,7 @@ util_est_enqueue(struct cfs_rq *cfs_rq, struct task_struct *p) {}
 static inline void
 util_est_dequeue(struct cfs_rq *cfs_rq, struct task_struct *p) {}
 
-static inline void util_est_update(struct sched_entity *se) {}
+static inline void util_est_update(struct sched_entity *se, bool task_sleep) {}
 
 static inline void update_misfit_status(struct task_struct *p, struct rq *rq) {}
 
