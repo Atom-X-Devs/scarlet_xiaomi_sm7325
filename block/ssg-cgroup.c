@@ -16,21 +16,37 @@
 
 static struct blkcg_policy ssg_blkcg_policy;
 
+static inline struct ssg_blkcg *cpd_to_ssg_blkcg(struct blkcg_policy_data *cpd)
+{
+	return cpd ? container_of(cpd, struct ssg_blkcg, cpd) : NULL;
+}
+
+static inline struct ssg_blkcg *blkcg_to_ssg_blkcg(struct blkcg *blkcg)
+{
+	return cpd_to_ssg_blkcg(blkcg_to_cpd(blkcg, &ssg_blkcg_policy));
+}
+
+static inline struct ssg_blkg *pd_to_ssg_blkg(struct blkg_policy_data *pd)
+{
+	return pd ? container_of(pd, struct ssg_blkg, pd) : NULL;
+}
+
+static inline struct ssg_blkg *blkg_to_ssg_blkg(struct blkcg_gq *blkg)
+{
+	return pd_to_ssg_blkg(blkg_to_pd(blkg, &ssg_blkcg_policy));
+}
 
 
-#define CPD_TO_SSG_BLKCG(_cpd) \
-	container_of_safe((_cpd), struct ssg_blkcg, cpd)
-#define BLKCG_TO_SSG_BLKCG(_blkcg) \
-	CPD_TO_SSG_BLKCG(blkcg_to_cpd((_blkcg), &ssg_blkcg_policy))
+static inline struct ssg_blkcg *css_to_ssg_blkcg(struct cgroup_subsys_state *css)
+{
+	return blkcg_to_ssg_blkcg(css_to_blkcg(css));
+}
 
-#define PD_TO_SSG_BLKG(_pd) \
-	container_of_safe((_pd), struct ssg_blkg, pd)
-#define BLKG_TO_SSG_BLKG(_blkg) \
-	PD_TO_SSG_BLKG(blkg_to_pd((_blkg), &ssg_blkcg_policy))
-
-#define CSS_TO_SSG_BLKCG(css) BLKCG_TO_SSG_BLKCG(css_to_blkcg(css))
-
-
+#define CPD_TO_SSG_BLKCG(_cpd) cpd_to_ssg_blkcg(_cpd)
+#define BLKCG_TO_SSG_BLKCG(_blkcg) blkcg_to_ssg_blkcg(_blkcg)
+#define PD_TO_SSG_BLKG(_pd) pd_to_ssg_blkg(_pd)
+#define BLKG_TO_SSG_BLKG(_blkg) blkg_to_ssg_blkg(_blkg)
+#define CSS_TO_SSG_BLKCG(css) css_to_ssg_blkcg(css)
 
 static struct blkcg_policy_data *ssg_blkcg_cpd_alloc(gfp_t gfp)
 {
@@ -47,7 +63,7 @@ static void ssg_blkcg_cpd_init(struct blkcg_policy_data *cpd)
 {
 	struct ssg_blkcg *ssg_blkcg = CPD_TO_SSG_BLKCG(cpd);
 
-	if (IS_ERR_OR_NULL(ssg_blkcg))
+	if (!ssg_blkcg)
 		return;
 
 	ssg_blkcg->max_available_ratio = 25;
@@ -57,7 +73,7 @@ static void ssg_blkcg_cpd_free(struct blkcg_policy_data *cpd)
 {
 	struct ssg_blkcg *ssg_blkcg = CPD_TO_SSG_BLKCG(cpd);
 
-	if (IS_ERR_OR_NULL(ssg_blkcg))
+	if (!ssg_blkcg)
 		return;
 
 	kfree(ssg_blkcg);
@@ -93,11 +109,11 @@ static void ssg_blkcg_pd_init(struct blkg_policy_data *pd)
 	struct ssg_blkcg *ssg_blkcg;
 
 	ssg_blkg = PD_TO_SSG_BLKG(pd);
-	if (IS_ERR_OR_NULL(ssg_blkg))
+	if (!ssg_blkg)
 		return;
 
 	ssg_blkcg = BLKCG_TO_SSG_BLKCG(pd->blkg->blkcg);
-	if (IS_ERR_OR_NULL(ssg_blkcg))
+	if (!ssg_blkcg)
 		return;
 
 	atomic_set(&ssg_blkg->current_rqs, 0);
@@ -109,7 +125,7 @@ static void ssg_blkcg_pd_free(struct blkg_policy_data *pd)
 {
 	struct ssg_blkg *ssg_blkg = PD_TO_SSG_BLKG(pd);
 
-	if (IS_ERR_OR_NULL(ssg_blkg))
+	if (!ssg_blkg)
 		return;
 
 	kfree(ssg_blkg);
@@ -125,7 +141,7 @@ unsigned int ssg_blkcg_shallow_depth(struct request_queue *q)
 	ssg_blkg = BLKG_TO_SSG_BLKG(blkg);
 	rcu_read_unlock();
 
-	if (IS_ERR_OR_NULL(ssg_blkg))
+	if (!ssg_blkg)
 		return 0;
 
 	if (atomic_read(&ssg_blkg->current_rqs) < ssg_blkg->max_available_rqs)
@@ -145,11 +161,11 @@ void ssg_blkcg_depth_updated(struct blk_mq_hw_ctx *hctx)
 	rcu_read_lock();
 	blkg_for_each_descendant_pre(blkg, pos_css, q->root_blkg) {
 		ssg_blkg = BLKG_TO_SSG_BLKG(blkg);
-		if (IS_ERR_OR_NULL(ssg_blkg))
+		if (!ssg_blkg)
 			continue;
 
 		ssg_blkcg = BLKCG_TO_SSG_BLKCG(blkg->blkcg);
-		if (IS_ERR_OR_NULL(ssg_blkcg))
+		if (!ssg_blkcg)
 			continue;
 
 		atomic_set(&ssg_blkg->current_rqs, 0);
@@ -162,7 +178,7 @@ void ssg_blkcg_inc_rq(struct blkcg_gq *blkg)
 {
 	struct ssg_blkg *ssg_blkg = BLKG_TO_SSG_BLKG(blkg);
 
-	if (IS_ERR_OR_NULL(ssg_blkg))
+	if (!ssg_blkg)
 		return;
 
 	atomic_inc(&ssg_blkg->current_rqs);
@@ -172,7 +188,7 @@ void ssg_blkcg_dec_rq(struct blkcg_gq *blkg)
 {
 	struct ssg_blkg *ssg_blkg = BLKG_TO_SSG_BLKG(blkg);
 
-	if (IS_ERR_OR_NULL(ssg_blkg))
+	if (!ssg_blkg)
 		return;
 
 	atomic_dec(&ssg_blkg->current_rqs);
@@ -182,7 +198,7 @@ static int ssg_blkcg_show_max_available_ratio(struct seq_file *sf, void *v)
 {
 	struct ssg_blkcg *ssg_blkcg = CSS_TO_SSG_BLKCG(seq_css(sf));
 
-	if (IS_ERR_OR_NULL(ssg_blkcg))
+	if (!ssg_blkcg)
 		return -EINVAL;
 
 	seq_printf(sf, "%d\n", ssg_blkcg->max_available_ratio);
@@ -198,7 +214,7 @@ static int ssg_blkcg_set_max_available_ratio(struct cgroup_subsys_state *css,
 	struct blkcg_gq *blkg;
 	struct ssg_blkg *ssg_blkg;
 
-	if (IS_ERR_OR_NULL(ssg_blkcg))
+	if (!ssg_blkcg)
 		return -EINVAL;
 
 	if (ratio > 100)
@@ -208,7 +224,7 @@ static int ssg_blkcg_set_max_available_ratio(struct cgroup_subsys_state *css,
 	ssg_blkcg->max_available_ratio = ratio;
 	hlist_for_each_entry(blkg, &blkcg->blkg_list, blkcg_node) {
 		ssg_blkg = BLKG_TO_SSG_BLKG(blkg);
-		if (IS_ERR_OR_NULL(ssg_blkg))
+		if (!ssg_blkg)
 			continue;
 
 		ssg_blkcg_set_shallow_depth(ssg_blkcg, ssg_blkg,
