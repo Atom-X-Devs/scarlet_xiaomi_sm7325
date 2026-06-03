@@ -146,6 +146,12 @@
 #endif
 
 /**
+ * Linux kernel forbids c99 restrict
+ * however we can use builtin's restrict
+ */
+#define restrict __restrict
+
+/**
  * replace common mem/str functions with builtins
  * so legacy kernels get better inlining and optimized routines (with newer compielrs)
  * a lot of people rice their flags (mcpu/march), this'll be a good reward for them.

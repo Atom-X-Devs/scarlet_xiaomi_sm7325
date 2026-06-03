@@ -621,7 +621,6 @@ static int handle_sepolicy_fn(void *data)
 			pr_info("sepol: cmd #%u success, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
 			success_cmd_count++;
 			ksu_add_shit_to_list(header.cmd, args);
-
 		}
 
 		cmd_index++;

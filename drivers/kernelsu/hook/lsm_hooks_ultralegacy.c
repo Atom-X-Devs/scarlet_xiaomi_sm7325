@@ -267,12 +267,6 @@ static inline void set_selinux_ops()
 		ops = (struct security_operations *)&selinux_ops;
 #endif
 
-// not always available, can also fail, but it wont hurt to try.
-#ifdef CONFIG_KALLSYMS
-	if (!ops)
-		ops = (struct security_operations *)kallsyms_lookup_name("selinux_ops");
-#endif
-
 #ifdef CONFIG_KEYS
 	extern struct key_user root_key_user;
 	if (!ops)

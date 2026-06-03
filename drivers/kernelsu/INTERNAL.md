@@ -10,7 +10,7 @@
 
 ## sucompat
 - tweaked for downstream
-- last word first, per word compare, this is faster
+- simd-like, last word first, per word compare
 - sucompat gate is tweaked too
 
 ## task_fix_setuid LSM
@@ -42,6 +42,10 @@
 - lockless argv pullouts for sulog
 - might be used for something later
 
+## selinux_hide
+- we have a thin implementation downstream
+- no kallsyms reliance, we hunt file operations instead, we try to keep this if possible.
+
 ## safe mode
 - the implementation accepts 3x VOLUME_UP or 3x VOLUNE_DOWN to trigger safemode
 - we have a dedicated input handler for this
@@ -54,7 +58,7 @@
 - causes heavy inlining (high stack overflow risk)
 - ensure inlining control (inline, noinline attributes)
 - stack safety is disabled
-- redefines str/mem fn's to builtins if !FORTIFY_SOURCE
+- redefines str/mem fn's to builtins
 
 ## compat handling
 - always redefine/override if possible
@@ -72,7 +76,7 @@
 ## hacks
 #### sleeping on spinlocks
 - on apply_kernelsu_rules and handle_sepolicy
-- pin task to x cpu, hold rwlock, enable preempt, jack priority, apply rules, do the reverse.
+- pin task to x cpu, hold rwlock, enable preempt, apply rules, do the reverse.
 #### pointers
 - this is C, theres tons of pointer hacks around.
 - im not pinpointing everything
@@ -88,4 +92,10 @@
 #### toolkit's uname hax
 - since we pass arg as reference of arg on sys_reboot
 - this is actually void * const char __user * const char __user *
+
+## log / reminders
+- some kernels reads 'cold + noinline' as __init, which evicts our fn. avoid this combination.
+- some kernels have autistic inlining which also fucks up if we ever wanted to \__\attribute__((flatten)) (e.g. sultan and other 'optimization')
+- c99 restrict is usable, however, we only use this on hot paths where it makes sense.
+
 

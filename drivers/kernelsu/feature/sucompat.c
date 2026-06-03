@@ -254,7 +254,7 @@ SUCOMPAT_HOOK_TYPE ksu_handle_execve(const char __user **filename_user, void *ar
 }
 
 #ifndef CONFIG_KSU_TAMPER_SYSCALL_TABLE
-static __always_inline void ksu_sucompat_kernel_common(void **filename_ptr, void *argv, void *envp, const char *function_name)
+static __always_inline void ksu_sucompat_kernel_common(void **restrict filename_ptr, void *restrict argv, void *restrict envp, const char *function_name)
 {
 
 #ifdef CONFIG_KSU_FEATURE_ADBROOT

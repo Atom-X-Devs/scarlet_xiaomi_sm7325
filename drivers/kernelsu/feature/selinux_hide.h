@@ -6,7 +6,6 @@ void ksu_selinux_hide_exit();
 
 static int sepol_expected_argc(u32 cmd);
 
-#if 1
 // its all push, no pop, so we can realloc forever
 
 // types
@@ -125,8 +124,7 @@ out_unlock:
 	mutex_unlock(&selinux_hide_list_mutex);
 }
 
-#else 
-
+#if 0
 // /selinux/rules.c, linked list
 LIST_HEAD(ksu_hide_type_list);
 LIST_HEAD(ksu_hide_rule_list);
@@ -231,6 +229,5 @@ out_unlock:
 	up_write(&ksu_sepolicy_shitlist_lock);
 }
 #endif
-
 
 #endif

@@ -43,14 +43,26 @@ main:
 // so we can do this like on x86 where 74 xx to 74 yy
 // bl is call+ret equivalent on x86 though
 
-
-// rename
+# if 0
 extern int security_inode_rename(struct inode *old_dir, struct dentry *old_dentry, struct inode *new_dir, struct dentry *new_dentry, unsigned int flags);
 __attribute__((hot))
 static __nocfi int ksu_inode_rename(struct inode *old_dir, struct dentry *old_dentry, struct inode *new_dir, struct dentry *new_dentry, unsigned int flags)
 {
 	ksu_rename_observer(old_dentry, new_dentry);
 	return security_inode_rename(old_dir, old_dentry, new_dir, new_dentry, flags);
+}
+#endif
+
+// this is EXPORT_SYMBOL, this is stabler.
+extern int vfs_rename(struct renamedata *rd);
+__attribute__((hot))
+static __nocfi int ksu_vfs_rename(struct renamedata *rd)
+{
+	int ret = vfs_rename(rd);
+	if (!ret)
+		ksu_rename_observer(rd->old_dentry, rd->new_dentry);
+
+	return ret;
 }
 
 // setuid
@@ -109,6 +121,7 @@ static void __init ksu_core_init(void)
 	uintptr_t target_callsite;
 	uintptr_t symbol_addr;
 
+#if 0
 	// rename
 	extern int vfs_rename(struct renamedata *rd);
 	target_callsite = (uintptr_t)&vfs_rename;
@@ -116,6 +129,15 @@ static void __init ksu_core_init(void)
 
 	ret = arm64_bl_patch(target_callsite, 256 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_inode_rename);
 	pr_info("lsm_hijack: security_inode_rename: ret %d \n", ret);
+	symbol_addr = NULL;
+#endif
+	// rename
+	extern int do_renameat2(int olddfd, struct filename *from, int newdfd, struct filename *to, unsigned int flags);
+	target_callsite = (uintptr_t)&do_renameat2;
+	symbol_addr = (uintptr_t)&vfs_rename;
+
+	ret = arm64_bl_patch(target_callsite, 256 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_vfs_rename);
+	pr_info("lsm_hijack: vfs_rename: ret %d \n", ret);
 	symbol_addr = NULL;
 
 	// setuid

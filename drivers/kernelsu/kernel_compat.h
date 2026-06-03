@@ -33,7 +33,6 @@ static inline struct key *ksu_get_current_session_keyring() { return rcu_derefer
 static inline struct key *ksu_get_current_session_keyring() { return rcu_dereference(current->cred->tgcred->session_keyring); }
 #endif
 
-__attribute__((cold))
 static noinline void ksu_grab_init_session_keyring()
 {
 	if (init_session_keyring)
