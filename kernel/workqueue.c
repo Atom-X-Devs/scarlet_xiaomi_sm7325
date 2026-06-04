@@ -33,6 +33,7 @@
 #include <linux/completion.h>
 #include <linux/workqueue.h>
 #include <linux/slab.h>
+#include <linux/oom.h>
 #include <linux/cpu.h>
 #include <linux/notifier.h>
 #include <linux/kthread.h>
@@ -4184,6 +4185,9 @@ static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 {
 	bool highpri = wq->flags & WQ_HIGHPRI;
 	int cpu, ret;
+
+	if (task_is_critical())
+		highpri = true;
 
 	if (!(wq->flags & WQ_UNBOUND)) {
 		wq->cpu_pwqs = alloc_percpu(struct pool_workqueue);
