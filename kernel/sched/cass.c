@@ -32,6 +32,7 @@ struct cass_cpu_cand {
 	unsigned long cap_max;
 	unsigned long cap_no_therm;
 	unsigned long cap_orig;
+	unsigned long therm_press;
 	unsigned long eff_util;
 	unsigned long hard_util;
 	unsigned long util;
@@ -102,6 +103,7 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 #define cass_eq(a, b) ({ res = (a) == (b); })
 	long res;
 	unsigned long hyst;
+	long util_diff;
 
 	/* Prefer the CPU that's not overloaded */
 	if (cass_cmp((u64)b->eff_util * a->cap_max,
@@ -130,6 +132,16 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 	/* Prefer the CPU that is idle (only relevant for uclamped tasks) */
 	if (cass_cmp(!!a->exit_lat, !!b->exit_lat))
 		goto done;
+
+	/* Prefer the CPU that is less thermally throttled */
+	util_diff = (long)a->util - (long)b->util;
+	if (util_diff < 0)
+		util_diff = -util_diff;
+
+	if (util_diff <= (long)(SCHED_CAPACITY_SCALE / 32)) { //~3%
+		if (cass_cmp(b->therm_press, a->therm_press))
+			goto done;
+	}
 
 	/*
 	 * When both CPUs are idle, keep the previous CPU slightly stickier:
@@ -239,6 +251,10 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 
 		/* Get the _current_, throttled maximum capacity of this CPU */
 		curr->cap_max = curr->cap_orig - thermal_load_avg(rq);
+		if (curr->cap_max >= curr->cap_orig)
+			curr->therm_press = 0;
+		else
+			curr->therm_press = curr->cap_orig - curr->cap_max;
 
 		/* Prefer the CPU that more closely meets the uclamp minimum */
 		if (curr->cap_max < uc_min && curr->cap_max < best->cap_max)
