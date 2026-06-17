@@ -229,25 +229,13 @@ static int goodix_spi_remove(struct spi_device *spi)
 
 #ifdef CONFIG_OF
 static const struct of_device_id spi_matchs[] = {
-	{
-		.compatible = "goodix,brl-a",
-	},
-	{
-		.compatible = "goodix,brl-b",
-	},
-	{
-		.compatible = "goodix,brl-d",
-	},
-	{
-		.compatible = "goodix,nottingham",
-	},
-	{
-		.compatible = "goodix,marseille",
-	},
-	{
-		.compatible = "goodix,atb",
-	},
-	{},
+	{ .compatible = "goodix,brl-a", .data = (void *)IC_TYPE_BERLIN_A },
+	{ .compatible = "goodix,brl-b", .data = (void *)IC_TYPE_BERLIN_B },
+	{ .compatible = "goodix,brl-d", .data = (void *)IC_TYPE_BERLIN_D },
+	{ .compatible = "goodix,nottingham", .data = (void *)IC_TYPE_NOTTINGHAM },
+	{ .compatible = "goodix,marseille", .data = (void *)IC_TYPE_MARSEILLE },
+	{ .compatible = "goodix,atb", .data = (void *)IC_TYPE_ATB },
+	{ /* Sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, goodix_spi_of_match);
 #endif
