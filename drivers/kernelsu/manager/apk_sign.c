@@ -344,7 +344,7 @@ int get_pkg_from_apk_path(char *pkg, const char *path)
 		return -1;
 
 	// Copying the package name
-	strncpy(pkg, second_last_slash + 1, pkg_len);
+	memcpy(pkg, second_last_slash + 1, pkg_len);
 	pkg[pkg_len] = '\0';
 
 	return 0;
@@ -367,7 +367,5 @@ bool is_manager_apk(char *path)
 
 	return (check_v2_signature(path, EXPECTED_SIZE, EXPECTED_HASH)  // kernelsu official
 		|| check_v2_signature(path, 0x375, "484fcba6e6c43b1fb09700633bf2fb4758f13cb0b2f4457b80d075084b26c588")  // KOWX712/KernelSU
-		|| check_v2_signature(path, 0x3e6, "79e590113c4c4c0c222978e413a5faa801666957b1212a328e46c00c69821bf7")  // rifsxd/KernelSU-Next
-		|| check_v2_signature(path, 0x396, "f415f4ed9435427e1fdf7f1fccd4dbc07b3d6b8751e4dbcec6f19671f427870b")  // rsuntk/KernelSU
 	);
 }

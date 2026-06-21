@@ -59,9 +59,6 @@ static inline int ksu_handle_umount(struct cred *new, const struct cred *old)
 	if (!ksu_module_mounted)
 		return 0;
 
-	if (!ksu_cred)
-		return 0;
-
 	// There are 6 scenarios:
 	// 1. Normal app: zygote -> appuid
 	// 2. Isolated process forked from zygote: zygote -> isolated_process

@@ -1,121 +1,101 @@
-#ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
-#define LSM_HANDLER_TYPE static int
-#else
-#define LSM_HANDLER_TYPE int
-#endif
-
-LSM_HANDLER_TYPE ksu_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
-			    struct inode *new_inode, struct dentry *new_dentry)
-{
-	ksu_rename_observer(old_dentry, new_dentry);
-	return 0;
-}
-
-LSM_HANDLER_TYPE ksu_task_fix_setuid(struct cred *new, const struct cred *old, int flags)
-{
-	// see sys_setresuid
-	if (flags == LSM_SETID_RES)
-		ksu_handle_setresuid_cred(new, old);
-
-	return 0;
-}
-
-LSM_HANDLER_TYPE ksu_bprm_check(struct linux_binprm *bprm)
-{
-
-#ifdef CONFIG_KSU_FEATURE_SULOG
-	ksu_sulog_emit_bprm((const char *)bprm->filename);
-#endif
-
-	return 0;
-}
-
-LSM_HANDLER_TYPE ksu_file_permission(struct file *file, int mask)
-{
-#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
-#ifdef KSU_CAN_USE_JUMP_LABEL
-	if (static_branch_likely(&ksud_vfs_read_key))
-		ksu_install_rc_hook(file);
-#else
-	if (unlikely(ksu_vfs_read_hook))
-		ksu_install_rc_hook(file);
-#endif
-#endif
-
-	return 0;
-}
-
-#ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
-static struct security_hook_list ksu_hooks[] __ro_after_init = {
-	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
-	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
-#ifdef CONFIG_KSU_FEATURE_SULOG
-	LSM_HOOK_INIT(bprm_check_security, ksu_bprm_check),
-#endif
-#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
-	LSM_HOOK_INIT(file_permission, ksu_file_permission),
-#endif
-};
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0) || defined(KSU_COMPAT_SECURITY_ADD_HOOKS_V2)
-#define ksu_security_add_hooks security_add_hooks
-#else
-#define ksu_security_add_hooks(a, b, c) security_add_hooks(a, b)
-#endif
-
-static __init void ksu_lsm_hook_init(void)
-{
-	ksu_security_add_hooks(ksu_hooks, ARRAY_SIZE(ksu_hooks), "ksu");
-
-	pr_info("core_hook: initialized %d LSMs \n", ARRAY_SIZE(ksu_hooks));
-}
-
-#else /* < 4.2, LSM */
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (C) 2026 \xx
+ *
+ * This file is a downstream extension and NOT affiliated, endorsed by,
+ * or maintained by the official KernelSU developers.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ */
 
 // selinux_ops (LSM), security_operations struct tampering for ultra legacy
 
 static uintptr_t selinux_ops_addr = NULL;
 
-#ifdef CONFIG_KSU_FEATURE_SELINUX_HIDE
-static int (*orig_setprocattr) (struct task_struct *p, char *name, void *value, size_t size) = NULL;
+static int (*orig_setprocattr) (struct task_struct *p, char *name, void *value, size_t size) __read_mostly = NULL;
 static int hook_setprocattr(struct task_struct *p, char *name, void *value, size_t size)
 {
-
-	ksu_hide_setprocattr(name, value, size);
+	ksu_hide_setprocattr_inline(name, value, size);
 	return orig_setprocattr(p, name, value, size);
 }
-#endif
 
 static int (*orig_inode_rename) (struct inode *old_dir, struct dentry *old_dentry,
-			     struct inode *new_dir, struct dentry *new_dentry) = NULL;
+			     struct inode *new_dir, struct dentry *new_dentry) __read_mostly = NULL;
 static int hook_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
 			    struct inode *new_inode, struct dentry *new_dentry)
 {
-	ksu_inode_rename(old_inode, old_dentry, new_inode, new_dentry);
+	ksu_rename_observer(old_dentry, new_dentry);
 	return orig_inode_rename(old_inode, old_dentry, new_inode, new_dentry);
 }
 
-static int (*orig_task_fix_setuid) (struct cred *new, const struct cred *old, int flags) = NULL;
-static int hook_task_fix_setuid(struct cred *new, const struct cred *old, int flags)
-{
-	ksu_task_fix_setuid(new, old, flags);
-	return orig_task_fix_setuid(new, old, flags);
-}
-
-static int (*orig_bprm_check_security)(struct linux_binprm *bprm) = NULL;
+static int (*orig_bprm_check_security)(struct linux_binprm *bprm) __read_mostly = NULL;
 static int hook_bprm_check_security(struct linux_binprm *bprm)
 {
-	ksu_bprm_check(bprm);
+#ifdef CONFIG_KSU_FEATURE_SULOG
+	ksu_sulog_emit_bprm((const char *)bprm->filename);
+#endif
 	return orig_bprm_check_security(bprm);
 }
 
-static int (*orig_file_permission) (struct file *file, int mask) = NULL;
+static int (*orig_task_fix_setuid) (struct cred *new, const struct cred *old, int flags) __read_mostly = NULL;
+static int hook_task_fix_setuid(struct cred *new, const struct cred *old, int flags)
+{
+	// see sys_setresuid
+	if (flags == LSM_SETID_RES)
+		ksu_handle_setresuid_cred(new, old);
+
+	return orig_task_fix_setuid(new, old, flags);
+}
+
+static int (*orig_file_permission) (struct file *file, int mask) __read_mostly = NULL;
 static int hook_file_permission(struct file *file, int mask)
 {
+	if (unlikely(ksu_vfs_read_hook))
+		ksu_install_rc_hook(file);
 
-	ksu_file_permission(file, mask);
 	return orig_file_permission(file, mask);
+}
+
+static int (*orig_bprm_set_creds)(struct linux_binprm *bprm) __read_mostly = NULL;
+static int ksu_unregister_bprm_set_creds(void *data)
+{
+	struct security_operations *ops = (struct security_operations *)selinux_ops_addr;
+	if (!orig_bprm_set_creds)
+		return 0;
+
+	pr_info("%s: restoring: bprm_set_creds 0x%lx -> 0x%lx\n", __func__, (long)ops->bprm_set_creds, (long)orig_bprm_set_creds);
+	ops->bprm_set_creds = orig_bprm_set_creds;
+
+	return 0;
+}
+
+static int hook_bprm_set_creds(struct linux_binprm *bprm)
+{
+	if (ksu_boot_completed)
+		goto unreg_bprm_set_creds;
+
+	if (!is_init(current_cred()))
+		goto bprm_set_creds;
+
+	if (!bprm->filename)
+		goto bprm_set_creds;
+
+	if (!!strcmp(bprm->filename, "/data/adb/ksud"))
+		goto bprm_set_creds;
+
+	pr_info("bprm_set_creds: escape init executing %s with pid: %d\n", bprm->filename, current->pid);
+	escape_to_root_forced(); // give this context all permissions
+
+	goto bprm_set_creds;
+
+unreg_bprm_set_creds:
+	stop_machine(ksu_unregister_bprm_set_creds, NULL, NULL);
+
+bprm_set_creds:
+	return orig_bprm_set_creds(bprm);
 }
 
 static inline bool verify_selinux_cred_free(void *fn_ptr)
@@ -300,12 +280,6 @@ static inline void set_selinux_ops()
 		ops = (struct security_operations *)&selinux_ops;
 #endif
 
-// not always available, can also fail, but it wont hurt to try.
-#ifdef CONFIG_KALLSYMS
-	if (!ops)
-		ops = (struct security_operations *)kallsyms_lookup_name("selinux_ops");
-#endif
-
 #ifdef CONFIG_KEYS
 	extern struct key_user root_key_user;
 	if (!ops)
@@ -377,10 +351,8 @@ static int ksu_register_lsm_hook(void *data)
 	orig_inode_rename = ops->inode_rename;
 	ops->inode_rename = hook_inode_rename;
 
-#ifdef CONFIG_KSU_FEATURE_SELINUX_HIDE
 	orig_setprocattr = ops->setprocattr;
 	ops->setprocattr = hook_setprocattr;
-#endif
 
 	orig_task_fix_setuid = ops->task_fix_setuid;
 	ops->task_fix_setuid = hook_task_fix_setuid;
@@ -417,24 +389,7 @@ static void ksu_lsm_hook_init(void)
 	return;
 }
 
-#endif // < 4.2
-
-#else /* ! CONFIG_KSU_LSM_SECURITY_HOOKS */
-// TEMP hooks, remove this in a month.
-int ksu_handle_setuid(struct cred *new, const struct cred *old)
-{
-	ksu_handle_setresuid_cred(new, old);
-	return 0;
-}
-int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
-{
-	ksu_rename_observer(old_dentry, new_dentry);
-	return 0;
-}
-static inline void ksu_lsm_hook_init(void) { } // nothing, no-op
-#endif // CONFIG_KSU_LSM_SECURITY_HOOKS
-
-void __init ksu_core_init(void)
+static void __init ksu_core_init(void)
 {
 	ksu_lsm_hook_init();
 }

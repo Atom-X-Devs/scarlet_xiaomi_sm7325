@@ -49,7 +49,7 @@ static long setup_ld_preload(void ***envp_arg)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 	unsigned long stackp = current_user_stack_pointer();
 #else
-	volatile unsigned long stackp = current->mm->start_stack; // its just a stack smash in the end, it'll work.
+	volatile unsigned long stackp = current->mm->start_stack;
 #endif
 	unsigned long envp, ld_preload_p, ld_library_path_p;
 	unsigned long *envp_p = (uintptr_t)envp_arg;
@@ -59,7 +59,7 @@ static long setup_ld_preload(void ***envp_arg)
 
 	envp = (char __user **)untagged_addr((unsigned long)*envp_p);
 
-	ld_preload_p = stackp = ALIGN_DOWN(stackp - sizeof(kLdPreload), 8); // 2 words on 32-bit, 32-on-64 its gonna be fine dw.
+	ld_preload_p = stackp = ALIGN_DOWN(stackp - sizeof(kLdPreload), 8);
 	ret = copy_to_user(ld_preload_p, kLdPreload, sizeof(kLdPreload));
 	if (ret != 0) {
 		pr_warn("write ld_preload when adb_root_handle_execve failed: %ld\n", ret);
@@ -138,7 +138,7 @@ out_release_env_p:
 	return ret;
 }
 
-static noinline void do_ksu_adb_root_handle_execve(void *filename, void *envp_in)
+static noinline void do_ksu_adb_root_handle_execve(void *restrict filename, void *restrict envp_in)
 {
 	if (likely(test_thread_flag(TIF_SECCOMP)))
 		return;
@@ -165,7 +165,7 @@ static noinline void do_ksu_adb_root_handle_execve(void *filename, void *envp_in
 	return;
 }
 
-static noinline void do_ksu_adb_root_handle_execveat(void *filename, void *envp_in)
+static noinline void do_ksu_adb_root_handle_execveat(void *restrict filename, void *restrict envp_in)
 {
 	if (likely(test_thread_flag(TIF_SECCOMP)))
 		return;

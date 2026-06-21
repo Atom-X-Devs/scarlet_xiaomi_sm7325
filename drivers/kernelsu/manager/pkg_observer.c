@@ -9,7 +9,6 @@
 
 static uintptr_t system_dir_inode_ptr = NULL;
 
-__attribute__((cold))
 static noinline void ksu_grab_data_system_inode()
 {
 	struct path path;
@@ -24,7 +23,6 @@ static noinline void ksu_grab_data_system_inode()
 	path_put(&path);
 }
 
-__attribute__((cold))
 static noinline void ksu_rename_observer_slow(struct dentry *old_dentry, struct dentry *new_dentry)
 {
 	system_dir_inode_ptr = NULL; // reset cached inode

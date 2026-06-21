@@ -87,8 +87,6 @@ void on_module_mounted(void)
 
 void on_boot_completed(void)
 {
-	ksud_escape_exit();
-
 	ksu_boot_completed = true;
 	pr_info("on_boot_completed!\n");
 	track_throne(true);
@@ -99,6 +97,126 @@ static ssize_t (*orig_read_iter)(struct kiocb *, struct iov_iter *);
 static struct file_operations fops_proxy;
 static ssize_t ksu_rc_pos = 0;
 const size_t ksu_rc_len = sizeof(KERNEL_SU_RC) - 1;
+
+// Prefer /metadata/watchdog/ when present, else /metadata.
+#define MODULE_RC_PATH_WATCHDOG "/metadata/watchdog/ksu/modules.rc"
+#define MODULE_RC_PATH_DEFAULT "/metadata/ksu/modules.rc"
+#define MODULE_RC_MAX (1u << 20) /* 1 MiB cap */
+static char *module_rc_buf;
+static size_t module_rc_len = 0;
+static ssize_t module_rc_pos;
+
+static struct file *open_module_rc(const char **chosen_path)
+{
+	struct file *f = filp_open(MODULE_RC_PATH_WATCHDOG, O_RDONLY, 0);
+	if (!IS_ERR(f)) {
+		*chosen_path = MODULE_RC_PATH_WATCHDOG;
+		return f;
+	}
+	f = filp_open(MODULE_RC_PATH_DEFAULT, O_RDONLY, 0);
+	if (!IS_ERR(f)) {
+		*chosen_path = MODULE_RC_PATH_DEFAULT;
+		return f;
+	}
+	*chosen_path = MODULE_RC_PATH_DEFAULT;
+	return f;
+}
+
+static void load_module_rc_once(void)
+{
+	static bool loaded = false;
+	struct file *f;
+	const char *path = NULL;
+	loff_t pos = 0;
+	ssize_t r;
+	size_t fsize;
+	const struct cred *old_cred;
+
+	if (loaded)
+		return;
+	loaded = true;
+ 
+	old_cred = override_creds(ksu_cred);
+
+	f = open_module_rc(&path);
+	if (IS_ERR(f)) {
+		pr_info("module rc: open %s failed: %ld\n", path, PTR_ERR(f));
+		goto out_revert_creds;
+	}
+
+	if (!S_ISREG(file_inode(f)->i_mode)) {
+		pr_warn("module rc: %s is not a regular file\n", path);
+		goto out_close_file;
+	}
+
+	fsize = i_size_read(file_inode(f));
+	if (fsize == 0) {
+		pr_warn("module rc: skip empty module rc\n");
+		goto out_close_file;
+	}
+
+	module_rc_buf = kvmalloc(fsize, GFP_KERNEL);
+	if (!module_rc_buf) {
+		pr_err("module rc: alloc %zu failed\n", fsize);
+		goto out_close_file;
+	}
+
+	r = kernel_read(f, module_rc_buf, fsize, &pos);
+ 
+	if (r <= 0) {
+		pr_err("module rc: read failed: %zd\n", r);
+		kvfree(module_rc_buf);
+		module_rc_buf = NULL;
+		goto out_close_file;
+	}
+
+	module_rc_len = r;
+	pr_info("module rc: loaded %zu bytes from %s\n", module_rc_len, path);
+
+out_close_file:
+	filp_close(f, NULL);
+
+out_revert_creds:
+	revert_creds(old_cred);
+}
+
+static void free_module_rc(void)
+{
+	kvfree(module_rc_buf);
+	module_rc_buf = NULL;
+	module_rc_len = 0;
+}
+
+static inline void set_module_rc_len_vfs()
+{
+	static bool loaded = false;
+	if (loaded)
+		return;
+
+	loaded = true;
+
+	struct path path;
+
+	int err = kern_path(MODULE_RC_PATH_WATCHDOG, LOOKUP_FOLLOW, &path);
+	if (err)
+		err = kern_path(MODULE_RC_PATH_DEFAULT, LOOKUP_FOLLOW, &path);
+
+	if (err)
+		return; 
+
+	struct inode *inode = d_inode(path.dentry);
+	if (inode && S_ISREG(inode->i_mode))
+		module_rc_len = i_size_read(inode);
+
+	path_put(&path);
+
+	if (module_rc_len > MODULE_RC_MAX)
+		module_rc_len = MODULE_RC_MAX;
+
+	pr_info("module_rc_len: %zu\n", module_rc_len);
+
+	return;
+}
 
 // https://cs.android.com/android/platform/superproject/main/+/main:system/core/init/parser.cpp;l=144;drc=61197364367c9e404c7da6900658f1b16c42d0da
 // https://cs.android.com/android/platform/superproject/main/+/main:system/libbase/file.cpp;l=241-243;drc=61197364367c9e404c7da6900658f1b16c42d0da
@@ -111,28 +229,51 @@ static ssize_t read_proxy(struct file *file, char __user *buf, size_t count, lof
 	size_t append_count;
 	if (ksu_rc_pos && ksu_rc_pos < ksu_rc_len)
 		goto append_ksu_rc;
+	if (ksu_rc_pos >= ksu_rc_len && module_rc_pos < module_rc_len)
+		goto append_module_rc;
 
 	ret = orig_read(file, buf, count, pos);
-	if (ret != 0 || ksu_rc_pos >= ksu_rc_len) {
+	if (ret != 0) {
 		return ret;
-	} else {
-		pr_info("read_proxy: orig read finished, start append rc\n");
 	}
-append_ksu_rc:
-	append_count = ksu_rc_len - ksu_rc_pos;
-	if (append_count > count - ret)
-		append_count = count - ret;
-	// copy_to_user returns the number of not copied
-	if (copy_to_user(buf + ret, KERNEL_SU_RC + ksu_rc_pos, append_count)) {
-		pr_info("read_proxy: append error, totally appended %ld\n", ksu_rc_pos);
-	} else {
-		pr_info("read_proxy: append %ld\n", append_count);
+	if (ksu_rc_pos >= ksu_rc_len && module_rc_pos >= module_rc_len) {
+		return ret;
+	}
+	pr_info("read_proxy: orig read finished, start append rc\n");
 
-		ksu_rc_pos += append_count;
-		if (ksu_rc_pos == ksu_rc_len) {
-			pr_info("read_proxy: append done\n");
+append_ksu_rc:
+	if (ksu_rc_pos < ksu_rc_len) {
+		append_count = ksu_rc_len - ksu_rc_pos;
+		if (append_count > count - ret)
+			append_count = count - ret;
+		// copy_to_user returns the number of bytes that could not be copied
+		if (copy_to_user(buf + ret, KERNEL_SU_RC + ksu_rc_pos, append_count)) {
+			pr_info("read_proxy: append error, totally appended %ld\n", ksu_rc_pos);
+			return ret;
 		}
+		pr_info("read_proxy: append static %zu\n", append_count);
+		ksu_rc_pos += append_count;
 		ret += append_count;
+		if (ksu_rc_pos == ksu_rc_len)
+			pr_info("read_proxy: static append done\n");
+	}
+
+append_module_rc:
+	if (module_rc_pos < module_rc_len && (size_t)ret < count) {
+		append_count = module_rc_len - module_rc_pos;
+		if (append_count > count - ret)
+			append_count = count - ret;
+		if (copy_to_user(buf + ret, module_rc_buf + module_rc_pos, append_count)) {
+			pr_info("read_proxy: module append error, totally appended %zd\n", module_rc_pos);
+			return ret;
+		}
+		pr_info("read_proxy: append module %zu\n", append_count);
+		module_rc_pos += append_count;
+		ret += append_count;
+		if (module_rc_pos == (ssize_t)module_rc_len) {
+			pr_info("read_proxy: module append done\n");
+			free_module_rc();
+		}
 	}
 
 	return ret;
@@ -145,26 +286,48 @@ static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
 	size_t append_count;
 	if (ksu_rc_pos && ksu_rc_pos < ksu_rc_len)
 		goto append_ksu_rc;
+	if (ksu_rc_pos >= ksu_rc_len && module_rc_pos < module_rc_len)
+		goto append_module_rc;
 
 	ret = orig_read_iter(iocb, to);
-	if (ret != 0 || ksu_rc_pos >= ksu_rc_len) {
+	if (ret != 0) {
 		return ret;
-	} else {
-		pr_info("read_iter_proxy: orig read finished, start append rc\n");
 	}
-append_ksu_rc:
-	// copy_to_iter returns the number of copied bytes
-	append_count = copy_to_iter((void *)KERNEL_SU_RC + ksu_rc_pos, ksu_rc_len - ksu_rc_pos, to);
-	if (!append_count) {
-		pr_info("read_iter_proxy: append error, totally appended %ld\n", ksu_rc_pos);
-	} else {
-		pr_info("read_iter_proxy: append %ld\n", append_count);
+	if (ksu_rc_pos >= ksu_rc_len && module_rc_pos >= module_rc_len) {
+		return ret;
+	}
+	pr_info("read_iter_proxy: orig read finished, start append rc\n");
 
-		ksu_rc_pos += append_count;
-		if (ksu_rc_pos == ksu_rc_len) {
-			pr_info("read_iter_proxy: append done\n");
+append_ksu_rc:
+	if (ksu_rc_pos < ksu_rc_len) {
+		// copy_to_iter returns the number of bytes successfully copied
+		append_count = copy_to_iter(KERNEL_SU_RC + ksu_rc_pos, ksu_rc_len - ksu_rc_pos, to);
+		if (!append_count) {
+			pr_info("read_iter_proxy: append error, totally appended %ld\n", ksu_rc_pos);
+			return ret;
 		}
+		pr_info("read_iter_proxy: append static %zu\n", append_count);
+		ksu_rc_pos += append_count;
 		ret += append_count;
+		if (ksu_rc_pos == ksu_rc_len) {
+			pr_info("read_iter_proxy: static append done\n");
+		}
+	}
+
+append_module_rc:
+	if (module_rc_pos < module_rc_len) {
+		append_count = copy_to_iter(module_rc_buf + module_rc_pos, module_rc_len - module_rc_pos, to);
+		if (!append_count) {
+			pr_info("read_iter_proxy: module append error, appended %zd\n", module_rc_pos);
+			return ret;
+		}
+		pr_info("read_iter_proxy: append module %zu\n", append_count);
+		module_rc_pos += append_count;
+		ret += append_count;
+		if (module_rc_pos == (ssize_t)module_rc_len) {
+			pr_info("read_iter_proxy: module append done\n");
+			free_module_rc();
+		}
 	}
 	return ret;
 }
@@ -202,11 +365,15 @@ static bool is_init_rc(struct file *fp)
 	return true;
 }
 
-__attribute__((cold))
 static noinline void ksu_install_rc_hook(struct file *file)
 {
 	if (!is_init(current_cred()))
 		return;
+
+	// if init process is running, always try to grab module_rc length
+	// this is because we are also running newfstat hook on kprobe
+	// and we really cannot kern_path on it
+	set_module_rc_len_vfs();
 
 	if (!is_init_rc(file)) {
 		return;
@@ -232,7 +399,9 @@ static noinline void ksu_install_rc_hook(struct file *file)
 	// now we can sure that the init process is reading
 	// `/system/etc/init/init.rc`
 
-	pr_info("read init.rc, comm: %s, rc_count: %zu\n", current->comm, ksu_rc_len);
+	load_module_rc_once();
+
+	pr_info("read init.rc, comm: %s, rc_count: %zu, module_rc: %zu\n", current->comm, ksu_rc_len, module_rc_len);
 
 	// Now we need to proxy the read and modify the result!
 	// But, we can not modify the file_operations directly, because it's in read-only memory.
@@ -255,7 +424,6 @@ static noinline void ksu_install_rc_hook(struct file *file)
 }
 
 // for sys_read kp / syscall table
-__attribute__((cold))
 static noinline void ksu_handle_sys_read_fd(unsigned int fd)
 {
 	if (likely(!ksu_vfs_read_hook))
@@ -275,8 +443,7 @@ static noinline void ksu_handle_sys_read_fd(unsigned int fd)
 #define STAT_NATIVE 0
 #define STAT_STAT64 1
 
-__attribute__((cold))
-static noinline void ksu_common_newfstat_ret(unsigned int fd_int, void **statbuf_ptr, 
+static inline void ksu_common_newfstat_ret(unsigned int fd_int, void **statbuf_ptr, 
 			const int type, const char *syscall_name)
 {
 	if (!is_init(current_cred()))
@@ -292,26 +459,12 @@ static noinline void ksu_common_newfstat_ret(unsigned int fd_int, void **statbuf
 	}
 	fput(file);
 
-	pr_info("%s: stat init.rc \n", syscall_name);
-
 	uintptr_t statbuf_ptr_local = (uintptr_t)*(void **)statbuf_ptr;
 	void __user *statbuf = (void __user *)statbuf_ptr_local;
 	if (!statbuf)
 		return;
 
-	void __user *st_size_ptr;
-	long size, new_size;
-	size_t len;
-
-	st_size_ptr = statbuf + offsetof(struct stat, st_size);
-	len = sizeof(long);
-
-#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
-	if (type) {
-		st_size_ptr = statbuf + offsetof(struct stat64, st_size);
-		len = sizeof(long long);
-	}
-#endif
+	pr_info("%s: stat init.rc \n", syscall_name);
 
 	// we do this for kretprobe's reusability
 	// this is pretty short, so nbd
@@ -321,19 +474,57 @@ static noinline void ksu_common_newfstat_ret(unsigned int fd_int, void **statbuf
 		got_flipped = true;
 	}
 
-	if (ksu_copy_from_user_retry(&size, st_size_ptr, len)) {
-		pr_info("%s: read statbuf 0x%lx failed \n", syscall_name, (unsigned long)st_size_ptr);
+// NOTE: Workaround to OABI's (likely) write-alignment issue.
+// weirdly enough dedicated copying with offsetof causes an issue! (somehow byte 44 is misaligned?!)
+// here we copy the whole struct, edit and write it over back!
+#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
+
+	if (type == STAT_NATIVE)
+		goto stat_native;
+	
+	struct stat64 k_stat64 = { 0 };
+
+	if (ksu_copy_from_user_retry(&k_stat64, statbuf, sizeof(struct stat64))) {
+		pr_info("%s: read statbuf 0x%lx failed \n", syscall_name, (uintptr_t)statbuf);
 		goto out;
 	}
 
-	new_size = size + ksu_rc_len;
-	pr_info("%s: adding ksu_rc_len: %ld -> %ld \n", syscall_name, size, new_size);
-		
-	if (!copy_to_user(st_size_ptr, &new_size, len))
-		pr_info("%s: added ksu_rc_len \n", syscall_name);
-	else
-		pr_info("%s: add ksu_rc_len failed: statbuf 0x%lx \n", syscall_name, (unsigned long)st_size_ptr);
-	
+	// take note of signed + unsigned math here (ksu_rc_len, module_rc_len are size_t)
+	// st_size is signed long long
+	long long stat64_old_size = (long long)k_stat64.st_size;
+	long long stat64_new_size = stat64_old_size + (long long)ksu_rc_len + (long long)module_rc_len;
+
+	pr_info("%s: adding ksu_rc_len: %lld -> %lld (ksu_rc_len: %zu, module_rc_len: %zu) \n", syscall_name, stat64_old_size, stat64_new_size, ksu_rc_len, module_rc_len);
+
+	k_stat64.st_size = stat64_new_size;
+
+	if (copy_to_user(statbuf, &k_stat64, sizeof(struct stat64)))
+		pr_info("%s: copy_to_user stat64 failed\n", syscall_name);
+
+	goto out;
+
+stat_native:
+#endif
+	;
+
+	struct stat k_stat = { 0 };
+
+	if (ksu_copy_from_user_retry(&k_stat, statbuf, sizeof(struct stat))) {
+		pr_info("%s: read statbuf 0x%lx failed \n", syscall_name, (uintptr_t)statbuf);
+		goto out;
+	}
+
+	// take note of signed + unsigned math here (ksu_rc_len, module_rc_len are size_t)
+	long stat_old_size = (long)k_stat.st_size;
+	long stat_new_size = stat_old_size + (long)ksu_rc_len + (long)module_rc_len;
+
+	pr_info("%s: adding ksu_rc_len: %ld -> %ld (ksu_rc_len: %zu, module_rc_len: %zu) \n", syscall_name, stat_old_size, stat_new_size, ksu_rc_len, module_rc_len);
+
+	k_stat.st_size = stat_new_size;
+
+	if (copy_to_user(statbuf, &k_stat, sizeof(struct stat)))
+		pr_info("%s: copy_to_user stat failed\n", syscall_name);
+
 out:
 	if (got_flipped)
 		preempt_disable();
@@ -528,8 +719,6 @@ start:
 	// close down input hook
 	stop_input_hook();
 
-	// close down ksud escape
-	ksud_escape_exit();
 	ksu_boot_completed = true;
 
 bail:
@@ -557,7 +746,6 @@ static void stop_input_hook()
 
 void __init ksu_ksud_init()
 {
-	ksud_escape_init();
 	vol_detector_init();
 }
 

@@ -33,7 +33,6 @@ static inline struct key *ksu_get_current_session_keyring() { return rcu_derefer
 static inline struct key *ksu_get_current_session_keyring() { return rcu_dereference(current->cred->tgcred->session_keyring); }
 #endif
 
-__attribute__((cold))
 static noinline void ksu_grab_init_session_keyring()
 {
 	if (init_session_keyring)
@@ -81,9 +80,40 @@ filp_open:
 static inline void ksu_grab_init_session_keyring() {} // no-op
 #endif // KEYS && < 5.2
 
+#ifndef READ_ONCE
+#define READ_ONCE(x) (*(const volatile typeof(x) *)&(x))
+#endif
+
+#ifndef WRITE_ONCE
+#define WRITE_ONCE(x, y) (*(volatile typeof(x) *)&(x) = (typeof(x))(y))
+#endif
+
 #ifndef __ro_after_init
 #define __ro_after_init
 #endif
+
+#ifndef __nocfi
+#define __nocfi
+#endif
+
+extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
+
+/**
+ * ksu_copy_from_user_retry
+ * try nofault copy first, if it fails, try with plain
+ * paramters are the same as copy_from_user
+ * 0 = success
+ */
+extern long copy_from_user_nofault(void *dst, const void __user *src, size_t size);
+static __always_inline long ksu_copy_from_user_retry(void *to, const void __user *from, unsigned long count)
+{
+	long ret = copy_from_user_nofault(to, from, count);
+	if (likely(!ret))
+		return ret;
+
+	// we faulted! fallback to slow path
+	return copy_from_user(to, from, count);
+}
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
 #define d_inode(dentry) ((dentry)->d_inode)
@@ -121,13 +151,13 @@ static inline void ksu_kvfree(void *buf)
 #define TWA_RESUME 1
 #endif
 
-// this is ksys_close, however that is spotty to use 
-// as 5.10 backported close_fd and rekt ksys_close
-// so we use what it does internally, __close_fd
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
-#define close_fd(fd) __close_fd(current->files, fd)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+#define ksu_close_fd close_fd
+// this is ksys_close, however that is spotty to use, as 5.10 backported close_fd and rekt ksys_close
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
+#define ksu_close_fd(fd) __close_fd(current->files, fd)
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
-#define close_fd sys_close
+#define ksu_close_fd sys_close
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
@@ -197,38 +227,59 @@ struct user_arg_ptr {
 	} ptr;
 };
 
-extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
-
-/**
- * ksu_copy_from_user_retry
- * try nofault copy first, if it fails, try with plain
- * paramters are the same as copy_from_user
- * 0 = success
- */
-extern long copy_from_user_nofault(void *dst, const void __user *src, size_t size);
-static __always_inline long ksu_copy_from_user_retry(void *to, const void __user *from, unsigned long count)
+#ifndef untagged_addr
+#ifdef CONFIG_ARM64
+static inline __s64 ksu_sign_extend64(__u64 value, int index)
 {
-	long ret = copy_from_user_nofault(to, from, count);
-	if (likely(!ret))
-		return ret;
-
-	// we faulted! fallback to slow path
-	return copy_from_user(to, from, count);
+	__u8 shift = 63 - index;
+	return (__s64)(value << shift) >> shift;
 }
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) // caller is reponsible for sanity!
-static inline void ksu_zeroed_strncpy(char *dest, const char *src, size_t count)
-{
-	// this is actually faster due to dead store elimination
-	// count - 1 as implicit null termination
-	__builtin_memset(dest, 0, count);
-	__builtin_strncpy(dest, src, count - 1);
-}
-#define strscpy_pad ksu_zeroed_strncpy
+#define untagged_addr(addr) ksu_sign_extend64(addr, 55)
+#else
+#define untagged_addr(addr) (addr)
+#endif
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
-#define strscpy ksu_zeroed_strncpy
+// not 1:1, no aligned/per-word optimization
+// https://elixir.bootlin.com/linux/v4.3/source/lib/string.c#L154
+__weak ssize_t strscpy(char *dest, const char *src, size_t count)
+{
+	if (!count)
+		return -E2BIG;
+
+	// look for the first null terminator w/in count
+	// alternatively, strnlen?
+	const char *end = __builtin_memchr(src, '\0', count);
+	if (!end)
+		goto no_null_term;
+
+	size_t copy_len = end - src;
+	__builtin_memcpy(dest, src, copy_len);
+	dest[copy_len] = '\0';
+	return copy_len;
+
+no_null_term:
+	__builtin_memcpy(dest, src, count - 1);
+	dest[count - 1] = '\0';
+	return -E2BIG;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
+// https://elixir.bootlin.com/linux/v5.2/source/lib/string.c#L240
+__weak ssize_t strscpy_pad(char *dest, const char *src, size_t count)
+{
+	ssize_t written;
+
+	written = strscpy(dest, src, count);
+	if (written < 0 || written == count - 1)
+		return written;
+
+	memset(dest + written + 1, 0, count - written - 1);
+
+	return written;
+}
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
@@ -286,10 +337,6 @@ __weak void groups_sort(struct group_info *group_info) { } // no-op
 #define EPOLLRDHUP	0x00002000
 #endif // < 4.12 && !EPOLLIN
 
-#ifndef READ_ONCE
-#define READ_ONCE(x) (*(const volatile typeof(x) *)&(x))
-#endif
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION (3, 15, 0)
 #define task_ppid_nr(a) (pid_t)sys_getppid()
 #endif
@@ -308,10 +355,6 @@ static inline u64 ksu_ktime_get_ns(void) { return ktime_to_ns(ktime_get()); }
 #ifndef ALIGN_DOWN
 #define ALIGN_DOWN(x, a) __ALIGN_KERNEL((x) - ((a) - 1), (a))
 #endif
-#endif
-
-#ifndef untagged_addr
-#define untagged_addr(addr) (addr)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)

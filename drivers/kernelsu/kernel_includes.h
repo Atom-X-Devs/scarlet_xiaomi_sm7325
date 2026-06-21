@@ -145,6 +145,29 @@
 #include <linux/lsm_hooks.h>
 #endif
 
+#ifdef CONFIG_KPROBES
+#include <linux/kprobes.h>
+#endif
+
+/**
+ * Linux kernel forbids c99 restrict
+ * however we can use builtin's restrict
+ */
+#define restrict __restrict
+
+/**
+ * old compilers does NOT know fallthrough, this is GNU/C23
+ * however we can use a comment and it silences it
+ * ref: https://elixir.bootlin.com/linux/v4.4.302/source/tools/include/linux/compiler.h#L121
+ */
+#ifndef fallthrough
+# if defined(__GNUC__) && __GNUC__ >= 7
+#  define fallthrough __attribute__ ((fallthrough))
+# else
+#  define fallthrough do {} while (0) /* fallthrough */
+# endif
+#endif
+
 /**
  * replace common mem/str functions with builtins
  * so legacy kernels get better inlining and optimized routines (with newer compielrs)
@@ -174,7 +197,7 @@
 #define strpbrk		__builtin_strpbrk
 #define strrchr		__builtin_strrchr
 #define strspn		__builtin_strspn
-//#define strstr		__builtin_strstr
+#define strstr		__builtin_strstr
 
 #endif // !CONFIG_KSU_DEBUG
 

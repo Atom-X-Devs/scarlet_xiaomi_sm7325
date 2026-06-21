@@ -1,5 +1,3 @@
-#include <linux/kprobes.h>
-
 // sys_newfstat rp
 // upstream: https://github.com/tiann/KernelSU/commit/df640917d11dd0eff1b34ea53ec3c0dc49667002
 
@@ -9,8 +7,8 @@ static int sys_newfstat_handler_pre(struct kretprobe_instance *p, struct pt_regs
 
 	// grab ptr on entry
 	uintptr_t *arg = (uintptr_t *)p->data;
-	arg[0] = (uintptr_t)PT_REGS_PARM1(regs); 
-	arg[1] = (uintptr_t)PT_REGS_PARM2(regs); 
+	arg[0] = (uintptr_t)PT_REGS_PARM1(real_regs); 
+	arg[1] = (uintptr_t)PT_REGS_PARM2(real_regs); 
 
 	return 0;
 }
@@ -40,8 +38,8 @@ static int sys_fstat64_handler_pre(struct kretprobe_instance *p, struct pt_regs 
 
 	// grab ptr on entry
 	uintptr_t *arg = (uintptr_t *)p->data;
-	arg[0] = (uintptr_t)PT_REGS_PARM1(regs); 
-	arg[1] = (uintptr_t)PT_REGS_PARM2(regs); 
+	arg[0] = (uintptr_t)PT_REGS_PARM1(real_regs); 
+	arg[1] = (uintptr_t)PT_REGS_PARM2(real_regs); 
 
 	return 0;
 }

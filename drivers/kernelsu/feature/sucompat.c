@@ -1,4 +1,4 @@
-#ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
+#if defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) || defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
 #define SUCOMPAT_HOOK_TYPE static __always_inline int
 #else
 #define SUCOMPAT_HOOK_TYPE int
@@ -78,7 +78,6 @@ static inline void ksu_sucompat_enable_branch() { } // no-op
 static inline void ksu_sucompat_disable_branch() { } // no-op
 #endif
 
-__attribute__((hot))
 static __always_inline bool is_su_allowed(const void **ptr_to_check)
 {
 #ifndef CONFIG_KSU_TAMPER_SYSCALL_TABLE
@@ -92,7 +91,50 @@ static __always_inline bool is_su_allowed(const void **ptr_to_check)
 #endif // KSU_CAN_USE_JUMP_LABEL
 #endif
 
-	if (likely(test_thread_flag(TIF_SECCOMP)))
+	/**
+	 *  comparison:
+	 *
+	 * 	if (test_thread_flag(TIF_SECCOMP)) 
+	 *		return false;
+	 *
+	 * ffffff800922ffa0 <hook_aarch64_faccessat>:
+	 * ffffff800922ffa0: d10183ff     	sub	sp, sp, #0x60
+	 * ffffff800922ffa4: f9001bfe     	str	x30, [sp, #0x30]
+	 * ffffff800922ffa8: a90457f6     	stp	x22, x21, [sp, #0x40]
+	 * ffffff800922ffac: a9054ff4     	stp	x20, x19, [sp, #0x50]
+	 * ffffff800922ffb0: d5384113     	mrs	x19, SP_EL0
+	 * ffffff800922ffb4: f9400268     	ldr	x8, [x19]							// load thread_info->flags long (x8 register, 64-bit)
+	 * ffffff800922ffb8: 375809c8     	tbnz	w8, #0xb, 0xffffff80092300f0 <hook_aarch64_faccessat+0x150>	// TIF_SECCOMP is 11, 0xb, run test branch if not zero
+	 * ...
+	 * ffffff80092300f0: 97c18550     	bl	0xffffff8008291630 <sys_faccessat>
+	 * ffffff80092300f4: a9454ff4     	ldp	x20, x19, [sp, #0x50]
+	 * ffffff80092300f8: a94457f6     	ldp	x22, x21, [sp, #0x40]
+	 * ffffff80092300fc: f9401bfe     	ldr	x30, [sp, #0x30]
+	 * ffffff8009230100: 910183ff     	add	sp, sp, #0x60
+	 * ffffff8009230104: d65f03c0     	ret
+	 * 
+	 * to:
+	 * 	if (!!current->seccomp.mode)
+	 *		return false;
+	 * 
+	 * ffffff800922ffa0 <hook_aarch64_faccessat>:
+	 * ffffff800922ffa0: d10183ff     	sub	sp, sp, #0x60
+	 * ffffff800922ffa4: f9001bfe     	str	x30, [sp, #0x30]
+	 * ffffff800922ffa8: a90457f6     	stp	x22, x21, [sp, #0x40]
+	 * ffffff800922ffac: a9054ff4     	stp	x20, x19, [sp, #0x50]
+	 * ffffff800922ffb0: d5384113     	mrs	x19, SP_EL0
+	 * ffffff800922ffb4: b947aa68     	ldr	w8, [x19, #0x7a8]					// load seccomp.mode int (w8 register)
+	 * ffffff800922ffb8: 340000e8     	cbz	w8, 0xffffff800922ffd4 <hook_aarch64_faccessat+0x34>	// branch if zero, else move to next insn
+	 * ffffff800922ffbc: 97c1859d     	bl	0xffffff8008291630 <sys_faccessat>
+	 * ffffff800922ffc0: a9454ff4     	ldp	x20, x19, [sp, #0x50]
+	 * ffffff800922ffc4: a94457f6     	ldp	x22, x21, [sp, #0x40]
+	 * ffffff800922ffc8: f9401bfe     	ldr	x30, [sp, #0x30]
+	 * ffffff800922ffcc: 910183ff     	add	sp, sp, #0x60
+	 * ffffff800922ffd0: d65f03c0     	ret
+	 *
+	 */
+
+	if (test_thread_flag(TIF_SECCOMP))
 		return false;
 
 	// see seccomp check above
@@ -134,18 +176,20 @@ static __always_inline void ksu_sucompat_user_common(const char __user **filenam
 				const uint8_t sym)
 {
 	uintptr_t buf;
-	const char su[] = SU_PATH;
+	const char su[16] = SU_PATH;
 
 	// sugar prep
 	uintptr_t *su_p = (uintptr_t *)su;
-	uintptr_t __user *fn_p = (uintptr_t *)*(char **)filename_user;
+	uintptr_t __user *fn_p = (uintptr_t __user *)untagged_addr(*(char **)filename_user);
+
+	// cheaper than prefaulting (fault_in_readable, fault_in_pages_readable)
+	__builtin_prefetch(fn_p);
 
 	// assert /system/bin/su\0 = 15 bytes.
-	BUILD_BUG_ON(sizeof(su) > 16); // compielr might to pad
-	BUILD_BUG_ON(sizeof(su) < 15);
+	BUILD_BUG_ON(sizeof(SU_PATH) + 1 != 16);
 
 	/*
-	 * it seems this is actually the slowest part, we peek last word first to speed it up
+	 * it seems this is actually the slowest part, so we peek last word first to speed it up
 	 * NOTE: get_user rets EFAULT on err, so if we are copying a pointer
 	 * that goes to nothing, we also detect that and ret fast
 	 *
@@ -153,10 +197,7 @@ static __always_inline void ksu_sucompat_user_common(const char __user **filenam
 	 * but this is fine as we are guaranteed alignment, hardware provides trailing garbeg
 	 * if it is specially crafted and hits a page guard, we just get EFAULT anyway
 	 *
-	 * on 64-bit we do this in 2 word compare, 4 on 32-bit
-	 *
-	 * we can do some bitmasking 0xFFFFFF blah blah to do that tail compare (7 or 3 bytes), 
-	 * but hot damn I hate that shit, lets just have __builtin_memcmp do it for us
+	 * on 64-bit we do this in 2 word compare, 4 on 32-bit, little endian only!
 	 *
 	 */
 
@@ -164,13 +205,14 @@ static __always_inline void ksu_sucompat_user_common(const char __user **filenam
 	if (get_user(buf, &fn_p[1]))
 		return;
 
-	if (likely(!!__builtin_memcmp(&buf, su + sizeof(uintptr_t), sizeof(su) - sizeof(uintptr_t) )))
+	if (likely((buf & 0x00FFFFFFFFFFFFFFUL) != (su_p[1] & 0x00FFFFFFFFFFFFFFUL)))
 		return;
+
 #else
 	if (get_user(buf, &fn_p[3]))
 		return;
 
-	if (likely(!!__builtin_memcmp(&buf, su +  (3 * sizeof(uintptr_t)), sizeof(su) - (3 * sizeof(uintptr_t)) )))
+	if (likely((buf & 0x00FFFFFFUL) != (su_p[3] & 0x00FFFFFFUL)))
 		return;
 
 	if (unlikely(get_user(buf, &fn_p[2])))
@@ -244,7 +286,6 @@ SUCOMPAT_HOOK_TYPE ksu_handle_stat(int *dfd, const char __user **filename_user, 
 // sys_execve, compat_sys_execve
 SUCOMPAT_HOOK_TYPE ksu_handle_execve(const char __user **filename_user, void *argv, void *envp)
 {
-	sys_execve_escape_ksud((void *)filename_user);
 
 #ifdef CONFIG_KSU_FEATURE_ADBROOT
 	ksu_adb_root_handle_execve((void *)filename_user, (void *)envp);
@@ -257,10 +298,8 @@ SUCOMPAT_HOOK_TYPE ksu_handle_execve(const char __user **filename_user, void *ar
 	return 0;
 }
 
-#ifndef CONFIG_KSU_TAMPER_SYSCALL_TABLE
-static __always_inline void ksu_sucompat_kernel_common(void **filename_ptr, void *argv, void *envp, const char *function_name)
+static __always_inline void ksu_sucompat_kernel_common(void **restrict filename_ptr, void *restrict argv, void *restrict envp, const char *function_name)
 {
-	kernel_execve_escape_ksud((void *)filename_ptr);
 
 #ifdef CONFIG_KSU_FEATURE_ADBROOT
 	ksu_adb_root_handle_execveat((void *)filename_ptr, (void *)envp);
@@ -271,20 +310,16 @@ static __always_inline void ksu_sucompat_kernel_common(void **filename_ptr, void
 
 	// it seems this is actually the slowest part, we peek last word first to speed it up
 	// sugar prep
-	const char su[] = SU_PATH;
+	const char su[16] = SU_PATH;
 	uintptr_t *su_p = (uintptr_t *)su;
 	uintptr_t *fn_p = (uintptr_t *)*(char **)filename_ptr;
 
-	// assert /system/bin/su\0 = 15 bytes.
-	BUILD_BUG_ON(sizeof(su) > 16); // compielr might to pad
-	BUILD_BUG_ON(sizeof(su) < 15);
-
 	// getname_flags pads this so nothing to worry about, dereference with confidence!
 #ifdef CONFIG_64BIT
-	if (likely(!!__builtin_memcmp(&fn_p[1], &su_p[1], sizeof(su) - sizeof(uintptr_t) )))
+	if (likely((fn_p[1] & 0x00FFFFFFFFFFFFFFUL) != (su_p[1] & 0x00FFFFFFFFFFFFFFUL)))
 		return;
 #else
-	if (likely(!!__builtin_memcmp(&fn_p[3], &su_p[3], sizeof(su) - (3 * sizeof(uintptr_t)) )))
+	if (likely((fn_p[3] & 0x00FFFFFFUL) != (su_p[3] & 0x00FFFFFFUL)))
 		return;
 
 	if (fn_p[2] != su_p[2])
@@ -324,7 +359,7 @@ no_ksud:
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 // take note: struct filename **filename, for do_execveat_common / do_execve_common on >= 3.14
-int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv, void *envp, int *flags)
+SUCOMPAT_HOOK_TYPE ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv, void *envp, int *flags)
 {
 	struct filename *filename = *filename_ptr;
 	if (IS_ERR(filename)) // see getname_flags
@@ -335,13 +370,12 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv, voi
 }
 #else
 // take note: char **filename, for do_execve_common on < 3.14
-int ksu_legacy_execve_sucompat(const char **filename_ptr, void *argv, void *envp)
+SUCOMPAT_HOOK_TYPE ksu_legacy_execve_sucompat(const char **filename_ptr, void *argv, void *envp)
 {
 	ksu_sucompat_kernel_common((void **)filename_ptr, argv, envp, "do_execve_common");
 	return 0;
 }
 #endif
-#endif // CONFIG_KSU_TAMPER_SYSCALL_TABLE
 
 #ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 static void syscall_table_sucompat_enable();

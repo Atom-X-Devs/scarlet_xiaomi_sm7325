@@ -53,7 +53,7 @@ static inline int ksu_handle_fd_request(void __user *arg4)
 
 	if (copy_to_user(arg4, &fd, sizeof(fd))) {
 		pr_err("install ksu fd reply err\n");
-		close_fd(fd);
+		ksu_close_fd(fd);
 	}
 
 	return 0;
@@ -164,8 +164,8 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 		if (original_release_buf[0] == '\0') {
 			struct new_utsname *u_curr = utsname();
 			// we save current version as the original before modifying
-			strncpy(original_release_buf, u_curr->release, sizeof(original_release_buf));
-			strncpy(original_version_buf, u_curr->version, sizeof(original_version_buf));
+			strscpy(original_release_buf, u_curr->release, sizeof(original_release_buf));
+			strscpy(original_version_buf, u_curr->version, sizeof(original_version_buf));
 			pr_info("sys_reboot: original uname saved: %s %s\n", original_release_buf, original_version_buf);
 		}
 
@@ -182,8 +182,8 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 		struct new_utsname *u = utsname();
 
 		down_write(&uts_sem);
-		strncpy(u->release, release_buf, sizeof(u->release));
-		strncpy(u->version, version_buf, sizeof(u->version));
+		strscpy(u->release, release_buf, sizeof(u->release));
+		strscpy(u->version, version_buf, sizeof(u->version));
 		up_write(&uts_sem);
 
 		// we write our confirmation on **
