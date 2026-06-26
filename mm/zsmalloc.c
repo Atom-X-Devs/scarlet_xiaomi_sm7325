@@ -914,6 +914,18 @@ unlock:
 	return 0;
 }
 
+/*
+ * __free_zspage_lockless(): release the component pages and metadata.
+ * The caller owns every page lock and the zspage is off the class lists.
+ * zs_free() uses it after dropping class->lock.
+ *
+ * __free_zspage(): release and account for a detached zspage while
+ * holding class->lock. Used by the deferred worker and the wrapper below.
+ *
+ * free_zspage(): compaction's wrapper under class->lock. Try to lock
+ * every page before detaching the empty zspage and calling __free_zspage().
+ * Schedule deferred freeing if any page lock is busy.
+ */
 static void __free_zspage_lockless(struct zs_pool *pool, struct zspage *zspage)
 {
 	struct page *page, *next;
@@ -1842,10 +1854,7 @@ static void replace_sub_page(struct size_class *class, struct zspage *zspage,
 
 static bool zs_page_isolate(struct page *page, isolate_mode_t mode)
 {
-	/*
-	 * Page is locked so zspage couldn't be destroyed. For detail, look at
-	 * lock_zspage in free_zspage.
-	 */
+	/* The page lock prevents release of the zspage during isolation. */
 	VM_BUG_ON_PAGE(PageIsolated(page), page);
 
 	return true;
@@ -1972,10 +1981,7 @@ static void zs_unregister_migration(struct zs_pool *pool)
 	iput(pool->inode);
 }
 
-/*
- * Caller should hold page_lock of all pages in the zspage
- * In here, we cannot use zspage meta data.
- */
+/* Detach empty zspages before waiting for their page locks. */
 static void async_free_zspage(struct work_struct *work)
 {
 	int i;
