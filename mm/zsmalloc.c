@@ -38,6 +38,9 @@
  *	pool->lock
  *	class->lock
  *	zspage->lock
+ *
+ * With class-index encoding, zs_free() and zs_rebind_handle() resolve
+ * the class directly and serialize against relocation using class->lock.
  */
 
 #include <linux/module.h>
@@ -444,7 +447,7 @@ static void cache_free_zspage(struct zs_pool *pool, struct zspage *zspage)
 
 /*
  * Serialize location updates with class->lock once the zspage is shared.
- * Pair with lockless allocated-state checks and prevent store tearing.
+ * Pair with lockless class lookups and allocated-state checks.
  */
 static void record_obj(struct zs_handle *handle, unsigned long obj)
 {
@@ -1442,6 +1445,12 @@ static void obj_free(int class_size, unsigned long obj)
 	mod_zspage_inuse(zspage, -1);
 }
 
+/*
+ * With an encoded class index, the first read identifies only the class.
+ * Re-read after taking class->lock because compaction and page migration
+ * can still change the location. The fallback pins the location with
+ * pool->lock until it acquires class->lock.
+ */
 static void obj_class_get_and_lock(struct zs_pool *pool,
 				   const struct zs_handle *handle,
 				   unsigned long *objp,
@@ -1451,14 +1460,25 @@ static void obj_class_get_and_lock(struct zs_pool *pool,
 {
 	struct page *page;
 
-	/* Neither compaction nor page migration can move the handle here. */
+#if ZS_OBJ_CLASS_BITS > 0
+	unsigned long obj = handle_to_obj(handle);
+	unsigned int class_idx = (obj >> ZS_OBJ_IDX_BITS) & ZS_OBJ_CLASS_MASK;
+
+	*classp = pool->size_class[class_idx];
+	spin_lock(&(*classp)->lock);
+#else
 	read_lock(&pool->lock);
+#endif
+
 	*objp = handle_to_obj(handle);
 	obj_to_page(*objp, &page);
 	*zspagep = get_zspage(page);
+
+#if ZS_OBJ_CLASS_BITS == 0
 	*classp = zspage_class(pool, *zspagep);
 	spin_lock(&(*classp)->lock);
 	read_unlock(&pool->lock);
+#endif
 }
 
 void zs_free(struct zs_pool *pool, struct zs_handle *handle)
@@ -1841,10 +1861,7 @@ static int zs_page_migrate(struct address_space *mapping, struct page *newpage,
 
 	pool = mapping->private_data;
 
-	/*
-	 * The pool migrate_lock protects the race between zpage migration
-	 * and zs_free() / zs_rebind_handle().
-	 */
+	/* Serialize with readers and with handle lookups on fallback layouts. */
 	write_lock(&pool->lock);
 	zspage = get_zspage(page);
 	class = zspage_class(pool, zspage);
@@ -1895,10 +1912,7 @@ static int zs_page_migrate(struct address_space *mapping, struct page *newpage,
 	kunmap_local(s_addr);
 
 	replace_sub_page(class, zspage, newpage, page);
-	/*
-	 * Since we complete the data copy and set up new zspage structure,
-	 * it's okay to release migration_lock.
-	 */
+	/* The copy and page chain update are complete. */
 	write_unlock(&pool->lock);
 	spin_unlock(&class->lock);
 	zspage_write_unlock(zspage);
@@ -2031,8 +2045,8 @@ static unsigned long __zs_compact(struct zs_pool *pool,
 	unsigned long pages_freed = 0;
 
 	/*
-	 * Serialize against handle lookups in zs_free() and zs_rebind_handle()
-	 * as well as zpage allocation/free
+	 * Serialize with handle lookups that use pool->lock and with
+	 * allocation, freeing and rebinding under class->lock.
 	 */
 	write_lock(&pool->lock);
 	spin_lock(&class->lock);
