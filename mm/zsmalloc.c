@@ -83,13 +83,14 @@
 #define ZS_HANDLE_SIZE sizeof(struct zs_handle *)
 
 /*
- * Object location (<PFN>, <obj_idx>) is encoded as
- * a single (unsigned long) handle value.
+ * The unsigned long object location is encoded as:
  *
- * The zero-based object index is stored as <obj_idx> + 1 so that even
- * object 0 on PFN 0 has a nonzero encoded location.
+ * MSB [ PFN | optional class index | object index + 1 ] LSB
  *
- * This is made more complicated by various memory models and PAE.
+ * The one-based index keeps object 0 on PFN 0 distinct from an empty
+ * handle. The class index is invariant across compaction and page
+ * migration. The PFN field is sized for the architecture's maximum
+ * physical address width.
  */
 
 #ifndef MAX_POSSIBLE_PHYSMEM_BITS
@@ -97,8 +98,8 @@
 #define MAX_POSSIBLE_PHYSMEM_BITS MAX_PHYSMEM_BITS
 #else
 /*
- * If this definition of MAX_PHYSMEM_BITS is used, OBJ_INDEX_BITS will just
- * be PAGE_SHIFT
+ * Without an architecture limit, reserve all possible PFN bits.
+ * This leaves PAGE_SHIFT low bits and no space for the class index.
  */
 #define MAX_POSSIBLE_PHYSMEM_BITS BITS_PER_LONG
 #endif
@@ -118,17 +119,38 @@
 #define OBJ_TAG_BITS	1
 #define OBJ_TAG_MASK	OBJ_ALLOCATED_TAG
 
-#define OBJ_INDEX_BITS	(BITS_PER_LONG - _PFN_BITS)
-#define OBJ_INDEX_MASK	((_AC(1, UL) << OBJ_INDEX_BITS) - 1)
+#define ZS_OBJ_PFN_SHIFT	(BITS_PER_LONG - _PFN_BITS)
 
 #define HUGE_BITS	1
 #define FULLNESS_BITS	4
 #define CLASS_BITS	8
 #define MAGIC_VAL_BITS	8
 
+#define MIN(a, b) ((a) <= (b) ? (a) : (b))
 #define MAX(a, b) ((a) >= (b) ? (a) : (b))
 
 #define ZS_MAX_PAGES_PER_ZSPAGE	(_AC(CONFIG_ZSMALLOC_CHAIN_SIZE, UL))
+#define ZS_MIN_ALLOC_FLOOR	32UL
+#define ZS_MAX_OBJS_PER_ZSPAGE \
+	(ZS_MAX_PAGES_PER_ZSPAGE * (1UL << PAGE_SHIFT) / ZS_MIN_ALLOC_FLOOR)
+
+/*
+ * Reserve the class field only when the remaining bits can encode every
+ * object at the minimum allocation floor. The capacity must be strictly
+ * greater than the maximum object count because index zero is reserved.
+ */
+#if BITS_PER_LONG >= 64 && ZS_OBJ_PFN_SHIFT > (CLASS_BITS + 1) && \
+	(1UL << (ZS_OBJ_PFN_SHIFT - (CLASS_BITS + 1))) > ZS_MAX_OBJS_PER_ZSPAGE
+#define ZS_OBJ_CLASS_BITS	(CLASS_BITS + 1)
+#else
+#define ZS_OBJ_CLASS_BITS	0
+#endif
+
+#define ZS_OBJ_CLASS_MASK	((1UL << ZS_OBJ_CLASS_BITS) - 1)
+#define ZS_OBJ_IDX_BITS		(ZS_OBJ_PFN_SHIFT - ZS_OBJ_CLASS_BITS)
+#define ZS_OBJ_IDX_MASK		((1UL << ZS_OBJ_IDX_BITS) - 1)
+
+static_assert(ZS_OBJ_IDX_BITS > 0);
 
 /* each chunk includes extra space to keep handle */
 #define ZS_MAX_ALLOC_SIZE	PAGE_SIZE
@@ -148,12 +170,16 @@
  */
 #define ZS_SIZE_CLASS_DELTA	(PAGE_SIZE >> CLASS_BITS)
 #define ZS_MIN_ALLOC_RAW \
-	DIV_ROUND_UP(ZS_MAX_PAGES_PER_ZSPAGE * PAGE_SIZE, OBJ_INDEX_MASK)
-#define ZS_MIN_ALLOC_SIZE MAX(32UL, ALIGN(ZS_MIN_ALLOC_RAW, ZS_ALIGN))
+	DIV_ROUND_UP(ZS_MAX_PAGES_PER_ZSPAGE * PAGE_SIZE, ZS_OBJ_IDX_MASK)
+/* A PAGE_SIZE class always uses one page, even on narrow encodings. */
+#define ZS_MIN_ALLOC_SIZE \
+	MIN(ZS_MAX_ALLOC_SIZE, MAX(ZS_MIN_ALLOC_FLOOR, \
+				   ALIGN(ZS_MIN_ALLOC_RAW, ZS_ALIGN)))
 
-static_assert(ZS_MIN_ALLOC_SIZE <= ZS_MAX_ALLOC_SIZE);
 #define ZS_SIZE_CLASSES	(DIV_ROUND_UP(ZS_MAX_ALLOC_SIZE - ZS_MIN_ALLOC_SIZE, \
 				      ZS_SIZE_CLASS_DELTA) + 1)
+
+static_assert(ZS_SIZE_CLASSES <= (1U << (CLASS_BITS + 1)));
 
 /*
  * Pages are distinguished by the ratio of used memory (that is the ratio
@@ -801,30 +827,33 @@ static struct page *get_next_page(struct page *page)
 static void obj_to_location(unsigned long obj, struct page **page,
 				unsigned int *obj_idx)
 {
-	VM_WARN_ON_ONCE(!(obj & OBJ_INDEX_MASK));
+	VM_WARN_ON_ONCE(!(obj & ZS_OBJ_IDX_MASK));
 
-	*page = pfn_to_page(obj >> OBJ_INDEX_BITS);
-	*obj_idx = (obj & OBJ_INDEX_MASK) - 1;
+	*page = pfn_to_page(obj >> ZS_OBJ_PFN_SHIFT);
+	*obj_idx = (obj & ZS_OBJ_IDX_MASK) - 1;
 }
 
 static void obj_to_page(unsigned long obj, struct page **page)
 {
-	*page = pfn_to_page(obj >> OBJ_INDEX_BITS);
+	*page = pfn_to_page(obj >> ZS_OBJ_PFN_SHIFT);
 }
 
 /**
- * location_to_obj - get obj value encoded from (<page>, <obj_idx>)
- * @page: page object resides in zspage
- * @obj_idx: object index
+ * location_to_obj - encode a page, object index and size class
+ * @page: page in the zspage where the object starts
+ * @obj_idx: zero-based object index
+ * @class_idx: size class index, ignored when ZS_OBJ_CLASS_BITS is zero
  */
-static unsigned long location_to_obj(struct page *page, unsigned int obj_idx)
+static unsigned long location_to_obj(struct page *page, unsigned int obj_idx,
+				     unsigned int class_idx)
 {
 	unsigned long obj;
 
-	VM_WARN_ON_ONCE((unsigned long)obj_idx + 1 > OBJ_INDEX_MASK);
+	VM_WARN_ON_ONCE((unsigned long)obj_idx + 1 > ZS_OBJ_IDX_MASK);
 
-	obj = page_to_pfn(page) << OBJ_INDEX_BITS;
-	obj |= ((unsigned long)obj_idx + 1) & OBJ_INDEX_MASK;
+	obj = page_to_pfn(page) << ZS_OBJ_PFN_SHIFT;
+	obj |= (unsigned long)(class_idx & ZS_OBJ_CLASS_MASK) << ZS_OBJ_IDX_BITS;
+	obj |= ((unsigned long)obj_idx + 1) & ZS_OBJ_IDX_MASK;
 
 	return obj;
 }
@@ -1311,7 +1340,7 @@ static unsigned long obj_malloc(struct zs_pool *pool,
 	kunmap_local(vaddr);
 	mod_zspage_inuse(zspage, 1);
 
-	obj = location_to_obj(m_page, obj);
+	obj = location_to_obj(m_page, obj, zspage->class);
 	record_obj(handle, obj);
 
 	return obj;
@@ -1795,12 +1824,10 @@ static int zs_page_migrate(struct address_space *mapping, struct page *newpage,
 	struct zs_pool *pool;
 	struct size_class *class;
 	struct zspage *zspage;
-	struct page *dummy;
 	void *s_addr, *d_addr, *addr;
 	unsigned int offset;
 	struct zs_handle *handle;
 	unsigned long old_obj, new_obj;
-	unsigned int obj_idx;
 
 	/*
 	 * We cannot support the _NO_COPY case here, because copy needs to
@@ -1860,9 +1887,8 @@ static int zs_page_migrate(struct address_space *mapping, struct page *newpage,
 		handle = obj_allocated(page, addr);
 		if (handle) {
 			old_obj = handle_to_obj(handle);
-			obj_to_location(old_obj, &dummy, &obj_idx);
-			new_obj = (unsigned long)location_to_obj(newpage,
-								obj_idx);
+			new_obj = (page_to_pfn(newpage) << ZS_OBJ_PFN_SHIFT) |
+				  (old_obj & GENMASK(ZS_OBJ_PFN_SHIFT - 1, 0));
 			record_obj(handle, new_obj);
 		}
 	}
