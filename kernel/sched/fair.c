@@ -39,7 +39,10 @@
 enum sched_tunable_scaling sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_NONE;
 
 /*
- * Minimal preemption granularity for CPU-bound tasks:
+ * Default base time slice (request size r_i) for SCHED_NORMAL/SCHED_BATCH:
+ *
+ * Under EEVDF this is the request size used to compute the virtual
+ * deadline; see update_deadline().
  *
  * (default: 0.28 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
@@ -12489,7 +12492,7 @@ static inline void task_tick_core(struct rq *rq, struct task_struct *curr)
 	 * if the sibling is forced idle, then trigger schedule to
 	 * give forced idle task a chance.
 	 *
-	 * sched_slice() considers only this active rq and it gets the
+	 * __entity_slice_used() considers only this active rq and it gets the
 	 * whole slice. But during force idle, we have siblings acting
 	 * like a single runqueue and hence we need to consider runnable
 	 * tasks on this CPU and the forced idle CPU. Ideally, we should
