@@ -131,6 +131,9 @@ struct psi_trigger {
 	/* Pending event flag */
 	int event;
 
+	/* Optional external wait queue for in-kernel consumers */
+	wait_queue_head_t *ext_wq;
+
 	/* Tracking window */
 	struct psi_window win;
 
