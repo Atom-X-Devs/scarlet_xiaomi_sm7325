@@ -476,13 +476,13 @@ static int omap2430_probe(struct platform_device *pdev)
 			ARRAY_SIZE(musb_resources));
 	if (ret) {
 		dev_err(&pdev->dev, "failed to add resources\n");
-		goto err_put_control_otghs;
+		goto err2;
 	}
 
 	ret = platform_device_add_data(musb, pdata, sizeof(*pdata));
 	if (ret) {
 		dev_err(&pdev->dev, "failed to add platform_data\n");
-		goto err_put_control_otghs;
+		goto err2;
 	}
 
 	pm_runtime_enable(glue->dev);
@@ -497,9 +497,7 @@ static int omap2430_probe(struct platform_device *pdev)
 
 err3:
 	pm_runtime_disable(glue->dev);
-err_put_control_otghs:
-	if (!IS_ERR(glue->control_otghs))
-		put_device(glue->control_otghs);
+
 err2:
 	platform_device_put(musb);
 
@@ -513,8 +511,6 @@ static int omap2430_remove(struct platform_device *pdev)
 
 	platform_device_unregister(glue->musb);
 	pm_runtime_disable(glue->dev);
-	if (!IS_ERR(glue->control_otghs))
-		put_device(glue->control_otghs);
 
 	return 0;
 }

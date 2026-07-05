@@ -359,7 +359,7 @@ static void acm_process_notification(struct acm *acm, unsigned char *buf)
 static void acm_ctrl_irq(struct urb *urb)
 {
 	struct acm *acm = urb->context;
-	struct usb_cdc_notification *dr;
+	struct usb_cdc_notification *dr = urb->transfer_buffer;
 	unsigned int current_size = urb->actual_length;
 	unsigned int expected_size, copy_size, alloc_size;
 	int retval;
@@ -386,25 +386,14 @@ static void acm_ctrl_irq(struct urb *urb)
 
 	usb_mark_last_busy(acm->dev);
 
-	if (acm->nb_index == 0) {
-		/*
-		 * The first chunk of a message must contain at least the
-		 * notification header with the length field, otherwise we
-		 * can't get an expected_size.
-		 */
-		if (current_size < sizeof(struct usb_cdc_notification)) {
-			dev_dbg(&acm->control->dev, "urb too short\n");
-			goto exit;
-		}
-		dr = urb->transfer_buffer;
-	} else {
+	if (acm->nb_index)
 		dr = (struct usb_cdc_notification *)acm->notification_buffer;
-	}
+
 	/* size = notification-header + (optional) data */
 	expected_size = sizeof(struct usb_cdc_notification) +
 					le16_to_cpu(dr->wLength);
 
-	if (acm->nb_index != 0 || current_size < expected_size) {
+	if (current_size < expected_size) {
 		/* notification is transmitted fragmented, reassemble */
 		if (acm->nb_size < expected_size) {
 			u8 *new_buffer;
@@ -1520,18 +1509,14 @@ skip_countries:
 	acm->nb_index = 0;
 	acm->nb_size = 0;
 
+	dev_info(&intf->dev, "ttyACM%d: USB ACM device\n", minor);
+
 	acm->line.dwDTERate = cpu_to_le32(9600);
 	acm->line.bDataBits = 8;
 	acm_set_line(acm, &acm->line);
 
 	usb_driver_claim_interface(&acm_driver, data_interface, acm);
 	usb_set_intfdata(data_interface, acm);
-
-	if (quirks & CLEAR_HALT_CONDITIONS) {
-		/* errors intentionally ignored */
-		usb_clear_halt(usb_dev, acm->in);
-		usb_clear_halt(usb_dev, acm->out);
-	}
 
 	tty_dev = tty_port_register_device(&acm->port, acm_tty_driver, minor,
 			&control_interface->dev);
@@ -1540,7 +1525,10 @@ skip_countries:
 		goto alloc_fail6;
 	}
 
-	dev_info(&intf->dev, "ttyACM%d: USB ACM device\n", minor);
+	if (quirks & CLEAR_HALT_CONDITIONS) {
+		usb_clear_halt(usb_dev, acm->in);
+		usb_clear_halt(usb_dev, acm->out);
+	}
 
 	return 0;
 alloc_fail6:
@@ -1745,16 +1733,13 @@ static const struct usb_device_id acm_ids[] = {
 	{ USB_DEVICE(0x0870, 0x0001), /* Metricom GS Modem */
 	.driver_info = NO_UNION_NORMAL, /* has no union descriptor */
 	},
-	{ USB_DEVICE(0x045b, 0x023c),	/* Renesas R-Car H3 USB Download mode */
+	{ USB_DEVICE(0x045b, 0x023c),	/* Renesas USB Download mode */
 	.driver_info = DISABLE_ECHO,	/* Don't echo banner */
 	},
-	{ USB_DEVICE(0x045b, 0x0247),	/* Renesas R-Car D3 USB Download mode */
+	{ USB_DEVICE(0x045b, 0x0248),	/* Renesas USB Download mode */
 	.driver_info = DISABLE_ECHO,	/* Don't echo banner */
 	},
-	{ USB_DEVICE(0x045b, 0x0248),	/* Renesas R-Car M3-N USB Download mode */
-	.driver_info = DISABLE_ECHO,	/* Don't echo banner */
-	},
-	{ USB_DEVICE(0x045b, 0x024D),	/* Renesas R-Car E3 USB Download mode */
+	{ USB_DEVICE(0x045b, 0x024D),	/* Renesas USB Download mode */
 	.driver_info = DISABLE_ECHO,	/* Don't echo banner */
 	},
 	{ USB_DEVICE(0x0e8d, 0x0003), /* FIREFLY, MediaTek Inc; andrey.arapov@gmail.com */

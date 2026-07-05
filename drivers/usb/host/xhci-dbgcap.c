@@ -975,15 +975,8 @@ int xhci_dbc_suspend(struct xhci_hcd *xhci)
 	if (!dbc)
 		return 0;
 
-	switch (dbc->state) {
-	case DS_ENABLED:
-	case DS_CONNECTED:
-	case DS_CONFIGURED:
+	if (dbc->state == DS_CONFIGURED)
 		dbc->resume_required = 1;
-		break;
-	default:
-		break;
-	}
 
 	xhci_dbc_stop(xhci);
 
