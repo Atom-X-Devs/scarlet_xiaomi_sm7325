@@ -324,7 +324,7 @@
 		aw8692x_trig_config = /bits/ 8 <0 0 0 1 0 2 0 0
 						0 0 0 1 0 2 0 0
 						0 0 0 1 0 2 0 0>;
-		aw8692x_bst_vol_default = <8000>;
+		aw8692x_bst_vol_default = <7938>;
 		aw8692x_is_enabled_track_en;
 		awinic,support_predefined_pattern;
 
