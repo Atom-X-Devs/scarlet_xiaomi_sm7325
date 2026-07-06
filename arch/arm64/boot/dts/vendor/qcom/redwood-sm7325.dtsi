@@ -304,6 +304,25 @@
 		mode = <1>;
 		f0_pre = <1700>;
 
+		/*************aw869x***************/
+		aw869x_f0_cali_percent = /bits/ 8 <7>;
+		aw869x_cont_drv_lev = /bits/ 8 <60>;
+		aw869x_cont_drv_lvl_ov = /bits/ 8 <60>;
+		aw869x_cont_td = <0xEF>;
+		aw869x_cont_zc_thr = <0x08F8>;
+		aw869x_cont_num_brk = /bits/ 8 <3>;
+		aw869x_f0_coeff = <260>;
+		aw869x_duration_time = /bits/ 8 <20 30 60>;
+		aw869x_tset = /bits/ 8 <0x1A>;
+		aw869x_r_spare = /bits/ 8 <0x68>;
+		aw869x_bstdbg = /bits/ 8 <0x30 0xEB 0xD4 0 0 0>;
+		aw869x_f0_trace_parameter = /bits/ 8 <0x09 0x03 0x01 0x1F>;
+		aw869x_bemf_config = /bits/ 8 <0 0x08 0x03 0xF8>;
+		aw869x_trig_config = /bits/ 8 <0 0 0 1 0 2 0 0
+					       0 0 0 1 0 2 0 0
+					       0 0 0 1 0 2 0 0>;
+		aw869x_bst_vol_default = <4375>;
+
 		/*************aw8692x***************/
 		aw8692x_f0_cali_percent = /bits/ 8 <7>;
 		aw8692x_cont_drv1_lvl =  /bits/ 8 <0x4F>;
