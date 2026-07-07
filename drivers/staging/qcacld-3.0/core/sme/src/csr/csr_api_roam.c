@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -17431,6 +17431,8 @@ static void csr_cm_update_driver_assoc_ies(
 		MIN_TX_PWR_CAP, MAX_TX_PWR_CAP};
 	uint8_t max_tx_pwr_cap = 0;
 	uint8_t supp_chan_ie[DOT11F_IE_SUPPCHANNELS_MAX_LEN], supp_chan_ie_len;
+	struct s_ext_cap *extcap;
+	uint8_t *ext_cap_ie;
 	static const uint8_t qcn_ie[] = {0x8C, 0xFD, 0xF0, 0x1,
 					 QCN_IE_VERSION_SUBATTR_ID,
 					 QCN_IE_VERSION_SUBATTR_DATA_LEN,
@@ -17441,6 +17443,14 @@ static void csr_cm_update_driver_assoc_ies(
 	rso_mode_cfg->assoc_ie_length = session->nAddIEAssocLength;
 	qdf_mem_copy(rso_mode_cfg->assoc_ie, session->pAddIEAssoc,
 		     rso_mode_cfg->assoc_ie_length);
+
+	ext_cap_ie = (uint8_t *)wlan_get_ie_ptr_from_eid(WLAN_ELEMID_XCAPS,
+							 rso_mode_cfg->assoc_ie,
+							 rso_mode_cfg->assoc_ie_length);
+	if (ext_cap_ie && wma_is_mbssid_enabled()) {
+		extcap = (struct s_ext_cap *)&ext_cap_ie[2];
+		extcap->multi_bssid = 1;
+	}
 
 	if (session->pConnectBssDesc)
 		max_tx_pwr_cap = csr_get_cfg_max_tx_power(
@@ -21460,12 +21470,15 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 			mac_ctx->psoc);
 		mac_ctx->sme.set_connection_info_cb(false);
 
-		if (roam_synch_data->pmk_len)
+		if (roam_synch_data->pmk_len) {
+			mlme_debug("Received pmk in roam sync. Length: %d",
+				   roam_synch_data->pmk_len);
 			csr_check_and_set_sae_single_pmk_cap(
 						mac_ctx, session,
 						session_id,
 						roam_synch_data->pmk,
 						roam_synch_data->pmk_len);
+		}
 
 		if (ucfg_pkt_capture_get_pktcap_mode(mac_ctx->psoc))
 			ucfg_pkt_capture_record_channel(vdev);
