@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2026 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -270,9 +270,22 @@
  * 3.140 Add H2T MPDUQ_AND_MSDUQ_INFO_HDR and MPDUQ_OF_MSDUQ_INFO defs.
  * 3.141 Add H2T HTT_AST_INFO for RxOLE.
  * 3.142 Add T2H GLOBAL_PEER_ID_UNMAP def, update H2T MPDUQ_OR_MSDUQ_INFO def.
+ * 3.143 Add T2H HAPS msg def.
+ * 3.144 Add svc_inst_req_type in htt_h2t_mpduq_or_msduq_info.
+ * 3.145 Add 3rd bit for rx_hdr_len in RX_RING_SELECTION_CFG
+ * 3.146 Add HTT_RXOLE_ASE_STATUS_RING def.
+ * 3.147 Add direct_refill flag in SRING_SETUP msg.
+ * 3.148 Add HTT_PEER_CFR_CAPTURE_BW_320MHZ def.
+ * 3.149 Add SAM fields in MPDUQ_OR_MSDUQ_INFO.
+ * 3.150 Add htt_reg_write_selection definitions.
+ * 3.151 Add HTT_H2T DAL_MODE_INFO def.
+ * 3.152 Add decap_type in htt_rx_peer_metadata_v1b.
+ * 3.153 Add passthru_pkt flag in rx_peer_metadata structs.
+ * 3.154 Add T2H PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP msg def.
+ * 3.155 Add rxmon hdrlen specs in rx_ring_selection_cfg_t.
  */
 #define HTT_CURRENT_VERSION_MAJOR 3
-#define HTT_CURRENT_VERSION_MINOR 142
+#define HTT_CURRENT_VERSION_MINOR 155
 
 #define HTT_NUM_TX_FRAG_DESC  1024
 
@@ -771,7 +784,10 @@ typedef enum {
     HTT_STATS_AST_ENTRY_TAG                        = 132, /* htt_ast_entry_tlv */
     HTT_STATS_TX_PDEV_BE_DL_MU_OFDMA_STATS_TAG     = 133, /* htt_tx_pdev_dl_be_mu_ofdma_sch_stats_tlv, TOPIC=advanced */
     HTT_STATS_TX_PDEV_BE_UL_MU_OFDMA_STATS_TAG     = 134, /* htt_tx_pdev_ul_be_mu_ofdma_sch_stats_tlv, TOPIC=advanced */
-    HTT_STATS_TX_PDEV_RATE_STATS_BE_OFDMA_TAG      = 135, /* htt_tx_pdev_rate_stats_be_ofdma_tlv */
+    HTT_STATS_TX_PDEV_RATE_BE_BN_OFDMA_TAG         = 135, /* htt_stats_tx_pdev_rate_be_bn_ofdma_tlv */
+        /* retain deprecated name as an alias */
+        HTT_STATS_TX_PDEV_RATE_STATS_BE_OFDMA_TAG =
+             HTT_STATS_TX_PDEV_RATE_BE_BN_OFDMA_TAG,
     HTT_STATS_RX_PDEV_UL_MUMIMO_TRIG_BE_STATS_TAG  = 136, /* htt_rx_pdev_ul_mumimo_trig_be_stats_tlv, TOPIC=advanced */
     HTT_STATS_TX_SELFGEN_BE_ERR_STATS_TAG          = 137, /* htt_tx_selfgen_be_err_stats_tlv, TOPIC=advanced */
     HTT_STATS_TX_SELFGEN_BE_STATS_TAG              = 138, /* htt_tx_selfgen_be_stats_tlv, TOPIC=advanced */
@@ -779,7 +795,10 @@ typedef enum {
     HTT_STATS_TX_PDEV_BE_UL_MU_MIMO_STATS_TAG      = 140, /* htt_tx_pdev_be_ul_mu_mimo_sch_stats_tlv */
     HTT_STATS_RX_PDEV_BE_UL_MIMO_USER_STATS_TAG    = 141, /* htt_rx_pdev_be_ul_mimo_user_stats_tlv */
     HTT_STATS_RX_RING_STATS_TAG                    = 142, /* htt_rx_fw_ring_stats_tlv_v */
-    HTT_STATS_RX_PDEV_BE_UL_TRIG_STATS_TAG         = 143, /* htt_rx_pdev_be_ul_trigger_stats_tlv, TOPIC=advanced */
+    HTT_STATS_RX_PDEV_BE_BN_UL_TRIG_TAG            = 143, /* htt_stats_rx_pdev_be_bn_ul_trig_tlv, TOPIC=advanced */
+        /* retain deprecated name as an alias */
+        HTT_STATS_RX_PDEV_BE_UL_TRIG_STATS_TAG =
+            HTT_STATS_RX_PDEV_BE_BN_UL_TRIG_TAG,
     HTT_STATS_TX_PDEV_SAWF_RATE_STATS_TAG          = 144, /* htt_tx_pdev_rate_stats_sawf_tlv, TOPIC=advanced */
     HTT_STATS_STRM_GEN_MPDUS_TAG                   = 145, /* htt_stats_strm_gen_mpdus_tlv_t */
     HTT_STATS_STRM_GEN_MPDUS_DETAILS_TAG           = 146, /* htt_stats_strm_gen_mpdus_details_tlv_t */
@@ -810,7 +829,8 @@ typedef enum {
     HTT_STATS_TX_PDEV_AP_EDCA_PARAMS_STATS_TAG     = 171, /* htt_tx_pdev_ap_edca_params_stats_tlv_v, TOPIC=advanced */
     HTT_STATS_TXBF_OFDMA_AX_STEER_MPDU_STATS_TAG   = 172, /* htt_txbf_ofdma_ax_steer_mpdu_stats_tlv, TOPIC=advanced */
     HTT_STATS_TXBF_OFDMA_BE_STEER_MPDU_STATS_TAG   = 173, /* htt_txbf_ofdma_be_steer_mpdu_stats_tlv, TOPIC=advanced */
-    HTT_STATS_PEER_AX_OFDMA_STATS_TAG              = 174, /* htt_peer_ax_ofdma_stats_tlv */
+    HTT_STATS_PEER_OFDMA_STATS_TAG                 = 174, /* htt_stats_peer_ofdma_stats_tlv */
+        HTT_STATS_PEER_AX_OFDMA_STATS_TAG = HTT_STATS_PEER_OFDMA_STATS_TAG, /* DEPRECATED */
     HTT_STATS_TX_PDEV_MU_EDCA_PARAMS_STATS_TAG     = 175, /* htt_tx_pdev_mu_edca_params_stats_tlv_v, TOPIC=advanced */
     HTT_STATS_PDEV_MBSSID_CTRL_FRAME_STATS_TAG     = 176, /* htt_pdev_mbssid_ctrl_frame_stats_tlv */
     HTT_STATS_TX_PDEV_MLO_ABORT_TAG                = 177, /* htt_tx_pdev_stats_mlo_abort_tlv_v */
@@ -850,6 +870,60 @@ typedef enum {
     HTT_STATS_PDEV_UL_MUMIMO_HIST_INELIGIBILITY_TAG = 211, /* htt_stats_pdev_ulmumimo_hist_ineligibility_tlv */
     HTT_STATS_PHY_PAPRD_PB_TAG                      = 212, /* htt_stats_phy_paprd_pb_tlv */
     HTT_STATS_HDS_PROF_STATS_TAG                    = 213, /* htt_stat_hds_prof_stats_tlv */
+    HTT_STATS_TX_PDEV_MDSB_NUM_USERS_HISTOGRAM_TLV_TAG = 214, /* htt_stats_tx_pdev_mdsb_num_users_histogram_tlv */
+    HTT_STATS_TX_PDEV_PENDING_SEQ_CNT_ON_SCHED_POST_HIST_TAG = 215, /* htt_stats_tx_pdev_pending_seq_cnt_on_sched_post_hist_tlv */
+    HTT_STATS_TX_PDEV_PENDING_SEQ_CNT_IN_HWQ_HIST_TAG        = 216, /* htt_stats_tx_pdev_pending_seq_cnt_in_hwq_hist_tlv */
+    HTT_STATS_TX_PDEV_PENDING_SEQ_CNT_IN_TXQ_HIST_TAG        = 217, /* htt_stats_tx_pdev_pending_seq_cnt_in_txq_hist_tlv */
+    HTT_STATS_SCHED_TXQ_EARLY_COMPL_TAG                      = 218, /* htt_stats_sched_txq_early_compl_tlv */
+    HTT_STATS_RX_PDEV_BN_UL_OFDMA_USER_TAG                   = 219, /* htt_stats_rx_pdev_bn_ul_ofdma_user_tlv */
+    HTT_STATS_TX_SELFGEN_BN_ERR_TAG                 = 220, /* htt_stats_tx_selfgen_bn_err_tlv, TOPIC=advanced */
+    HTT_STATS_TX_SELFGEN_BN_TAG                     = 221, /* htt_stats_tx_selfgen_bn_tlv, TOPIC=advanced */
+    HTT_STATS_TX_SELFGEN_BN_SCHED_STATUS_TAG        = 222, /* htt_stats_tx_selfgen_bn_sched_status_tlv, TOPIC=advanced */
+    HTT_STATS_TX_PDEV_BN_DL_MU_OFDMA_STATS_TAG      = 223, /* htt_stats_tx_pdev_bn_dl_mu_ofdma_tlv, TOPIC=advanced */
+    HTT_STATS_TX_PDEV_BN_UL_MU_OFDMA_STATS_TAG      = 224, /* htt_stats_tx_pdev_bn_ul_mu_ofdma_tlv, TOPIC=advanced */
+    HTT_STATS_RX_PEER_TID_REO_QUEUE_BA_TAG          = 225, /* htt_stats_rx_peer_tid_reo_queue_ba_tlv */
+    HTT_STATS_TXBF_OFDMA_BN_NDPA_TAG                = 226, /* htt_stats_txbf_ofdma_bn_ndpa_tlv */
+    HTT_STATS_TXBF_OFDMA_BN_NDP_TAG                 = 227, /* htt_stats_txbf_ofdma_bn_ndp_tlv */
+    HTT_STATS_TXBF_OFDMA_BN_BRP_TAG                 = 228, /* htt_stats_txbf_ofdma_bn_brp_tlv */
+    HTT_STATS_TXBF_OFDMA_BN_STEER_TAG               = 229, /* htt_stats_txbf_ofdma_bn_steer_tlv */
+    HTT_STATS_TXBF_OFDMA_BN_STEER_MPDU_TAG          = 230, /* htt_stats_txbf_ofdma_bn_steer_mpdu_tlv */
+    HTT_STATS_TXBF_OFDMA_BN_PARBW_TAG               = 231, /* htt_stats_txbf_ofdma_bn_parbw_tlv */
+    HTT_STATS_OPTIONAL_CONFIGS_TAG                  = 232, /* htt_stats_optional_configs_tlv */
+    HTT_STATS_PDEV_SAM_TAG                          = 233, /* htt_stats_pdev_sam_tlv */
+    HTT_STATS_FTM_TAG                               = 234, /* htt_stats_ftm_tlv */
+    HTT_STATS_PDEV_FTM_TPCCAL_EXT_TAG               = 235, /* htt_stats_pdev_ftm_tpccal_ext_tlv */
+    HTT_STATS_TX_PDEV_BN_RATE_TAG                   = 236, /* htt_stats_tx_pdev_bn_rate_tlv */
+    HTT_STATS_RX_PDEV_UL_MUMIMO_TRIG_BN_TAG         = 237, /* htt_stats_rx_pdev_ul_mumimo_trig_bn_tlv, TOPIC=advanced */
+    HTT_STATS_RX_PDEV_BN_UL_MIMO_USER_TAG           = 238, /* htt_stats_rx_pdev_bn_ul_mimo_user_tlv */
+    HTT_STATS_TX_PDEV_BN_UL_MU_MIMO_TAG             = 239, /* htt_stats_tx_pdev_bn_ul_mu_mimo_tlv */
+    /* HTT_STATS_PDEV_ANI_HIST_TAG:
+     * htt_stats_pdev_ani_hist_tlv
+     * ani_hist_type:
+     *     0 = 1 sec,
+     *     1 = granular
+     *     2 = 1 sec disabled
+     *     3 = granular disabled
+     */
+    HTT_STATS_PDEV_ANI_HIST_TAG                     = 240,
+    HTT_STATS_ANI_SCALAR_TAG                        = 241, /* htt_stats_ani_scalar_tlv */
+    HTT_STATS_ANI_PKT_CNT_TAG                       = 242, /* htt_stats_ani_pkt_cnt_tlv */
+    HTT_STATS_ANI_CRC_PASS_TAG                      = 243, /* htt_stats_ani_crc_pass_tlv */
+    HTT_STATS_ANI_PER_BLK_ERR_TAG                   = 244, /* htt_stats_ani_per_blk_err_tlv */
+    HTT_STATS_ANI_OTA_ERR_TAG                       = 245, /* htt_stats_ani_ota_err_tlv */
+    HTT_STATS_RESET_HISTORY_TAG                     = 246, /* htt_stats_reset_history_tlv */
+    HTT_STATS_REGDB_CTRY_TAG                        = 247, /* htt_stats_regdb_ctry_tlv */
+    HTT_STATS_REGDB_REGDOMAIN_TAG                   = 248, /* htt_stats_regdb_regdomain_tlv */
+    HTT_STATS_REG_6G_TAG                            = 249, /* htt_stats_reg_6g_tlv*/
+    HTT_STATS_REG_6G_CH_PWR_INFO_TAG                = 250, /* htt_stats_reg_6g_ch_power_info_tlv*/
+    HTT_STATS_REG_6G_OOBE_TAG                       = 251, /* htt_stats_reg_6g_oobe_tlv*/
+    HTT_STATS_TX_SELFGEN_RESP_FRAME_STATS_TAG       = 252, /* htt_stats_tx_selfgen_resp_frame_stats_tlv */
+    HTT_STATS_DPD_HALPHY_TAG                        = 253, /* htt_stats_dpd_halphy_tlv */
+    HTT_STATS_DPD_HW_CAL_PARAMS_TAG                 = 254, /* htt_stats_dpd_hw_cal_params_tlv */
+    HTT_STATS_DPD_HW_CAL_RESULTS_TAG                = 255, /* htt_stats_dpd_hw_cal_results_tlv */
+    HTT_STATS_TX_PDEV_TXOP_DUR_TAG                  = 256, /* htt_stats_tx_pdev_txop_dur_tlv */
+    HTT_STATS_TXQ_COMBINED_SEQ_STATE_TAG            = 257, /* htt_stats_sched_txq_combined_seq_state_tlv */
+    HTT_STATS_CTL_TAG                               = 258, /* htt_stats_ctl_tlv */
+    HTT_STATS_ENHANCED_CTL_TAG                      = 259, /* htt_stats_enhanced_ctl_tlv */
 
     HTT_STATS_MAX_TAG,
 } htt_stats_tlv_tag_t;
@@ -928,6 +1002,7 @@ enum htt_h2t_msg_type {
     HTT_H2T_MSG_TYPE_MPDUQ_AND_MSDUQ_INFO_HDR               = 0x29,
     HTT_H2T_MSG_TYPE_MPDUQ_OR_MSDUQ_INFO                    = 0x2a,
     HTT_H2T_MSG_TYPE_AST_INFO                               = 0x2b,
+    HTT_H2T_MSG_TYPE_DAL_MODE_INFO                          = 0x2c,
 
     /* keep this last */
     HTT_H2T_NUM_MSGS
@@ -5465,7 +5540,8 @@ PREPACK struct htt_sring_setup_t {
              prefetch_timer_cfg:  3,
              response_required:   1,
              ipa_drop_flag:      1,
-             reserved1:          11;
+             direct_refill:      1,
+             reserved1:          10;
     A_UINT32 ipa_drop_low_threshold:    8,
              ipa_drop_high_threshold:   8,
              reserved:                  16;
@@ -5495,6 +5571,10 @@ enum htt_srng_ring_id {
     HTT_LPASS_TO_FW_RXBUF_RING,    /* new LPASS to FW refill ring to recycle rx buffers */
     HTT_HOST3_TO_FW_RXBUF_RING,    /* used by host for EasyMesh feature */
     HTT_HOST4_TO_FW_RXBUF_RING,    /* fourth ring used by host to provide buffers for MGMT packets */
+    HTT_RXDMA_WBM_BUF0_RING,       /* used for SFE Datapath */
+    HTT_RXDMA_WBM_BUF1_RING,       /* used for MGMT Datapath */
+    HTT_RXDMA_WBM_BUF2_RING,       /* used for PPE path */
+    HTT_RXOLE_ASE_STATUS_RING,     /* RxOLE2SW ASE Status ring */
     /* Add Other SRING which can't be directly configured by host software above this line */
 };
 
@@ -5819,6 +5899,27 @@ enum htt_srng_ring_id {
             ((_var) |= ((_val) << HTT_SRING_SETUP_RESPONSE_REQUIRED_S)); \
         } while (0)
 
+#define HTT_SRING_SETUP_IPA_DROP_FLAG_M        0x00100000
+#define HTT_SRING_SETUP_IPA_DROP_FLAG_S        20
+#define HTT_SRING_SETUP_IPA_DROP_FLAG_GET(_var) \
+        (((_var) & HTT_SRING_SETUP_IPA_DROP_FLAG_M) >> \
+                HTT_SRING_SETUP_IPA_DROP_FLAG_S)
+#define HTT_SRING_SETUP_IPA_DROP_FLAG_SET(_var, _val) \
+        do { \
+            HTT_CHECK_SET_VAL(HTT_SRING_SETUP_IPA_DROP_FLAG, _val); \
+            ((_var) |= ((_val) << HTT_SRING_SETUP_IPA_DROP_FLAG_S)); \
+        } while (0)
+
+#define HTT_SRING_SETUP_DIRECT_REFILL_M        0x00200000
+#define HTT_SRING_SETUP_DIRECT_REFILL_S        21
+#define HTT_SRING_SETUP_DIRECT_REFILL_GET(_var) \
+        (((_var) & HTT_SRING_SETUP_DIRECT_REFILL_M) >> \
+                HTT_SRING_SETUP_DIRECT_REFILL_S)
+#define HTT_SRING_SETUP_DIRECT_REFILL_SET(_var, _val) \
+        do { \
+            HTT_CHECK_SET_VAL(HTT_SRING_SETUP_DIRECT_REFILL, _val); \
+            ((_var) |= ((_val) << HTT_SRING_SETUP_DIRECT_REFILL_S)); \
+        } while (0)
 
 /**
  * @brief host -> target RX ring selection config message
@@ -5837,7 +5938,7 @@ enum htt_srng_ring_id {
  *    |-----+--+--+--+--+--+-----------------+----+---+---+---+---------------|
  *    |rsvd1|ED|DT|OV|PS|SS|      ring_id    |     pdev_id    |    msg_type   |
  *    |--------------------------+-----+-----+--------------------------------|
- *    | rsvd2  |RX|RXHDL|   CLD  | CLC | CLM |           ring_buffer_size     |
+ *    |rsvd2|HE|RX|RXHDL|   CLD  | CLC | CLM |           ring_buffer_size     |
  *    |-----------------------------------------------------------------------|
  *    |                           packet_type_enable_flags_0                  |
  *    |-----------------------------------------------------------------------|
@@ -5871,6 +5972,7 @@ enum htt_srng_ring_id {
  *     CLD = config_length_data
  *     RXHDL = rx_hdr_len
  *     RX = rxpcu_filter_enable_flag
+ *     HE = rx_hdr_len extension
  * The message is interpreted as follows:
  * dword0 - b'0:7   - msg_type: This will be set to
  *                    0xc (HTT_H2T_MSG_TYPE_RX_RING_SELECTION_CFG)
@@ -5936,7 +6038,18 @@ enum htt_srng_ring_id {
  *                    be zero which means allow all frames for MD at RxOLE
  *                    host wil fiter out frames.
  *                    RxPCU (Filter IN) -> RxOLE (Filter In/Filter Out)
- *          b'28:31 - rsvd2: Reserved for future use
+ *          b'28    - rx_hdr_len_ext:
+ *                    Extend rx_hdr_len to 3 bits with b'28 as MSb.
+ *                    Valid combined values:
+ *                    001 - 64bytes
+ *                    010 - 128bytes
+ *                    011 - 256bytes
+ *                    100 - 512bytes
+ *                    101 - 1024bytes
+ *                    110 - 2048bytes
+ *                    111 - max bytes supported by HW
+ *                    default - 128 bytes
+ *          b'29:31 - rsvd2: Reserved for future use
  * dword2 - b'0:31  - packet_type_enable_flags_0:
  *                    Enable MGMT packet from 0b0000 to 0b1001
  *                    bits from low to high: FP, MD, MO - 3 bits
@@ -6085,6 +6198,11 @@ enum htt_srng_ring_id {
  * dword28- b'0-31  - packet_type_enable_data_fpmo_flags_1 - filter bmap for
  *                    full pkt buffer each mode ctrl/data type/subtype for
  *                    fpmo mode
+ * dword29- b'0-31  - rdi_based_source_cfg
+ *                    Each bit maps to an RDI; if set, the corresponding
+ *                    ring ID is configured as a source buffer.
+ *                    Applies only to HTT_RXDMA_WBM_BUF0/1/2_RING.
+ * dword30- b'0-31  - wifi8 header length configurations.
  */
 PREPACK struct htt_rx_ring_selection_cfg_t {
     A_UINT32 msg_type:          8,
@@ -6103,7 +6221,8 @@ PREPACK struct htt_rx_ring_selection_cfg_t {
              config_length_data:3,
              rx_hdr_len:        2,
              rxpcu_filter_enable_flag:1,
-             rsvd2:             4;
+             rx_hdr_len_ext:    1,
+             rsvd2:             3;
     A_UINT32 packet_type_enable_flags_0;
     A_UINT32 packet_type_enable_flags_1;
     A_UINT32 packet_type_enable_flags_2;
@@ -6156,7 +6275,57 @@ PREPACK struct htt_rx_ring_selection_cfg_t {
     A_UINT32 packet_type_enable_data_flags_3;
     A_UINT32 packet_type_enable_data_fpmo_flags0;
     A_UINT32 packet_type_enable_data_fpmo_flags1;
+
+    /* rdi_based_source_cfg:
+     * Each bit position in rdi_based_source_cfg represents RDI
+     * (REO Destination Indication).
+     *
+     * 1 in specific RDI position represents, for the given RDI position,
+     * ring id in the ring setup msg has to be configured as source buf.
+     *
+     * Below Field only applies for HTT_RXDMA_WBM_BUF0/1/2_RING
+     */
+    A_UINT32 rdi_based_source_cfg;
+
+    A_UINT32 rxmon_fpmo_data_hdrlen    : 2,
+             rxmon_fpmo_ctrl_hdrlen    : 2,
+             rxmon_fpmo_mgmt_hdrlen    : 2,
+             rxmon_fp_data_hdrlen      : 2,
+             rxmon_fp_ctrl_hdrlen      : 2,
+             rxmon_fp_mgmt_hdrlen      : 2,
+             rxmon_mo_data_hdrlen      : 2,
+             rxmon_mo_ctrl_hdrlen      : 2,
+             rxmon_mo_mgmt_hdrlen      : 2,
+             rxmon_md_data_hdrlen      : 2,
+             rxmon_md_ctrl_hdrlen      : 2,
+             rxmon_md_mgmt_hdrlen      : 2,
+             rxmon_enable_hdr_per_ppdu : 1,
+             rxmon_rsvd                : 7;
 } POSTPACK;
+
+/**
+ * Enumeration for Reg Write block index selection
+ * Each Enum position corresponds to respective
+ * UMAC_UMCMN_R0_REG_ADDR_LSB_IX_n
+ * UMAC_UMCMN_R0_REG_ADDR_MSB_IX_n
+ * UMAC_UMCMN_R2_REG_VALUE_IX_n
+ *
+ * Any value written to the value register will be copied by
+ * Reg Writer Block to Address written in Reg Address Register.
+ *
+ * NOTE: Only value Registers defined in the enum should be used by the Host.
+ * Rest are unconfigured, and if used may result in invalid memory access
+ */
+enum htt_reg_write_selection {
+    HTT_REG_WRITER_RXMON_SW2MON_BUF_RING,
+    HTT_REG_WRITER_TXMON_SW2MON_BUF_RING,
+    HTT_REG_WRITER_RXMON_M0_MON2SW_DEST_RING,
+    HTT_REG_WRITER_RXMON_M1_MON2SW_DEST_RING,
+    HTT_REG_WRITER_TXMON_M0_MON2SW_DEST_RING,
+    HTT_REG_WRITER_TXMON_M1_MON2SW_DEST_RING,
+    HTT_REG_WRITER_RXOLE2SW_ASE_DEST_RING,
+};
+
 
 #define HTT_RX_RING_SELECTION_CFG_SZ    (sizeof(struct htt_rx_ring_selection_cfg_t))
 
@@ -6294,14 +6463,25 @@ PREPACK struct htt_rx_ring_selection_cfg_t {
 
 #define HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_M                 0x06000000
 #define HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_S                 25
+#define HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_EXT_M             0x10000000
+#define HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_EXT_S             28
+#define HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_CHK_M             0x7
+#define HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_CHK_S             0
 #define HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_GET(_var) \
-                (((_var) & HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_M) >> \
-                                      HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_S)
+    ((((_var) & HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_EXT_M) >> \
+                (HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_EXT_S-2)) | \
+     (((_var) & HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_M) >> \
+                HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_S))
 #define HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_SET(_var, _val) \
-            do { \
-                HTT_CHECK_SET_VAL( HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN, _val); \
-                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_S));\
-            } while(0)
+    do { \
+        HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_CHK, _val); \
+        ((_var) |= (((_val) << \
+            HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_S) & \
+            HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_M)); \
+        ((_var) |= (((_val) << \
+            (HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_EXT_S-2)) & \
+            HTT_RX_RING_SELECTION_CFG_RX_HDR_LEN_EXT_M)); \
+    } while(0)
 
 #define HTT_RX_RING_SELECTION_CFG_RXPCU_FILTER_M               0x08000000
 #define HTT_RX_RING_SELECTION_CFG_RXPCU_FILTER_S               27
@@ -6802,6 +6982,150 @@ PREPACK struct htt_rx_ring_selection_cfg_t {
          HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_PACKET_TYPE_ENABLE_DATA_FPMO_FLAGS1, _val); \
          ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_PACKET_TYPE_ENABLE_DATA_FPMO_FLAGS1_S)); \
      } while (0)
+
+
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_DATA_HDRLEN_M     0x00000003
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_DATA_HDRLEN_S     0
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_DATA_HDRLEN_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_DATA_HDRLEN_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_DATA_HDRLEN_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_DATA_HDRLEN_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_DATA_HDRLEN, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_DATA_HDRLEN_S)); \
+            } while (0)
+
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_CTRL_HDRLEN_M     0x0000000C
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_CTRL_HDRLEN_S     2
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_CTRL_HDRLEN_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_CTRL_HDRLEN_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_CTRL_HDRLEN_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_CTRL_HDRLEN_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_CTRL_HDRLEN, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_CTRL_HDRLEN_S)); \
+            } while (0)
+
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_MGMT_HDRLEN_M     0x00000030
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_MGMT_HDRLEN_S     4
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_MGMT_HDRLEN_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_MGMT_HDRLEN_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_MGMT_HDRLEN_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_MGMT_HDRLEN_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_MGMT_HDRLEN, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMON_FPMO_MGMT_HDRLEN_S)); \
+            } while (0)
+
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FP_DATA_HDRLEN_M     0x000000C0
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FP_DATA_HDRLEN_S     6
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FP_DATA_HDRLEN_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMON_FP_DATA_HDRLEN_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMON_FP_DATA_HDRLEN_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FP_DATA_HDRLEN_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMON_FP_DATA_HDRLEN, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMON_FP_DATA_HDRLEN_S)); \
+            } while (0)
+
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FP_CTRL_HDRLEN_M     0x00000300
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FP_CTRL_HDRLEN_S     8
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FP_CTRL_HDRLEN_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMON_FP_CTRL_HDRLEN_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMON_FP_CTRL_HDRLEN_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FP_CTRL_HDRLEN_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMON_FP_CTRL_HDRLEN, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMON_FP_CTRL_HDRLEN_S)); \
+            } while (0)
+
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FP_MGMT_HDRLEN_M     0x00000C00
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FP_MGMT_HDRLEN_S     10
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FP_MGMT_HDRLEN_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMON_FP_MGMT_HDRLEN_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMON_FP_MGMT_HDRLEN_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMON_FP_MGMT_HDRLEN_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMON_FP_MGMT_HDRLEN, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMON_FP_MGMT_HDRLEN_S)); \
+            } while (0)
+
+#define HTT_RX_RING_SELECTION_CFG_RXMON_MO_DATA_HDRLEN_M     0x00003000
+#define HTT_RX_RING_SELECTION_CFG_RXMON_MO_DATA_HDRLEN_S     12
+#define HTT_RX_RING_SELECTION_CFG_RXMON_MO_DATA_HDRLEN_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMON_MO_DATA_HDRLEN_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMON_MO_DATA_HDRLEN_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMON_MO_DATA_HDRLEN_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMON_MO_DATA_HDRLEN, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMON_MO_DATA_HDRLEN_S)); \
+            } while (0)
+
+#define HTT_RX_RING_SELECTION_CFG_RXMON_MO_CTRL_HDRLEN_M     0x0000C000
+#define HTT_RX_RING_SELECTION_CFG_RXMON_MO_CTRL_HDRLEN_S     14
+#define HTT_RX_RING_SELECTION_CFG_RXMON_MO_CTRL_HDRLEN_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMON_MO_CTRL_HDRLEN_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMON_MO_CTRL_HDRLEN_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMON_MO_CTRL_HDRLEN_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMON_MO_CTRL_HDRLEN, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMON_MO_CTRL_HDRLEN_S)); \
+            } while (0)
+
+#define HTT_RX_RING_SELECTION_CFG_RXMON_MO_MGMT_HDRLEN_M     0x00030000
+#define HTT_RX_RING_SELECTION_CFG_RXMON_MO_MGMT_HDRLEN_S     16
+#define HTT_RX_RING_SELECTION_CFG_RXMON_MO_MGMT_HDRLEN_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMON_MO_MGMT_HDRLEN_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMON_MO_MGMT_HDRLEN_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMON_MO_MGMT_HDRLEN_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMON_MO_MGMT_HDRLEN, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMON_MO_MGMT_HDRLEN_S)); \
+            } while (0)
+
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_MD_DATA_HDRLEN_M     0x000C0000
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_MD_DATA_HDRLEN_S     18
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_MD_DATA_HDRLEN_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMDN_MD_DATA_HDRLEN_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMDN_MD_DATA_HDRLEN_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_MD_DATA_HDRLEN_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMDN_MD_DATA_HDRLEN, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMDN_MD_DATA_HDRLEN_S)); \
+            } while (0)
+
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_MD_CTRL_HDRLEN_M     0x00300000
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_MD_CTRL_HDRLEN_S     20
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_MD_CTRL_HDRLEN_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMDN_MD_CTRL_HDRLEN_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMDN_MD_CTRL_HDRLEN_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_MD_CTRL_HDRLEN_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMDN_MD_CTRL_HDRLEN, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMDN_MD_CTRL_HDRLEN_S)); \
+            } while (0)
+
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_MD_MGMT_HDRLEN_M     0x00C00000
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_MD_MGMT_HDRLEN_S     22
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_MD_MGMT_HDRLEN_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMDN_MD_MGMT_HDRLEN_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMDN_MD_MGMT_HDRLEN_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_MD_MGMT_HDRLEN_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMDN_MD_MGMT_HDRLEN, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMDN_MD_MGMT_HDRLEN_S)); \
+            } while (0)
+
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_ENABLE_HEADER_PER_PPDU_M     0x01000000
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_ENABLE_HEADER_PER_PPDU_S     24
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_ENABLE_HEADER_PER_PPDU_GET(_var) \
+            (((_var) & HTT_RX_RING_SELECTION_CFG_RXMDN_ENABLE_HEADER_PER_PPDU_M) >> \
+                    HTT_RX_RING_SELECTION_CFG_RXMDN_ENABLE_HEADER_PER_PPDU_S)
+#define HTT_RX_RING_SELECTION_CFG_RXMDN_ENABLE_HEADER_PER_PPDU_SET(_var, _val) \
+            do { \
+                HTT_CHECK_SET_VAL(HTT_RX_RING_SELECTION_CFG_RXMDN_ENABLE_HEADER_PER_PPDU, _val); \
+                ((_var) |= ((_val) << HTT_RX_RING_SELECTION_CFG_RXMDN_ENABLE_HEADER_PER_PPDU_S)); \
+            } while (0)
 
 
 /*
@@ -11686,6 +12010,19 @@ PREPACK struct htt_h2t_mpduq_and_msduq_info_hdr {
  *              tid_num (in bits 16:12)
  *              msduq_mpduq_type (in bits 21:17)
  * dword3 - b'31:0  - pn_addr_0_31: Lower 32 bits of 40 bit pn physical address
+ * dword4 - b'0:0   - sam_mpduq_allocated: Indicates whether a SAM MPDUQ has
+ *                    been allocated for this TQM MPDUQ.
+ *          b'11:1  - sam_mpduq_id: The SAM MPDUQ ID assigned by the host for
+ *                    this TQM MPDUQ. The value in this field is ignored if
+ *                    sam_mpduq_allocated is 0.
+ *          b'13:12 - sam_mpduq_priority: The SAM priority assigned by the
+ *                    host. A SAM priority MUST ALWAYS be provided for chipsets
+ *                    that have SAM support, regardless of whether or not a SAM
+ *                    MPDUQ has been allocated.
+ *          b'14:14 - sam_mpduq_sched_eligible: Indicates that this SAM MPDUQ
+ *                    is eligible for autonomous SAM scheduling. The value in
+ *                    this field is ignored if sam_mpduq_allocated is 0.
+ *          b'31:15 – reserved
  * Additional reserved dwords for future use cases
  *
  *
@@ -11710,14 +12047,33 @@ PREPACK struct htt_h2t_mpduq_and_msduq_info_hdr {
  * dword2 - b'31:0  - msduq_address_39_8: 256 byte aligned msduq physical
  *                    address, since lowest octet is zero for 256 byte aligned
  *                    addresses just passing upper 32 bits of 40 bit address
+ * dword3 - b'0:0   - svc_inst_req_type_valid: Indicates whether
+ *                    svc_inst_req_type is valid.
+ *          b'3:1   - svc_inst_req_type: Contains one of the values from
+ *                    HTT_SAWF_SVC_INST_REQ_TYPE. Only valid if
+ *                    svc_inst_req_type_valid is 1.
+ *          b'4:4   - sam_msduq_allocated: Indicates whether a SAM MSDUQ has
+ *                    been allocated for this TQM MSDUQ.
+ *          b'17:5  - sam_msduq_id: The SAM MSDUQ ID assigned by the host for
+ *                    this TQM MSDUQ. The value in this field is ignored if
+ *                    sam_msduq_allocated is 0.
+ *          b'19:18 - sam_msduq_priority: The SAM priority assigned by the
+ *                    host. A SAM priority MUST ALWAYS be provided for chipsets
+ *                    that have SAM support, regardless of whether or not a SAM
+ *                    MSDUQ has been allocated.
+ *          b'20:20 - sam_msduq_sched_eligible: Indicates that this SAM MSDUQ
+ *                    is eligible for autonomous SAM scheduling. The value in
+ *                    this field is ignored if sam_msduq_allocated is 0.
+ *          b'31:21 – reserved
  * Additional reserved dwords for future use cases
  */
 
 /*
  * Enum describes the various msduq/mpduq types,
  * First 8 types correspond to the standard msduq types for data
- * Next come custom flows for specific purposes
- * enum 30 is reserved for mpduq type
+ * Next come custom flows for specific purposes.
+ * Values 23-29 will be used for MGMT flows.
+ * The value 30 is reserved for mpduq type
  */
 typedef enum {
     HTT_H2T_TID_MSDUQ_NONUDP,                                    /* 0 */
@@ -11734,7 +12090,15 @@ typedef enum {
     HTT_H2T_TID_MSDUQ_MCAST,                                     /* 9 */
     HTT_H2T_TID_MSDUQ_FAST_ROAMING,                              /* 10 */
 
-    HTT_H2T_TID_MSDUQ_DATA_TYPE_END = 29,                        /* 29 */
+    HTT_H2T_TID_MSDUQ_DATA_TYPE_END = 23,                        /* 23 */
+
+    HTT_H2T_TID_MSDUQ_MGMT_LINK_SPECIFIC_0,                      /* 24 */
+    HTT_H2T_TID_MSDUQ_MGMT_LINK_SPECIFIC_1,                      /* 25 */
+    HTT_H2T_TID_MSDUQ_MGMT_LINK_SPECIFIC_2,                      /* 26 */
+    HTT_H2T_TID_MSDUQ_MGMT_LINK_SPECIFIC_3,                      /* 27 */
+    HTT_H2T_TID_MSDUQ_MGMT_LINK_SPECIFIC_4,                      /* 28 */
+    HTT_H2T_TID_MSDUQ_MGMT_LINK_AGNOSTIC,                        /* 29 */
+
     HTT_H2T_TID_MPDUQ_TYPE,                                      /* 30 */
     HTT_H2T_TID_MSDUQ_MPDUQ_TYPE_END,                            /* 31 */
 } HTT_H2T_TID_MSDUQ_MPDUQ_TYPE;
@@ -11752,6 +12116,13 @@ typedef enum {
     HTT_H2T_MAX_TID_NUM            = 31,
 } H2T_TX_TID;
 
+typedef enum {
+    HTT_SAWF_SVC_INST_CREATE_REQ = 0,
+    HTT_SAWF_SVC_INST_DEACTIVATE_REQ,
+    HTT_SAWF_SVC_INST_REACTIVATE_REQ,
+    HTT_SAWF_SVC_INST_DELETE_REQ,
+} HTT_SAWF_SVC_INST_REQ_TYPE;
+
 /* HTT_H2T_MSG_TYPE_MPDUQ_OR_MSDUQ_INFO */
 PREPACK struct htt_h2t_mpduq_or_msduq_info {
    A_UINT32 msg_type:          8,  /* bits  7:0  */
@@ -11761,31 +12132,46 @@ PREPACK struct htt_h2t_mpduq_or_msduq_info {
 
     union {
         struct {
-            A_UINT32 mpduq_address_39_8;     /* bits 31:0  */
-            A_UINT32 mpduq_number:       24, /* bits 23:0  */
-                     pn_addr_39_32:       8; /* bits 31:24 */
-            A_UINT32 pn_addr_31_0;           /* bits 31:0  */
-            A_UINT32 reserved1a;             /* bits 31:0  */
-            A_UINT32 reserved1b;             /* bits 31:0  */
-            A_UINT32 reserved1c;             /* bits 31:0  */
-            A_UINT32 reserved1d;             /* bits 31:0  */
-            A_UINT32 reserved1e;             /* bits 31:0  */
-            A_UINT32 reserved1f;             /* bits 31:0  */
+            A_UINT32 mpduq_address_39_8;          /* bits 31:0  */
+            A_UINT32 mpduq_number:            24, /* bits 23:0  */
+                     pn_addr_39_32:            8; /* bits 31:24 */
+            A_UINT32 pn_addr_31_0;                /* bits 31:0  */
+            A_UINT32 sam_mpduq_allocated:      1, /* bit     0  */
+                     sam_mpduq_id:            11, /* bits 11:1  */
+                     sam_mpduq_priority:       2, /* bits 13:12 */
+                     sam_mpduq_sched_eligible: 1, /* bit     14 */
+                     reserved1a:              17; /* bits 31:15 */
+            A_UINT32 reserved1b;                  /* bits 31:0  */
+            A_UINT32 reserved1c;                  /* bits 31:0  */
+            A_UINT32 reserved1d;                  /* bits 31:0  */
+            A_UINT32 reserved1e;                  /* bits 31:0  */
+            A_UINT32 reserved1f;                  /* bits 31:0  */
         };
         struct {
-            A_UINT32 tx_msduq_number:    24, /* bits 23:0  */
-                     svc_class_id:        8; /* bits 31:24 */
-            A_UINT32 msduq_address_39_8;     /* bits 31:0  */
-            A_UINT32 reserved2a;             /* bits 31:0  */
-            A_UINT32 reserved2b;             /* bits 31:0  */
-            A_UINT32 reserved2c;             /* bits 31:0  */
-            A_UINT32 reserved2d;             /* bits 31:0  */
-            A_UINT32 reserved2e;             /* bits 31:0  */
-            A_UINT32 reserved2f;             /* bits 31:0  */
-            A_UINT32 reserved2g;             /* bits 31:0  */
+            A_UINT32 tx_msduq_number:         24, /* bits 23:0  */
+                     svc_class_id:             8; /* bits 31:24 */
+            A_UINT32 msduq_address_39_8;          /* bits 31:0  */
+            A_UINT32 svc_inst_req_type_valid:  1, /* bit    0   */
+                     /* svc_inst_req_type:
+                      * contains a HTT_SAWF_SVC_INST_REQ_TYPE value
+                      */
+                     svc_inst_req_type:        3, /* bits  3:1  */
+                     sam_msduq_allocated:      1, /* bit     4  */
+                     sam_msduq_id:            13, /* bits 17:5  */
+                     sam_msduq_priority:       2, /* bits 19:18 */
+                     sam_msduq_sched_eligible: 1, /* bit     20 */
+                     reserved2a:              11; /* bits 31:21 */
+            A_UINT32 reserved2b;                  /* bits 31:0  */
+            A_UINT32 reserved2c;                  /* bits 31:0  */
+            A_UINT32 reserved2d;                  /* bits 31:0  */
+            A_UINT32 reserved2e;                  /* bits 31:0  */
+            A_UINT32 reserved2f;                  /* bits 31:0  */
+            A_UINT32 reserved2g;                  /* bits 31:0  */
         };
     };
 } POSTPACK;
+
+/* MPDUQ/MSDUQ shared fields of HTT_H2T_MSG_TYPE_MPDUQ_OR_MSDUQ_INFO */
 
 #define HTT_H2T_MSG_TYPE_MPDUQ_OR_MSDUQ_INFO_MSDUQ_MPDUQ_TYPE_M    0x00001F00
 #define HTT_H2T_MSG_TYPE_MPDUQ_OR_MSDUQ_INFO_MSDUQ_MPDUQ_TYPE_S             8
@@ -11844,6 +12230,9 @@ PREPACK struct htt_h2t_mpduq_or_msduq_info {
         ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MPDUQ_OR_MSDUQ_NUMBER_MSDUQ_MPDUQ_TYPE_S)); \
     } while (0)
 
+
+/* MPDUQ Variant of HTT_H2T_MSG_TYPE_MPDUQ_OR_MSDUQ_INFO */
+
 #define HTT_H2T_MSG_TYPE_MPDUQ_INFO_MPDUQ_ADDRESS_39_8_M   0xFFFFFFFF
 #define HTT_H2T_MSG_TYPE_MPDUQ_INFO_MPDUQ_ADDRESS_39_8_S            0
 #define HTT_H2T_MSG_TYPE_MPDUQ_INFO_MPDUQ_ADDRESS_39_8_GET(_var) \
@@ -11890,6 +12279,53 @@ PREPACK struct htt_h2t_mpduq_or_msduq_info {
         ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MPDUQ_INFO_PN_ADDRESS_31_0_S)); \
     } while (0)
 
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ALLOCATED_M    0x00000001
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ALLOCATED_S             0
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ALLOCATED_GET(_var) \
+        (((_var) & HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ALLOCATED_M) >> \
+                HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ALLOCATED_S)
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ALLOCATED_SET(_var, _val) \
+    do {                                                     \
+        HTT_CHECK_SET_VAL(HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ALLOCATED, _val);  \
+        ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ALLOCATED_S)); \
+    } while (0)
+
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ID_M    0x00000FFE
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ID_S             1
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ID_GET(_var) \
+        (((_var) & HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ID_M) >> \
+                HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ID_S)
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ID_SET(_var, _val) \
+    do {                                                     \
+        HTT_CHECK_SET_VAL(HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ID, _val);  \
+        ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_ID_S)); \
+    } while (0)
+
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_PRIORITY_M    0x00003000
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_PRIORITY_S            12
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_PRIORITY_GET(_var) \
+        (((_var) & HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_PRIORITY_M) >> \
+                HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_PRIORITY_S)
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_PRIORITY_SET(_var, _val) \
+    do {                                                     \
+        HTT_CHECK_SET_VAL(HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_PRIORITY, _val);  \
+        ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_PRIORITY_S)); \
+    } while (0)
+
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_SCHED_ELIGIBLE_M    0x00004000
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_SCHED_ELIGIBLE_S            14
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_SCHED_ELIGIBLE_GET(_var) \
+        (((_var) & HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_SCHED_ELIGIBLE_M) >> \
+                HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_SCHED_ELIGIBLE_S)
+#define HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_SCHED_ELIGIBLE_SET(_var, _val) \
+    do {                                                     \
+        HTT_CHECK_SET_VAL(HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_SCHED_ELIGIBLE, _val);  \
+        ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MPDUQ_INFO_SAM_MPDUQ_SCHED_ELIGIBLE_S)); \
+    } while (0)
+
+
+/* MSDUQ Variant of HTT_H2T_MSG_TYPE_MPDUQ_OR_MSDUQ_INFO */
+
 #define HTT_H2T_MSG_TYPE_MSDUQ_INFO_TX_MSDUQ_NUMBER_M           0x00FFFFFF
 #define HTT_H2T_MSG_TYPE_MSDUQ_INFO_TX_MSDUQ_NUMBER_S                    0
 #define HTT_H2T_MSG_TYPE_MSDUQ_INFO_TX_MSDUQ_NUMBER_GET(_var) \
@@ -11921,6 +12357,72 @@ PREPACK struct htt_h2t_mpduq_or_msduq_info {
     do {                                                     \
         HTT_CHECK_SET_VAL(HTT_H2T_MSG_TYPE_MSDUQ_INFO_MSDUQ_ADDRESS_39_8, _val);  \
         ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MSDUQ_INFO_MSDUQ_ADDRESS_39_8_S)); \
+    } while (0)
+
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_VALID_M 0x00000001
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_VALID_S          0
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_VALID_GET(_var) \
+        (((_var) & HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_VALID_M) >> \
+                HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_VALID_S)
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_VALID_SET(_var, _val) \
+    do {                                                     \
+        HTT_CHECK_SET_VAL(HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_VALID, _val);  \
+        ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_VALID_S)); \
+    } while (0)
+
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_M       0x0000000E
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_S                1
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_GET(_var) \
+        (((_var) & HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_M) >> \
+                HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_S)
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_SET(_var, _val) \
+    do {                                                     \
+        HTT_CHECK_SET_VAL(HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE, _val);  \
+        ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MSDUQ_INFO_SVC_INST_REQ_TYPE_S)); \
+    } while (0)
+
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ALLOCATED_M    0x00000010
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ALLOCATED_S             4
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ALLOCATED_GET(_var) \
+        (((_var) & HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ALLOCATED_M) >> \
+                HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ALLOCATED_S)
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ALLOCATED_SET(_var, _val) \
+    do {                                                     \
+        HTT_CHECK_SET_VAL(HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ALLOCATED, _val);  \
+        ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ALLOCATED_S)); \
+    } while (0)
+
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ID_M    0x0003FFE0
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ID_S             5
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ID_GET(_var) \
+        (((_var) & HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ID_M) >> \
+                HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ID_S)
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ID_SET(_var, _val) \
+    do {                                                     \
+        HTT_CHECK_SET_VAL(HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ID, _val);  \
+        ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_ID_S)); \
+    } while (0)
+
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_PRIORITY_M    0x000C0000
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_PRIORITY_S            18
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_PRIORITY_GET(_var) \
+        (((_var) & HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_PRIORITY_M) >> \
+                HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_PRIORITY_S)
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_PRIORITY_SET(_var, _val) \
+    do {                                                     \
+        HTT_CHECK_SET_VAL(HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_PRIORITY, _val);  \
+        ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_PRIORITY_S)); \
+    } while (0)
+
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_SCHED_ELIGIBLE_M    0x00100000
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_SCHED_ELIGIBLE_S            20
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_SCHED_ELIGIBLE_GET(_var) \
+        (((_var) & HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_SCHED_ELIGIBLE_M) >> \
+                HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_SCHED_ELIGIBLE_S)
+#define HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_SCHED_ELIGIBLE_SET(_var, _val) \
+    do {                                                     \
+        HTT_CHECK_SET_VAL(HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_SCHED_ELIGIBLE, _val);  \
+        ((_var) |= ((_val) << HTT_H2T_MSG_TYPE_MSDUQ_INFO_SAM_MSDUQ_SCHED_ELIGIBLE_S)); \
     } while (0)
 
 
@@ -12095,6 +12597,76 @@ PREPACK struct htt_ast_info_t {
         } while (0)
 
 
+/*
+ * @brief  host -> target HTT_H2T_MSG_TYPE_DAL_MODE_INFO message
+ *
+ * MSG_TYPE => HTT_H2T_MSG_TYPE_DAL_MODE_INFO (0x2C)
+ *
+ *    The message would appear as follows:
+ *    |31                16|15              8|7                 0|
+ *    |--------------------+-----------------+-------------------|
+ *    |       mode         |     pdev_id     |     msg_type      |
+ *    |----------------------------------------------------------|
+ *    |                    write_data_addr_lo                    |
+ *    |----------------------------------------------------------|
+ *    |                    write_data_addr_hi                    |
+ *    |----------------------------------------------------------|
+ *    |                    write_msi_addr_lo                     |
+ *    |----------------------------------------------------------|
+ *    |                    write_msi_addr_hi                     |
+ *    |----------------------------------------------------------|
+ *    |                    write_msi_data                        |
+ *    |----------------------------------------------------------|
+ *
+ * The message is interpreted as follows:
+ * dword0  - b'7:0   - msg_type
+ *           b'15:8  - pdev_id
+ *           b'31:16 - mode
+ * dword1  - b'31:0  - write_data_addr_lo
+ * dword2  - b'31:0  - write_data_addr_hi
+ * dword3  - b'31:0  - write_msi_addr_lo
+ * dword4  - b'31:0  - write_msi_addr_hi
+ * dword5  - b'31:0  - write_msi_data
+ */
+PREPACK struct htt_h2t_msg_dal_mode_info {
+        A_UINT32 msg_type:  8,
+                 pdev_id:   8,
+                 mode:     16;
+        A_UINT32 write_data_addr_lo;
+        A_UINT32 write_data_addr_hi;
+        A_UINT32 write_msi_addr_lo;
+        A_UINT32 write_msi_addr_hi;
+        A_UINT32 write_msi_data;
+} POSTPACK;
+
+#define HTT_H2T_MSG_DAL_MODE_INFO_SZ (sizeof(struct htt_h2t_msg_dal_mode_info))
+
+/* DWORD0 */
+#define HTT_H2T_MSG_DAL_MODE_INFO_PDEV_ID_M                  0x0000ff00
+#define HTT_H2T_MSG_DAL_MODE_INFO_PDEV_ID_S                  8
+
+#define HTT_H2T_MSG_DAL_MODE_INFO_PDEV_ID_GET(_var) \
+        (((_var) & HTT_H2T_MSG_DAL_MODE_INFO_PDEV_ID_M) >> \
+            HTT_H2T_MSG_DAL_MODE_INFO_PDEV_ID_S)
+#define HTT_H2T_MSG_DAL_MODE_INFO_PDEV_ID_SET(_var, _val) \
+        do { \
+            HTT_CHECK_SET_VAL(HTT_H2T_MSG_DAL_MODE_INFO_PDEV_ID, _val); \
+            ((_var) |= ((_val) << HTT_H2T_MSG_DAL_MODE_INFO_PDEV_ID_S)); \
+        } while (0)
+
+#define HTT_H2T_MSG_DAL_MODE_INFO_MODE_M                  0xffff0000
+#define HTT_H2T_MSG_DAL_MODE_INFO_MODE_S                  16
+
+#define HTT_H2T_MSG_DAL_MODE_INFO_MODE_GET(_var) \
+        (((_var) & HTT_H2T_MSG_DAL_MODE_INFO_MODE_M) >> \
+            HTT_H2T_MSG_DAL_MODE_INFO_MODE_S)
+#define HTT_H2T_MSG_DAL_MODE_INFO_MODE_SET(_var, _val) \
+        do { \
+            HTT_CHECK_SET_VAL(HTT_H2T_MSG_DAL_MODE_INFO_MODE, _val); \
+            ((_var) |= ((_val) << HTT_H2T_MSG_DAL_MODE_INFO_MODE_S)); \
+        } while (0)
+
+
 
 /*=== target -> host messages ===============================================*/
 
@@ -12170,6 +12742,8 @@ enum htt_t2h_msg_type {
     HTT_T2H_MSG_TYPE_SDWF_MSDUQ_CFG_IND            = 0x3c,
     HTT_T2H_MSG_TYPE_MLO_LATENCY_REQ               = 0x3d,
     HTT_T2H_MSG_TYPE_GLOBAL_PEER_ID_UNMAP          = 0x3e,
+    HTT_T2H_MSG_TYPE_HAPS                          = 0x3f,
+    HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP = 0x40,
 
 
     HTT_T2H_MSG_TYPE_TEST,
@@ -19948,6 +20522,7 @@ typedef enum {
     HTT_PEER_CFR_CAPTURE_BW_80MHZ    = 2,
     HTT_PEER_CFR_CAPTURE_BW_160MHZ   = 3,
     HTT_PEER_CFR_CAPTURE_BW_80_80MHZ = 4,
+    HTT_PEER_CFR_CAPTURE_BW_320MHZ   = 5,
     HTT_PEER_CFR_CAPTURE_BW_MAX,
 } HTT_PEER_CFR_CAPTURE_BW;
 
@@ -21423,10 +21998,12 @@ PREPACK struct htt_rx_peer_metadata_v1 {
  *
  * The following diagram shows the format of the RX PEER METADATA V1A format.
  *
- * |31 29|28   26|25           22|21   14|   13  |12                  0|
- * |-------------------------------------------------------------------|
- * |Rsvd2|CHIP ID|logical_link_id|VDEV ID|ML PEER|SW PEER ID/ML PEER ID|
- * |-------------------------------------------------------------------|
+ * |31   |29|28   26|25           22|21   14|   13  |12                  0|
+ * |----------------------------------------------------------------------|
+ * |Rsvd2|PT|CHIP ID|logical_link_id|VDEV ID|ML PEER|SW PEER ID/ML PEER ID|
+ * |----------------------------------------------------------------------|
+ * Where:
+ *     PT = passthrough packet
  */
 PREPACK struct htt_rx_peer_metadata_v1a {
     A_UINT32
@@ -21436,7 +22013,8 @@ PREPACK struct htt_rx_peer_metadata_v1a {
         logical_link_id: 4,
         chip_id:         3,
         qdata_refill:    1,
-        reserved2:       2;
+        passthru_pkt:    1,
+        reserved2:       1;
 } POSTPACK;
 
 #define HTT_RX_PEER_META_DATA_V1A_PEER_ID_S    0
@@ -21505,6 +22083,17 @@ PREPACK struct htt_rx_peer_metadata_v1a {
         ((_var) |= ((_val) << HTT_RX_PEER_META_DATA_V1A_QDATA_REFILL_S)); \
     } while (0)
 
+#define HTT_RX_PEER_META_DATA_V1A_PASSTHRU_PKT_S    30
+#define HTT_RX_PEER_META_DATA_V1A_PASSTHRU_PKT_M    0x40000000
+#define HTT_RX_PEER_META_DATA_V1A_PASSTHRU_PKT_GET(_var) \
+    (((_var) & HTT_RX_PEER_META_DATA_V1A_PASSTHRU_PKT_M) >> HTT_RX_PEER_META_DATA_V1A_PASSTHRU_PKT_S)
+
+#define HTT_RX_PEER_META_DATA_V1A_PASSTHRU_PKT_SET(_var, _val) \
+    do {                                             \
+        HTT_CHECK_SET_VAL(HTT_RX_PEER_META_DATA_V1A_PASSTHRU_PKT, _val);  \
+        ((_var) |= ((_val) << HTT_RX_PEER_META_DATA_V1A_PASSTHRU_PKT_S)); \
+    } while (0)
+
 
 /**
  * @brief target -> RX PEER METADATA V1B format
@@ -21515,10 +22104,10 @@ PREPACK struct htt_rx_peer_metadata_v1a {
  *
  * The following diagram shows the format of the RX PEER METADATA V1B format.
  *
- * |31 29|28   26|25      22|21   14|   13  |12                  0|
- * |--------------------------------------------------------------|
- * |Rsvd2|CHIP ID|hw_link_id|VDEV ID|ML PEER|SW PEER ID/ML PEER ID|
- * |--------------------------------------------------------------|
+ * |31   |30 29|28   26|25      22|21   14|   13  |12                  0|
+ * |--------------------------------------------------------------------|
+ * |Rsvd2|DECAP|CHIP ID|hw_link_id|VDEV ID|ML PEER|SW PEER ID/ML PEER ID|
+ * |--------------------------------------------------------------------|
  */
 PREPACK struct htt_rx_peer_metadata_v1b {
     A_UINT32
@@ -21527,7 +22116,8 @@ PREPACK struct htt_rx_peer_metadata_v1b {
         vdev_id:         8,
         hw_link_id:      4,
         chip_id:         3,
-        reserved2:       3;
+        decap_type:      2,
+        reserved2:       1;
 } POSTPACK;
 
 #define HTT_RX_PEER_META_DATA_V1B_PEER_ID_S    0
@@ -21585,6 +22175,126 @@ PREPACK struct htt_rx_peer_metadata_v1b {
         ((_var) |= ((_val) << HTT_RX_PEER_META_DATA_V1B_CHIP_ID_S)); \
     } while (0)
 
+#define HTT_RX_PEER_META_DATA_V1B_DECAP_TYPE_S 29
+#define HTT_RX_PEER_META_DATA_V1B_DECAP_TYPE_M 0x60000000
+#define HTT_RX_PEER_META_DATA_V1B_DECAP_TYPE_GET(_var) \
+    (((_var) & HTT_RX_PEER_META_DATA_V1B_DECAP_TYPE_M) >> HTT_RX_PEER_META_DATA_V1B_DECAP_TYPE_S)
+
+#define HTT_RX_PEER_META_DATA_V1B_DECAP_TYPE_SET(_var, _val) \
+    do {                                             \
+        HTT_CHECK_SET_VAL(HTT_RX_PEER_META_DATA_V1B_DECAP_TYPE, _val);  \
+        ((_var) |= ((_val) << HTT_RX_PEER_META_DATA_V1B_DECAP_TYPE_S)); \
+    } while (0)
+
+/*
+ * htt_rx_peer_metadata_v2 - HTT RX peer metadata version 2
+ *
+ * |31     22|21|20    13|12|11  9|8   6|  5  |4   0|
+ * |---------+--+--------+--+-----+-----+-----+-----|
+ * |reserved |PT|peer    |Q | Log |VDEV | ML  |Peer |
+ * |         |  |session |D |Link | ID  |Peer | ID  |
+ * |         |  |ID      |R | ID  |     |Valid|     |
+ * |---------+--+--------+--+-----+-----+-----+-----|
+ * Where:
+ *     QDR = queue data refill
+ *     PT  = passthrough packet
+ */
+PREPACK struct htt_rx_peer_metadata_v2 {
+    A_UINT32
+        peer_id:          5,
+        ml_peer_valid:    1,
+        vdev_id:          3,
+        logical_link_id:  3,
+        qdata_refill:     1,
+        peer_session_id:  8,
+        passthru_pkt:     1,
+        reserved:        10;
+} POSTPACK;
+
+#define HTT_RX_PEER_META_DATA_V2_PEER_ID_S 0
+#define HTT_RX_PEER_META_DATA_V2_PEER_ID_M 0x0000001f
+
+#define HTT_RX_PEER_META_DATA_V2_PEER_ID_GET(_var) \
+    (((_var) & HTT_RX_PEER_META_DATA_V2_PEER_ID_M) >> \
+    HTT_RX_PEER_META_DATA_V2_PEER_ID_S)
+#define HTT_RX_PEER_META_DATA_V2_PEER_ID_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_RX_PEER_META_DATA_V2_PEER_ID, _val); \
+        ((_var) |= ((_val) << HTT_RX_PEER_META_DATA_V2_PEER_ID_S)); \
+    } while (0)
+
+#define HTT_RX_PEER_META_DATA_V2_ML_PEER_VALID_S 5
+#define HTT_RX_PEER_META_DATA_V2_ML_PEER_VALID_M 0x00000020
+#define HTT_RX_PEER_META_DATA_V2_ML_PEER_VALID_GET(_var) \
+    (((_var) & HTT_RX_PEER_META_DATA_V2_ML_PEER_VALID_M) >> \
+    HTT_RX_PEER_META_DATA_V2_ML_PEER_VALID_S)
+#define HTT_RX_PEER_META_DATA_V2_ML_PEER_VALID_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_RX_PEER_META_DATA_V2_ML_PEER_VALID, _val); \
+        ((_var) |= ((_val) << HTT_RX_PEER_META_DATA_V2_ML_PEER_VALID_S)); \
+    } while (0)
+
+#define HTT_RX_PEER_META_DATA_V2_VDEV_ID_S 6
+#define HTT_RX_PEER_META_DATA_V2_VDEV_ID_M 0x000001c0
+
+#define HTT_RX_PEER_META_DATA_V2_VDEV_ID_GET(_var) \
+    (((_var) & HTT_RX_PEER_META_DATA_V2_VDEV_ID_M) >> \
+    HTT_RX_PEER_META_DATA_V2_VDEV_ID_S)
+#define HTT_RX_PEER_META_DATA_V2_VDEV_ID_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_RX_PEER_META_DATA_V2_VDEV_ID, _val); \
+        ((_var) |= ((_val) << HTT_RX_PEER_META_DATA_V2_VDEV_ID_S)); \
+    } while (0)
+
+#define HTT_RX_PEER_META_DATA_V2_LOGICAL_LINK_ID_S 9
+#define HTT_RX_PEER_META_DATA_V2_LOGICAL_LINK_ID_M 0x00000e00
+
+#define HTT_RX_PEER_META_DATA_V2_LOGICAL_LINK_ID_GET(_var) \
+    (((_var) & HTT_RX_PEER_META_DATA_V2_LOGICAL_LINK_ID_M) >> \
+    HTT_RX_PEER_META_DATA_V2_LOGICAL_LINK_ID_S)
+#define HTT_RX_PEER_META_DATA_V2_LOGICAL_LINK_ID_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_RX_PEER_META_DATA_V2_LOGICAL_LINK_ID, _val); \
+        ((_var) |= ((_val) << HTT_RX_PEER_META_DATA_V2_LOGICAL_LINK_ID_S)); \
+    } while (0)
+
+#define HTT_RX_PEER_META_DATA_V2_QDATA_REFILL_S 12
+#define HTT_RX_PEER_META_DATA_V2_QDATA_REFILL_M 0x00001000
+
+#define HTT_RX_PEER_META_DATA_V2_QDATA_REFILL_GET(_var) \
+    (((_var) & HTT_RX_PEER_META_DATA_V2_QDATA_REFILL_M) >> \
+    HTT_RX_PEER_META_DATA_V2_QDATA_REFILL_S)
+#define HTT_RX_PEER_META_DATA_V2_QDATA_REFILL_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_RX_PEER_META_DATA_V2_QDATA_REFILL, _val); \
+        ((_var) |= ((_val) << HTT_RX_PEER_META_DATA_V2_QDATA_REFILL_S)); \
+    } while (0)
+
+#define HTT_RX_PEER_META_DATA_V2_PEER_SESSION_ID_S 13
+#define HTT_RX_PEER_META_DATA_V2_PEER_SESSION_ID_M 0x001fe000
+
+#define HTT_RX_PEER_META_DATA_V2_PEER_SESSION_ID_GET(_var) \
+    (((_var) & HTT_RX_PEER_META_DATA_V2_PEER_SESSION_ID_M) >> \
+    HTT_RX_PEER_META_DATA_V2_PEER_SESSION_ID_S)
+#define HTT_RX_PEER_META_DATA_V2_PEER_SESSION_ID_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_RX_PEER_META_DATA_V2_PEER_SESSION_ID, _val); \
+        ((_var) |= ((_val) << HTT_RX_PEER_META_DATA_V2_PEER_SESSION_ID_S)); \
+    } while (0)
+
+#define HTT_RX_PEER_META_DATA_V2_PASSTHRU_PKT_S 21
+#define HTT_RX_PEER_META_DATA_V2_PASSTHRU_PKT_M 0x00200000
+
+#define HTT_RX_PEER_META_DATA_V2_PASSTHRU_PKT_GET(_var) \
+    (((_var) & HTT_RX_PEER_META_DATA_V2_PASSTHRU_PKT_M) >> \
+    HTT_RX_PEER_META_DATA_V2_PASSTHRU_PKT_S)
+#define HTT_RX_PEER_META_DATA_V2_PASSTHRU_PKT_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_RX_PEER_META_DATA_V2_PASSTHRU_PKT, _val); \
+        ((_var) |= ((_val) << HTT_RX_PEER_META_DATA_V2_PASSTHRU_PKT_S)); \
+    } while (0)
+
+
 /* generic variables for masks and shifts for various fields */
 extern A_UINT32 HTT_RX_PEER_META_DATA_PEER_ID_S;
 extern A_UINT32 HTT_RX_PEER_META_DATA_PEER_ID_M;
@@ -21616,6 +22326,12 @@ extern void (*HTT_RX_PEER_META_DATA_HW_LINK_ID_SET) (A_UINT32 *var, A_UINT32 val
 
 extern A_UINT32 (*HTT_RX_PEER_META_DATA_QDATA_REFILL_GET) (A_UINT32 var);
 extern void (*HTT_RX_PEER_META_DATA_QDATA_REFILL_SET) (A_UINT32 *var, A_UINT32 val);
+
+extern A_UINT32 (*HTT_RX_PEER_META_DATA_PEER_SESSION_ID_GET) (A_UINT32 var);
+extern void (*HTT_RX_PEER_META_DATA_PEER_SESSION_ID_SET) (A_UINT32 *var, A_UINT32 val);
+
+extern A_UINT32 (*HTT_RX_PEER_META_DATA_DECAP_TYPE_GET) (A_UINT32 var);
+extern void (*HTT_RX_PEER_META_DATA_DECAP_TYPE_SET) (A_UINT32 *var, A_UINT32 val);
 
 
 /*
@@ -21663,18 +22379,25 @@ enum HTT_MSDU_QTYPE {
     HTT_MSDU_QTYPE_HI_PRIO,        /* Specifies MSDUQ index used for high priority flow type */
     HTT_MSDU_QTYPE_LO_PRIO,        /* Specifies MSDUQ index used for low priority flow type */
 
+    HTT_MSDU_QTYPE_MAX, /* legacy limit (based on ROM compatibility) */
+
+    HTT_MSDU_QTYPE_LATENCY_CRIT_2,
+    HTT_MSDU_QTYPE_LATENCY_CRIT_3,
+    HTT_MSDU_QTYPE_LATENCY_CRIT_4,
+    HTT_MSDU_QTYPE_LATENCY_CRIT_5,
 
     /* New MSDU_QTYPE should be added above this line */
     /*
-     * Below QTYPE_MAX will increase if additional QTYPEs are defined
-     * in the future. Hence HTT_MSDU_QTYPE_MAX can't be used in
-     * any host/target message definitions.  The QTYPE_MAX value can
+     * Below QTYPE_MAX_EXT will increase if additional QTYPEs are defined
+     * in the future. Hence HTT_MSDU_QTYPE_MAX_EXT can't be used in
+     * any host/target message definitions.  The QTYPE_MAX_EXT value can
      * only be used internally within the host or within the target.
-     * If host or target find a qtype value is >= HTT_MSDU_QTYPE_MAX
+     * If host or target find a qtype value is >= HTT_MSDU_QTYPE_MAX_EXT
      * it must regard the unexpected value as a default qtype value,
      * or ignore it.
      */
-    HTT_MSDU_QTYPE_MAX,
+    HTT_MSDU_QTYPE_MAX_EXT,
+
     HTT_MSDU_QTYPE_NOT_IN_USE = 255, /* corresponding MSDU index is not in use */
 };
 
@@ -24054,6 +24777,175 @@ PREPACK struct htt_t2h_global_peer_id_unmap_t {
     do { \
         HTT_CHECK_SET_VAL(HTT_T2H_MSG_TYPE_GLOBAL_PEER_ID_UNMAP_HW_LINK_ID, _val); \
         ((_var) |= ((_val) << HTT_T2H_MSG_TYPE_GLOBAL_PEER_ID_UNMAP_HW_LINK_ID_S)); \
+    } while (0)
+
+
+/*
+ * @brief target -> pause/unpause host tx queues based on FW indication
+ * MSG_TYPE => HTT_T2H_MSG_TYPE_HAPS
+ *
+ * @details * Header fields:
+ *
+ * |31     22|21         20|19       16|15               8|7             0|
+ * |---------+-------------+-----------+------------------+---------------|
+ * | RSVD    |time_type    |action_code|      vdev_id     |   msg type    |
+ * |----------------------------------------------------------------------|
+ * |                          time_high                                   |
+ * |----------------------------------------------------------------------|
+ * |                          time_low                                    |
+ * |----------------------------------------------------------------------|
+ *
+ * dword0 - b'7:0       - msg_type: This will be set to
+ *                        0x3f (HTT_T2H_MSG_TYPE_HAPS)
+ *          b'15:8      - vdev_id
+ *          b'19:16     - action_code (HTT_T2H_HAPS_ACTION_CODE):
+ *                        b'0000: Pause
+ *                        b'0001: Pause with One-Shot Unpause
+ *                        b'0010: Unpause
+ *                        values 3-15: reserved
+ *          b'21:20     - time_type
+ *          b'31:22     - rsvd
+ * reverse action_code at time specified below
+ * (units are specified by the type_type bitfield)
+ * dword1 - b'31:0      uint32_t time_high
+ * dword2 - b'31:0      uint32_t time_low
+ */
+typedef enum {
+    HTT_T2H_HAPS_ACTION_PAUSE                          = 0x00,
+    HTT_T2H_HAPS_ACTION_PAUSE_WITH_ONESHOT_UNPAUSE     = 0x01,
+    HTT_T2H_HAPS_ACTION_UNPAUSE                        = 0x02,
+} HTT_T2H_HAPS_ACTION_CODE;
+
+typedef enum {
+    HTT_T2H_HAPS_TIME_TYPE_HOST_QTIME                  = 0x00,
+    HTT_T2H_HAPS_TIME_TYPE_TSF                         = 0x01,
+} HTT_T2H_HAPS_TIME_TYPE;
+
+PREPACK struct htt_t2h_power_state_info {
+    uint32_t msg_type : 8,           /* [7:0]   */
+             vdev_id : 8,            /* [15:8]  */
+             action_code : 4,        /* [19:16] */
+             time_type: 2,           /* [21:20] */
+             rsvd: 10;               /* [31:22] */
+    uint32_t time_low;
+    uint32_t time_high;
+} POSTPACK;
+
+#define HTT_T2H_POWER_STATE_INFO_SIZE (sizeof(struct htt_t2h_power_state_info))
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_VDEV_ID_M                 0x0000FF00
+#define HTT_T2H_POWER_STATE_INFO_HTT_VDEV_ID_S                          8
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_VDEV_ID_GET(_var) \
+    (((_var) & HTT_T2H_POWER_STATE_INFO_HTT_VDEV_ID_M) >> \
+     HTT_T2H_POWER_STATE_INFO_HTT_VDEV_ID_S)
+#define HTT_T2H_POWER_STATE_INFO_HTT_VDEV_ID_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_T2H_POWER_STATE_INFO_HTT_VDEV_ID, _val); \
+        ((_var) |= ((_val) << HTT_T2H_POWER_STATE_INFO_HTT_VDEV_ID_S));\
+    } while (0)
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_ACTION_CODE_M                 0x000F0000
+#define HTT_T2H_POWER_STATE_INFO_HTT_ACTION_CODE_S                         16
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_ACTION_CODE_GET(_var) \
+    (((_var) & HTT_T2H_POWER_STATE_INFO_HTT_ACTION_CODE_M) >> \
+     HTT_T2H_POWER_STATE_INFO_HTT_ACTION_CODE_S)
+#define HTT_T2H_POWER_STATE_INFO_HTT_ACTION_CODE_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_T2H_POWER_STATE_INFO_HTT_ACTION_CODE, _val); \
+        ((_var) |= ((_val) << HTT_T2H_POWER_STATE_INFO_HTT_ACTION_CODE_S));\
+    } while (0)
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_TIME_TYPE_M                 0x00300000
+#define HTT_T2H_POWER_STATE_INFO_HTT_TIME_TYPE_S                         20
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_TIME_TYPE_GET(_var) \
+    (((_var) & HTT_T2H_POWER_STATE_INFO_HTT_TIME_TYPE_M) >> \
+     HTT_T2H_POWER_STATE_INFO_HTT_TIME_TYPE_S)
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_TIME_TYPE_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_T2H_POWER_STATE_INFO_HTT_TIME_TYPE, _val); \
+        ((_var) |= ((_val) << HTT_T2H_POWER_STATE_INFO_HTT_TIME_TYPE_S));\
+    } while (0)
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_TIME_HIGH_M                 0xFFFFFFFF
+#define HTT_T2H_POWER_STATE_INFO_HTT_TIME_HIGH_S                          0
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_TIME_HIGH_GET(_var) \
+    (((_var) & HTT_T2H_POWER_STATE_INFO_HTT_TIME_HIGH_M) >> \
+     HTT_T2H_POWER_STATE_INFO_HTT_TIME_HIGH_S)
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_TIME_HIGH_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_T2H_POWER_STATE_INFO_HTT_TIME_HIGH, _val); \
+        ((_var) |= ((_val) << HTT_T2H_POWER_STATE_INFO_HTT_TIME_HIGH_S));\
+    } while (0)
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_TIME_LOW_M                 0xFFFFFFFF
+#define HTT_T2H_POWER_STATE_INFO_HTT_TIME_LOW_S                          0
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_TIME_LOW_GET(_var) \
+    (((_var) & HTT_T2H_POWER_STATE_INFO_HTT_TIME_LOW_M) >> \
+     HTT_T2H_POWER_STATE_INFO_HTT_TIME_LOW_S)
+
+#define HTT_T2H_POWER_STATE_INFO_HTT_TIME_LOW_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_T2H_POWER_STATE_INFO_HTT_TIME_LOW, _val); \
+        ((_var) |= ((_val) << HTT_T2H_POWER_STATE_INFO_HTT_TIME_LOW_S));\
+    } while (0)
+
+
+/* MSG_TYPE => HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP
+ *
+ * The following diagram shows the format of the peer delete all global vdev
+ * unmap message sent from the target to the host. This message is used to
+ * send unmap event to host after tid and msduq/mpduq cleanup of all peers
+ * associated to a vdev, in FW, host cleans up msduq/mpduq based on message.
+ *
+ * |31                    20|19      16|15              8|7               0|
+ * |------------------------+----------+-----------------+-----------------|
+ * |       reserved         |hw_link_id| global_vdev_id  |     msg type    |
+ * |-----------------------------------------------------------------------|
+ * @details
+ * struct htt_t2h_peer_del_all_global_vdev_id_unmap_t:
+ *
+ * The message is interpreted as follows:
+ * dword0 - b'7:0   - msg_type: This will be set to 0x40
+ *                    (HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP)
+ *          b'15:8  - global_vdev_id : global vdev id assigned by host
+ *          b'19:16 - hw_link_id : hw link id for which unmap is being sent
+ *          b'31:20 - reserved
+ */
+/* HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP */
+PREPACK struct htt_t2h_peer_del_all_global_vdev_id_unmap_t {
+    A_UINT32 msg_type:               8,  /* bits  7:0  */
+             global_vdev_id:         8,  /* bits 15:8  */
+             hw_link_id:             4,  /* bits 19:16 */
+             reserved:               12; /* bits 31:20 */
+} POSTPACK;
+
+#define HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_GLOBAL_VDEV_ID_M 0x0000FF00
+#define HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_GLOBAL_VDEV_ID_S 8
+#define HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_GLOBAL_VDEV_ID_GET(_var) \
+    (((_var) & HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_GLOBAL_VDEV_ID_M) >> \
+     HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_GLOBAL_VDEV_ID_S)
+#define HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_GLOBAL_VDEV_ID_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_GLOBAL_VDEV_ID, _val); \
+        ((_var) |= ((_val) << HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_GLOBAL_VDEV_ID_S)); \
+    } while (0)
+
+#define HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_HW_LINK_ID_M 0x000F0000
+#define HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_HW_LINK_ID_S 16
+#define HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_HW_LINK_ID_GET(_var) \
+    (((_var) & HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_HW_LINK_ID_M) >> \
+     HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_HW_LINK_ID_S)
+#define HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_HW_LINK_ID_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_HW_LINK_ID, _val); \
+        ((_var) |= ((_val) << HTT_T2H_MSG_TYPE_PEER_DEL_ALL_GLOBAL_VDEV_ID_UNMAP_HW_LINK_ID_S)); \
     } while (0)
 
 
