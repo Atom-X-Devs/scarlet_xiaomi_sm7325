@@ -393,9 +393,8 @@ static int32_t cam_sensor_handle_random_read(
 	struct cam_buf_io_cfg *io_cfg, uint32_t payload_count)
 {
 	struct i2c_settings_list *i2c_list;
-	int32_t rc = 0, cnt = 0, payload_count = 0;
+	int32_t rc = 0, cnt = 0;
 
-	payload_count = cmd_i2c_random_rd->header.count;
 	i2c_list = cam_sensor_get_i2c_ptr(i2c_reg_settings,
 		payload_count);
 	if ((i2c_list == NULL) ||
