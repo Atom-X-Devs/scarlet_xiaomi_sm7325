@@ -4983,6 +4983,9 @@ static int sde_encoder_setup_display(struct sde_encoder_virt *sde_enc,
 	if (disp_info->intf_type == DRM_MODE_CONNECTOR_DSI) {
 		*drm_enc_mode = DRM_MODE_ENCODER_DSI;
 		intf_type = INTF_DSI;
+	} else if (disp_info->intf_type == DRM_MODE_CONNECTOR_eDP) {
+		*drm_enc_mode = DRM_MODE_ENCODER_TMDS;
+		intf_type = INTF_DP;
 	} else if (disp_info->intf_type == DRM_MODE_CONNECTOR_HDMIA) {
 		*drm_enc_mode = DRM_MODE_ENCODER_TMDS;
 		intf_type = INTF_HDMI;
