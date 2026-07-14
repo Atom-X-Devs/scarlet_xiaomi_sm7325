@@ -58,13 +58,6 @@ static void zram_free_page(struct zram *zram, size_t index);
 static int zram_read_from_zspool(struct zram *zram, struct page *page,
 				 u32 index);
 
-static void zram_slot_lock_init(struct zram *zram)
-{
-	static struct lock_class_key __key;
-
-	lockdep_init_map(&zram->table_lock_map, "zram->table[index].lock", &__key, 0);
-}
-
 /*
  * entry locking rules:
  *
@@ -1500,6 +1493,7 @@ static void zram_meta_free(struct zram *zram, u64 disksize)
 	zs_destroy_pool(zram->mem_pool);
 	vfree(zram->table);
 	zram->table = NULL;
+	lockdep_unregister_key(&zram->table_lock_key);
 }
 
 static bool zram_meta_alloc(struct zram *zram, u64 disksize)
@@ -1521,7 +1515,8 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 	if (!huge_class_size)
 		huge_class_size = zs_huge_class_size(zram->mem_pool);
 
-	zram_slot_lock_init(zram);
+	lockdep_register_key(&zram->table_lock_key);
+	lockdep_init_map(&zram->table_lock_map, "zram->table[index].lock", &zram->table_lock_key, 0);
 
 	return true;
 }
