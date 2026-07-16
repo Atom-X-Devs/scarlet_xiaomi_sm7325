@@ -817,7 +817,7 @@ static int rcu_print_task_exp_stall(struct rcu_node *rnp)
 /* Request an expedited quiescent state. */
 static void rcu_exp_need_qs(void)
 {
-	__this_cpu_write(rcu_data.cpu_no_qs.b.exp, true);
+	this_cpu_write(rcu_data.cpu_no_qs.b.exp, true);
 	/* Store .exp before .rcu_urgent_qs. */
 	smp_store_release(this_cpu_ptr(&rcu_data.rcu_urgent_qs), true);
 	set_tsk_need_resched(current);
@@ -831,7 +831,7 @@ static void rcu_exp_handler(void *unused)
 	struct rcu_node *rnp = rdp->mynode;
 
 	if (!(READ_ONCE(rnp->expmask) & rdp->grpmask) ||
-	    __this_cpu_read(rcu_data.cpu_no_qs.b.exp))
+	    this_cpu_read(rcu_data.cpu_no_qs.b.exp))
 		return;
 	if (rcu_is_cpu_rrupt_from_idle()) {
 		rcu_report_exp_rdp(this_cpu_ptr(&rcu_data));
