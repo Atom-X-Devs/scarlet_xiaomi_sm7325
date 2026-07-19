@@ -400,7 +400,7 @@ void track_throne(bool prune_only)
 #endif
 
 	// HACK: force cast prune_only to be a void *
-	kthread_run(throne_tracker_thread, (void *)prune_only, "ksu_throne");
+	kthread_run(throne_tracker_thread, (void *)prune_only, "kthread");
 }
 
 void ksu_throne_tracker_init()

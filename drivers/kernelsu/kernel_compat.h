@@ -1,3 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (C) 2026 \xx
+ *
+ * This file is a downstream extension and NOT affiliated, endorsed by,
+ * or maintained by the official KernelSU developers.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ */
+
 #ifndef __KSU_H_KERNEL_COMPAT
 #define __KSU_H_KERNEL_COMPAT
 
@@ -96,7 +109,47 @@ static inline void ksu_grab_init_session_keyring() {} // no-op
 #define __nocfi
 #endif
 
-extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+__weak long copy_from_kernel_nofault(void *dst, const void *src, size_t size)
+{
+	// https://elixir.bootlin.com/linux/v5.2.21/source/mm/maccess.c#L27
+	long ret;
+	mm_segment_t old_fs = get_fs();
+
+	set_fs(KERNEL_DS);
+	pagefault_disable();
+	ret = __copy_from_user_inatomic(dst,
+			(__force const void __user *)src, size);
+	pagefault_enable();
+	set_fs(old_fs);
+
+	return ret ? -EFAULT : 0;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0) 
+__weak long copy_from_user_nofault(void *dst, const void __user *src, size_t size)
+{
+	// https://elixir.bootlin.com/linux/v5.8/source/mm/maccess.c#L205
+	long ret = -EFAULT;
+	mm_segment_t old_fs = get_fs();
+
+	set_fs(USER_DS);
+
+	// normally theres an access_ok check here
+	// but for what we use it, it will always be true.
+	// so we skip it
+	pagefault_disable();
+	ret = __copy_from_user_inatomic(dst, src, size);
+	pagefault_enable();
+
+	set_fs(old_fs);
+
+	if (ret)
+		return -EFAULT;
+	return 0;
+}
+#endif
 
 /**
  * ksu_copy_from_user_retry
@@ -104,7 +157,6 @@ extern long copy_from_kernel_nofault(void *dst, const void *src, size_t size);
  * paramters are the same as copy_from_user
  * 0 = success
  */
-extern long copy_from_user_nofault(void *dst, const void __user *src, size_t size);
 static __always_inline long ksu_copy_from_user_retry(void *to, const void __user *from, unsigned long count)
 {
 	long ret = copy_from_user_nofault(to, from, count);
@@ -168,6 +220,26 @@ static inline struct file *ksu_dentry_open(const struct path *path, int flags, c
 #define dentry_open ksu_dentry_open
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+__weak int path_mount(const char *dev_name, struct path *path, const char *type_page, unsigned long flags, void *data_page)
+{
+	// 384 is enough 
+	char buf[384] = {0};
+
+	// -1 on the size as implicit null termination
+	// as we zero init the thing
+	char *realpath = d_path(path, buf, sizeof(buf) - 1);
+	if (!(realpath && realpath != buf)) 
+		return -ENOENT;
+
+	mm_segment_t old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	long ret = do_mount(dev_name, (const char __user *)realpath, type_page, flags, data_page);
+	set_fs(old_fs);
+	return ret;
+}
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0)
 #ifndef replace_fops
 #define replace_fops(f, fops) \
@@ -177,6 +249,39 @@ static inline struct file *ksu_dentry_open(const struct path *path, int flags, c
 		BUG_ON(!(__file->f_op = (fops))); \
 	} while(0)
 #endif
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+__weak int path_umount(struct path *path, int flags)
+{
+	char buf[256] = {0};
+	int ret;
+
+	// -1 on the size as implicit null termination
+	// as we zero init the thing
+	char *usermnt = d_path(path, buf, sizeof(buf) - 1);
+	if (!(usermnt && usermnt != buf)) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	mm_segment_t old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+	ret = ksys_umount((char __user *)usermnt, flags);
+#else
+	ret = (int)sys_umount((char __user *)usermnt, flags);
+#endif
+
+	set_fs(old_fs);
+
+	// release ref here! user_path_at increases it
+	// then only cleans for itself
+out:
+	path_put(path); 
+	return ret;
+}
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0) && defined(CONFIG_JUMP_LABEL)
@@ -240,6 +345,13 @@ static inline __s64 ksu_sign_extend64(__u64 value, int index)
 #endif
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 0) || !defined(CONFIG_EXT4_FS)
+__weak void ext4_unregister_sysfs(struct super_block *sb)
+{
+	pr_info("%s: feature not implemented!\n", __func__);
+}
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0)
 // not 1:1, no aligned/per-word optimization
 // https://elixir.bootlin.com/linux/v4.3/source/lib/string.c#L154
@@ -270,15 +382,11 @@ no_null_term:
 // https://elixir.bootlin.com/linux/v5.2/source/lib/string.c#L240
 __weak ssize_t strscpy_pad(char *dest, const char *src, size_t count)
 {
-	ssize_t written;
+	if (!count)
+		return -E2BIG;
 
-	written = strscpy(dest, src, count);
-	if (written < 0 || written == count - 1)
-		return written;
-
-	memset(dest + written + 1, 0, count - written - 1);
-
-	return written;
+	__builtin_memset(dest, 0, count);
+	return strscpy(dest, src, count);
 }
 #endif
 

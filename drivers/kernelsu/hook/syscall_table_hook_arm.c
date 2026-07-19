@@ -97,14 +97,14 @@ static noinline long hook_armeabi_read(const struct pt_regs *regs)
  
 extern void *sys_call_table[];
 
-static uintptr_t armeabi_reboot __read_mostly = NULL;
+static void *armeabi_reboot __read_mostly = NULL;
 static noinline long hook_armeabi_reboot(int magic1, int magic2, unsigned int cmd, void __user *arg)
 {
 	ksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
 	return sys_reboot(magic1, magic2, cmd, arg);
 }
 
-static uintptr_t armeabi_execve __read_mostly = NULL;
+static void *armeabi_execve __read_mostly = NULL;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 static noinline long hook_armeabi_execve(const char __user * filename,
@@ -154,21 +154,21 @@ static noinline void hook_armeabi_execve()
 #endif /* sys_execve_oabi */
 
 
-static uintptr_t armeabi_faccessat __read_mostly = NULL;
+static void *armeabi_faccessat __read_mostly = NULL;
 static noinline long hook_armeabi_faccessat(int dfd, const char __user * filename, int mode)
 {
 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
 	return sys_faccessat(dfd, filename, mode);
 }
 
-static uintptr_t armeabi_fstatat64 __read_mostly = NULL;
+static void *armeabi_fstatat64 __read_mostly = NULL;
 static noinline long hook_armeabi_fstatat64(int dfd, const char __user * filename, struct stat64 __user * statbuf, int flag)
 {
 	ksu_handle_stat(&dfd, &filename, &flag);
 	return sys_fstatat64(dfd, filename, statbuf, flag);
 }
 
-static uintptr_t armeabi_fstat64 __read_mostly = NULL;
+static void *armeabi_fstat64 __read_mostly = NULL;
 static noinline long hook_armeabi_fstat64_ret(unsigned long fd, struct stat64 __user * statbuf)
 {
 	// we handle it like rp
@@ -177,7 +177,7 @@ static noinline long hook_armeabi_fstat64_ret(unsigned long fd, struct stat64 __
 	return ret;
 }
 
-static uintptr_t armeabi_read __read_mostly = NULL;
+static void *armeabi_read __read_mostly = NULL;
 static noinline long hook_armeabi_read(unsigned int fd, char __user *buf, size_t count)
 {
 	ksu_handle_sys_read_fd(fd);
@@ -186,8 +186,20 @@ static noinline long hook_armeabi_read(unsigned int fd, char __user *buf, size_t
 
 #endif // SYSCALL HANDLERS
 
-// 'vmapping for writable' idea copied from upstream's LSM_HOOK_HACK, override_security_head
-// no more "Unable to handle kernel write to read-only memory at virtual address ffffffuckyou"
+struct syscall_patch_param {
+	void **target_slot;	// pptr to writable vmapped sc slot
+	void *fn_ptr;		// fn_ptr to write on that slot
+};
+
+static int patch_syscall_slot_stop_machine(void *data)
+{
+	struct syscall_patch_param *param = (struct syscall_patch_param *)data;
+
+	// write on the actual syscall slot
+	*(param->target_slot) = param->fn_ptr;
+
+	return 0;
+}
 
 // WARNING!!! void * abuse ahead! (type-punning, pointer-hiding!)
 // for 4.19+ old_ptr is actually syscall_fn_t *, which is just long * so we can consider this void **
@@ -218,40 +230,28 @@ static void read_and_replace_syscall(void *old_ptr, unsigned long syscall_nr, vo
 	unsigned long base = addr & PAGE_MASK;
 	unsigned long offset = addr & ~PAGE_MASK; // offset_in_page
 
-	// this is impossible for our case because the page alignment
-	// but be careful for other cases!
-	// BUG_ON(offset + len > PAGE_SIZE);
-	if (offset + sizeof(void *) > PAGE_SIZE) {
-		pr_info("%s: syscall slot crosses page boundary! aborting.\n", __func__);
-		return;
-	}
-
-	// virtual mapping of a physical page 
 	struct page *page = phys_to_page(__pa(base));
 	if (!page)
 		return;
 
-	// create a "writabel address" which is mapped to teh same address
 	void *writable_addr = vmap(&page, 1, VM_MAP, PAGE_KERNEL);
 	if (!writable_addr)
 		return;
 
-	// swap on the alias
+	// use the alias
 	void **target_slot = (void **)((unsigned long)writable_addr + offset);
 
-	preempt_disable();
-	local_irq_disable();
+	// copy syscall's addr to storage variable
+	*(void **)old_ptr = *target_slot;
+	barrier();
 
-	*(void **)old_ptr = *target_slot; 
+	struct syscall_patch_param param;
+	param.target_slot = target_slot;
+	param.fn_ptr = new_ptr;
 
-	*target_slot = new_ptr;
-	smp_mb(); // ^^
-
-	local_irq_enable();
-	preempt_enable();
+	stop_machine(patch_syscall_slot_stop_machine, (void *)&param, NULL);
 
 	vunmap(writable_addr);
-
 	smp_mb(); 
 }
 
@@ -287,25 +287,15 @@ static void restore_syscall(void *old_ptr, unsigned long syscall_nr, void *new_p
 	unsigned long base = addr & PAGE_MASK;
 	unsigned long offset = addr & ~PAGE_MASK; // offset_in_page
 
-	// this is impossible for our case because the page alignment
-	// but be careful for other cases!
-	// BUG_ON(offset + len > PAGE_SIZE);
-	if (offset + sizeof(void *) > PAGE_SIZE) {
-		pr_info("%s: syscall slot crosses page boundary! aborting.\n", __func__);
-		return;
-	}
-
-	// virtual mapping of a physical page 
 	struct page *page = phys_to_page(__pa(base));
 	if (!page)
 		return;
 
-	// create a "writabel address" which is mapped to teh same address
 	void *writable_addr = vmap(&page, 1, VM_MAP, PAGE_KERNEL);
 	if (!writable_addr)
 		return;
 
-	// swap on the alias
+	// use the alias
 	void **target_slot = (void **)((unsigned long)writable_addr + offset);
 
 	// check if its ours
@@ -314,22 +304,18 @@ static void restore_syscall(void *old_ptr, unsigned long syscall_nr, void *new_p
 		goto out;
 	}
 	
-	pr_info("%s: syscall is ours! *target_slot: 0x%lx new_ptr: 0x%lx\n", __func__, (long)*target_slot, (long)new_ptr );
+	pr_info("%s: syscall is ours! *target_slot: 0x%lx new_ptr: 0x%lx\n", __func__, (long)*target_slot, (long)new_ptr);
 
-	preempt_disable();
-	local_irq_disable();
+	struct syscall_patch_param param;
+	param.target_slot = target_slot;
+	param.fn_ptr = *(void **)old_ptr;
 
-	*target_slot = *(void **)old_ptr;	
-	smp_mb(); // ^^
+	stop_machine(patch_syscall_slot_stop_machine, (void *)&param, NULL);
 
-	*(void **)old_ptr = NULL; // explicit reset
-
-	local_irq_enable();
-	preempt_enable();
-
+	// reset storage variable
+	WRITE_ONCE(*(void **)old_ptr, NULL);
 out:
 	vunmap(writable_addr);
-
 	smp_mb(); 
 }
 

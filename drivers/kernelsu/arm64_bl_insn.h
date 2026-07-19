@@ -17,7 +17,9 @@
 #include <linux/version.h>
 #include <linux/uaccess.h>
 #include <asm/insn.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0)
+#include <asm/text-patching.h>
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
 #include <asm/patching.h>
 #endif
 

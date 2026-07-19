@@ -1,5 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Copyright (C) 2026 \xx
+/*
+ * Copyright (C) 2026 \xx
+ *
+ * This file is a downstream extension and NOT affiliated, endorsed by,
+ * or maintained by the official KernelSU developers.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ */
 
 #ifndef __KSU_H_KPROBES_COMMON
 #define __KSU_H_KPROBES_COMMON
@@ -42,7 +52,11 @@ static uintptr_t kp_cfi_kallsyms_lookup_name(const char *name)
 	return addr;
 
 cfi_jt:
-	// decode the b 0xfffffffff address on here if this happens, TODO.
+	return addr;
+
+	__builtin_unreachable();
+
+	// TODO: decode the b 0xfffffffff address on here if this happens
 	snprintf(cfi_name, sizeof(cfi_name), "%s.cfi_jt", name);
 	addr = kallsyms_lookup_name(cfi_name);
 	pr_info("kallsyms_lookup_name: %s addr: 0x%lx \n", cfi_name, addr);
