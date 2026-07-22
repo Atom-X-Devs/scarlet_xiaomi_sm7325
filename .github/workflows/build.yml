@@ -62,11 +62,11 @@ jobs:
           
           cd AnyKernel3
           sed -i 's/do.devicecheck=1/do.devicecheck=0/g' anykernel.sh
-          zip -r9 ../ShinjiKernel-Redwood-KSUN.zip *
+          zip -r9 ../ShinjiKernel-KSUN-Redwood.zip *
 
       - name: Upload Kernel Artifact (ZIP)
         uses: actions/upload-artifact@v4
         with:
           name: ShinjiKernel-Redwood-KSUNext v1.0
-          path: ShinjiKernel-Redwood-KSUN.zip
+          path: ShinjiKernel-KSUN-Redwood.zip
           
