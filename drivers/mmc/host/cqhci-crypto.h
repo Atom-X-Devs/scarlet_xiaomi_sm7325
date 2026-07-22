@@ -48,7 +48,8 @@ void cqhci_crypto_enable_spec(struct cqhci_host *host);
 void cqhci_crypto_disable_spec(struct cqhci_host *host);
 
 int cqhci_host_init_crypto_spec(struct cqhci_host *host,
-				const struct keyslot_mgmt_ll_ops *ksm_ops);
+				void *ksm_ops);
+
 
 void cqhci_crypto_setup_rq_keyslot_manager_spec(struct cqhci_host *host,
 						struct request_queue *q);
