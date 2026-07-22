@@ -35,14 +35,14 @@ jobs:
 
       - name: Build Kernel
         run: |
-          # Hilangkan cd kernel
           export PATH=$GITHUB_WORKSPACE/toolchain/bin:$PATH
           export ARCH=arm64
           export SUBARCH=arm64
           export KBUILD_BUILD_USER="Scarlet-Builder"
           export KBUILD_BUILD_HOST="GitHub-Actions"
 
-          make O=out vendor/redwood_defconfig
+          # Ubah baris ini menggunakan nama file defconfig yang benar
+          make O=out vendor/xiaomi-qgki_defconfig
           
           make -j$(nproc --all) O=out \
             LLVM=1 \
@@ -50,6 +50,7 @@ jobs:
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+
 
       - name: Pack with AnyKernel3
         run: |
