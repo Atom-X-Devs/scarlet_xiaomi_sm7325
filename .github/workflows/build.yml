@@ -6,8 +6,6 @@ on:
 jobs:
   build-kernel:
     runs-on: ubuntu-22.04
-    permissions:
-     contents: write
   
     steps:
       - name: Checkout Repository
@@ -77,21 +75,3 @@ jobs:
         with:
           name: ShinjiKernel-KSUNext v1.0
           path: ShinjiKernel-KSUN-redwood.zip
-
-
-      - name: Upload to Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            out/arch/arm64/boot/Image
-            out/arch/arm64/boot/dtb
-            AnyKernel3/*.zip
-          name: "ShinjiKernel-KSUNext v1.0 - $(date +'%d%m%Y')"
-          tag_name: "v$(date +'%d%m%Y_%H%M')"
-          body: |
-            Automated Kernel Build with KernelSU-Next Latest v3.3.0
-            Device: Xiaomi Redmi Note 12 Pro Speed / POCO X5 Pro 5G (Redwood)
-            Compiler: Neutron Clang Build 06302026
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
