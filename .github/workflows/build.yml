@@ -28,18 +28,14 @@ jobs:
           chmod +x antman
           ./antman --patch=glibc
 
-      - name: Clone Kernel Source
-        run: |
-          git clone --depth=1 https://github.com/Harukiansyah/scarlet_xiaomi_sm7325_Fork kernel
-
       - name: Inject KernelSU-Next (v3.3.0)
         run: |
-          cd kernel
+          # Langsung inject karena kita sudah berada di root folder source kernel
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s v3.3.0
 
       - name: Build Kernel
         run: |
-          cd kernel
+          # Hilangkan cd kernel
           export PATH=$GITHUB_WORKSPACE/toolchain/bin:$PATH
           export ARCH=arm64
           export SUBARCH=arm64
@@ -58,15 +54,16 @@ jobs:
       - name: Pack with AnyKernel3
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
-          cp kernel/out/arch/arm64/boot/Image AnyKernel3/
+          # Ubah path copy image karena tidak pakai folder "kernel" lagi
+          cp out/arch/arm64/boot/Image AnyKernel3/
           
           cd AnyKernel3
           sed -i 's/do.devicecheck=1/do.devicecheck=0/g' anykernel.sh
-          zip -r9 ../ShinjiKernel-KSUN-Redwood.zip *
+          zip -r9 ../ShinjiKernel-KSUN-redwood.zip *
 
       - name: Upload Kernel Artifact (ZIP)
         uses: actions/upload-artifact@v4
         with:
-          name: ShinjiKernel-Redwood-KSUNext v1.0
-          path: ShinjiKernel-KSUN-Redwood.zip
+          name: ShinjiKernel-KSUNext v1.0
+          path: ShinjiKernel-KSUN-redwood.zip
           
