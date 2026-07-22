@@ -41,8 +41,10 @@ jobs:
           export KBUILD_BUILD_USER="Scarlet-Builder"
           export KBUILD_BUILD_HOST="GitHub-Actions"
 
-          # Ubah baris ini menggunakan nama file defconfig yang benar
           make O=out vendor/xiaomi-qgki_defconfig
+          
+          # TAMBAHAN: Paksa make untuk menjawab default semua pertanyaan config yang hilang/bentrok
+          make O=out olddefconfig
           
           make -j$(nproc --all) O=out \
             LLVM=1 \
