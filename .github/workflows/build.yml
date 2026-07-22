@@ -41,17 +41,17 @@ jobs:
           export KBUILD_BUILD_USER="Scarlet-Builder"
           export KBUILD_BUILD_HOST="GitHub-Actions"
 
-          make O=out vendor/xiaomi-qgki_defconfig
+          # Paksa spam ENTER saat ngebaca defconfig
+          yes "" | make O=out vendor/xiaomi-qgki_defconfig
           
-          # TAMBAHAN: Paksa make untuk menjawab default semua pertanyaan config yang hilang/bentrok
-          make O=out olddefconfig
-          
-          make -j$(nproc --all) O=out \
+          # Paksa spam ENTER juga pas proses kompilasi utamanya
+          yes "" | make -j$(nproc --all) O=out \
             LLVM=1 \
             LLVM_IAS=1 \
             CC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+
 
 
       - name: Pack with AnyKernel3
