@@ -3,16 +3,25 @@
 ## hooking
 - prefer syscalls and LSM always
 - syscall table hooking is implemented
+- theres partial kprobe/kretprobe support on boot-time hooks
 - on legacy theres no kprobes/kretprobes and syscall tracepoint guarantees
 - theres no guarantee for kallsyms even!
 - lots have random backports left and right, theres no abi stability guarantee at all!
-- theres partial kp/rp support on boot-time hooks
-- theres also experimental ARM64 bl insn inline hooking support. Recommended for GKI.
+- theres also ARM64 'branch-link' inline hooking support.
+- real-deal-but-brittle kallsyms bruteforcer to hunt ksyms.
+- manual hooking is still supported and will be kept forever.
 
 ## sucompat
 - tweaked for downstream
 - simd-like, last word first, per word compare
 - sucompat gate is tweaked too
+
+## LSM framework
+- pure function pointer on sub 6.8
+- 3.x LSM scans the whole kernel to hunt for selinux_ops.
+- 4.2 ~ 6.8 relies on first list member hijack.
+- 6.8+ LSM relies on branch link hooking. ARM64 only.
+- manual hooking also available.
 
 ## task_fix_setuid LSM
 - upstream was on this before
@@ -38,7 +47,8 @@
 - we also use this for "second stage apply" instead of execve_ksud
 - we also grab init_session_keyring here
 
-## security_bprm_check LSM
+## bprm LSM
+- defferent hooks for different kernels
 - think of this as "after sys_execve"
 - lockless argv pullouts for sulog
 - might be used for something later
@@ -96,6 +106,6 @@
 ## log / reminders
 - some kernels reads 'cold + noinline' as __init, which evicts our fn. avoid this combination.
 - some kernels have autistic inlining which also fucks up if we ever wanted to \__\attribute__((flatten)) (e.g. sultan and other 'optimization')
-- c99 restrict is usable, however, we only use this on hot paths where it makes sense.
+- c99 restrict is used, however, we only use this on hot paths where it makes sense.
 
 

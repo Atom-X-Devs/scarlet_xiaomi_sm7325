@@ -101,14 +101,6 @@ static inline void ksu_grab_init_session_keyring() {} // no-op
 #define WRITE_ONCE(x, y) (*(volatile typeof(x) *)&(x) = (typeof(x))(y))
 #endif
 
-#ifndef __ro_after_init
-#define __ro_after_init
-#endif
-
-#ifndef __nocfi
-#define __nocfi
-#endif
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
 __weak long copy_from_kernel_nofault(void *dst, const void *src, size_t size)
 {
@@ -167,16 +159,6 @@ static __always_inline long ksu_copy_from_user_retry(void *to, const void __user
 	return copy_from_user(to, from, count);
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
-#define d_inode(dentry) ((dentry)->d_inode)
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0) && defined(CONFIG_ARM64)
-#ifndef TIF_SECCOMP
-#define TIF_SECCOMP		11
-#endif
-#endif
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
 static inline void *ksu_kvmalloc(size_t size, gfp_t flags)
 {
@@ -186,6 +168,7 @@ static inline void *ksu_kvmalloc(size_t size, gfp_t flags)
 	
 	return buf;
 }
+#define kvmalloc ksu_kvmalloc
 
 static inline void ksu_kvfree(void *buf)
 {
@@ -194,8 +177,25 @@ static inline void ksu_kvfree(void *buf)
 	else
 		kfree(buf);
 }
-#define kvmalloc ksu_kvmalloc
 #define kvfree ksu_kvfree
+#endif
+
+// basic stack offload.
+static inline void kvfree_byref(void *buf) { kvfree(*(void **)buf); }
+static inline void kfree_byref(void *buf) { kfree(*(void **)buf); }
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 0)
+__weak void memzero_explicit(void *s, size_t count) { memset_explicit(s, 0, count); }
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+#define d_inode(dentry) ((dentry)->d_inode)
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0) && defined(CONFIG_ARM64)
+#ifndef TIF_SECCOMP
+#define TIF_SECCOMP		11
+#endif
 #endif
 
 // for supercalls.c fd install tw
@@ -223,12 +223,13 @@ static inline struct file *ksu_dentry_open(const struct path *path, int flags, c
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
 __weak int path_mount(const char *dev_name, struct path *path, const char *type_page, unsigned long flags, void *data_page)
 {
-	// 384 is enough 
-	char buf[384] = {0};
+	char *buf __cleanup(kfree_byref) = kzalloc(PATH_MAX, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
 
 	// -1 on the size as implicit null termination
 	// as we zero init the thing
-	char *realpath = d_path(path, buf, sizeof(buf) - 1);
+	char *realpath = d_path(path, buf, PATH_MAX - 1);
 	if (!(realpath && realpath != buf)) 
 		return -ENOENT;
 
@@ -490,12 +491,10 @@ static noinline ssize_t ksu_kernel_write_compat(struct file *p, const void *buf,
 #define kernel_write ksu_kernel_write_compat
 #endif // < 4.14
 
-static inline void ksu_kfree_byref(void *buf) { kfree(*(void **)buf); }
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION (3, 9, 0)
 // hashtable.h, list.h, rculist.h
 // ref: https://github.com/torvalds/linux/commit/b67bfe0d42cac56c512dd5da4b1b347a23f4b70a
-#include "linux_hashtable.h"
+#include "external/linux_hashtable.h"
 static inline int __must_check ksu_kref_get_unless_zero(struct kref *kref)
 { 
 	return atomic_add_unless(&kref->refcount, 1, 0); 

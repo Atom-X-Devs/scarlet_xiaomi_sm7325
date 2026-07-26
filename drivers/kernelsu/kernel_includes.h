@@ -162,6 +162,14 @@
 #include <linux/kprobes.h>
 #endif
 
+#ifndef __ro_after_init
+#define __ro_after_init
+#endif
+
+#ifndef __nocfi
+#define __nocfi
+#endif
+
 /**
  * Linux kernel forbids c99 restrict
  * however we can use builtin's restrict
@@ -179,6 +187,24 @@
 # else
 #  define fallthrough do {} while (0) /* fallthrough */
 # endif
+#endif
+
+/**
+ * we do NOT have memset_explicit on the linux kernel
+ *
+ * from: OPENSSL_cleanse, volatile function pointer prevents memset optimization
+ * https://github.com/openssl/openssl/blob/master/crypto/mem_clr.c
+ * 
+ */
+static void *(*volatile memset_fnptr)(void *s, int c, size_t count) = memset;
+static __nocfi void *memset_explicit(void *s, int c, size_t count)
+{
+	return memset_fnptr(s, c, count);
+}
+
+// pseudo-raii / defer on C via __attribute__((__cleanup__()))
+#ifndef __cleanup
+#define __cleanup(fn) __attribute__((__cleanup__(fn)))
 #endif
 
 /**

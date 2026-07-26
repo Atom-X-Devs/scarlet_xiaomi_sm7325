@@ -11,8 +11,8 @@ MDIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 $(info -- KDIR: $(KDIR))
 $(info -- MDIR: $(MDIR))
 
-# compliant to last upstream kernel change as of fab24e04
-CFLAGS_ksu.o += -DKSU_VERSION=32654
+# compliant to last upstream kernel change as of 942394fc
+CFLAGS_ksu.o += -DKSU_VERSION=32660
 
 ifndef KSU_EXPECTED_SIZE
 KSU_EXPECTED_SIZE := 0x033b
@@ -120,13 +120,14 @@ CFLAGS_REMOVE_ksu.o += -fno-builtin
 ifneq ($(CONFIG_KSU_DEBUG),y)
 # strip, remove tracing / profiling
 # comment out if proper backtrace is needed
-CFLAGS_ksu.o += -O3
 CFLAGS_ksu.o += -g0 -fno-unwind-tables -fno-asynchronous-unwind-tables -fomit-frame-pointer
 CFLAGS_ksu.o += $(call cc-option, -momit-leaf-frame-pointer)
 
 # no profiling
 CFLAGS_REMOVE_ksu.o = $(CC_FLAGS_FTRACE)
 CFLAGS_REMOVE_ksu.o += -pg
+
+CFLAGS_ksu.o += -O3
 
 # hot paths dont have loops so lets make code smaller
 CFLAGS_ksu.o += $(call cc-option, -fno-unroll-loops)

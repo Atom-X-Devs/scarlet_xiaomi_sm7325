@@ -14,9 +14,8 @@
 #ifndef __KSU_H_KPROBES_COMMON
 #define __KSU_H_KPROBES_COMMON
 
-// kprobes based symbol resolvers.
+// kprobes based symbol resolver.
 // works better than kallsyms_lookup_xxx family
-
 static uintptr_t kp_kallsyms_lookup_name(const char *name)
 {
 	struct kprobe kp = { .symbol_name = name };
@@ -27,39 +26,6 @@ static uintptr_t kp_kallsyms_lookup_name(const char *name)
 
 	addr = (uintptr_t)kp.addr;
 	unregister_kprobe(&kp);
-
-	return addr;
-}
-
-static uintptr_t kp_syscall_lookup(const char *name)
-{
-	uintptr_t addr = kp_kallsyms_lookup_name(name);
-	pr_info("syscall_lookup: %s addr: 0x%lx \n", name, addr);
-	
-	return addr;
-}
-
-static uintptr_t kp_cfi_kallsyms_lookup_name(const char *name)
-{
-	char cfi_name[KSYM_NAME_LEN] = { 0 };
-	uintptr_t addr = NULL;
-
-	addr = kp_kallsyms_lookup_name(name);
-	if (!addr)
-		goto cfi_jt;
-	
-	pr_info("kp_kallsyms_lookup_name: %s addr: 0x%lx \n", name, addr);
-	return addr;
-
-cfi_jt:
-	return addr;
-
-	__builtin_unreachable();
-
-	// TODO: decode the b 0xfffffffff address on here if this happens
-	snprintf(cfi_name, sizeof(cfi_name), "%s.cfi_jt", name);
-	addr = kallsyms_lookup_name(cfi_name);
-	pr_info("kallsyms_lookup_name: %s addr: 0x%lx \n", cfi_name, addr);
 
 	return addr;
 }
