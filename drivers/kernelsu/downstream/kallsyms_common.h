@@ -106,7 +106,7 @@ size_is_sufficient:
 __weak int sprint_symbol_no_offset(char *buffer, unsigned long address) { return sprint_symbol(buffer, address); }
 #endif
 
-static noinline void dotted_kallsyms_build_hash_array(void)
+static noinline __nocfi void dotted_kallsyms_build_hash_array(void)
 {
 	extern char _stext[], _etext[];
 	uintptr_t start = (uintptr_t)_stext;
@@ -114,12 +114,24 @@ static noinline void dotted_kallsyms_build_hash_array(void)
 	uintptr_t iter_count = 0;
 	uintptr_t curr;
 
-	char *last_sym = kzalloc(KSYM_SYMBOL_LEN, GFP_KERNEL); // symbol cache
-	char *symbol_buf = kzalloc(KSYM_SYMBOL_LEN, GFP_KERNEL);
-	if (!symbol_buf || !last_sym)
+	might_sleep();
+
+	char *membuf __zoffstack(KSYM_SYMBOL_LEN * 2);
+	if (!membuf)
 		return;
 
-	might_sleep();
+	char *symbol_buf = membuf;
+	char *symbol_cache = membuf + KSYM_SYMBOL_LEN;
+
+#ifdef MODULE // https://elixir.bootlin.com/linux/v7.2-rc4/source/kernel/kprobes.c#L1506
+	int (*kallsyms_lookup_size_offset_fn)(unsigned long addr, unsigned long *symbolsize, unsigned long *offset) = NULL;
+	*(void **)&kallsyms_lookup_size_offset_fn = kallsyms_lookup_name("kallsyms_lookup_size_offset");
+	if (!kallsyms_lookup_size_offset_fn)
+		pr_info("%s: kallsyms_lookup_size_offset not found! \n", __func__);
+#else
+	extern int kallsyms_lookup_size_offset(unsigned long addr, unsigned long *symbolsize, unsigned long *offset);
+	int (*kallsyms_lookup_size_offset_fn)(unsigned long addr, unsigned long *symbolsize, unsigned long *offset) = kallsyms_lookup_size_offset;
+#endif
 
 	pr_info("%s: hash array init! \n", __func__);
 
@@ -157,27 +169,32 @@ scan_start:
 	dot_ptr[0] = '\0';
 
 	// if current symbol is same as last entry, skip
-	if (!strcmp(symbol_buf, last_sym))
+	if (!strcmp(symbol_buf, symbol_cache))
 		goto step_up;
 
 	// symbol is not the same as the last one!
 	// cache this symbol and insert it to our hash array!
-	strscpy(last_sym, symbol_buf, KSYM_SYMBOL_LEN);
+	strscpy(symbol_cache, symbol_buf, KSYM_SYMBOL_LEN);
 
 	insert_to_kallsyms_array(symbol_buf, curr);
 
 step_up:
-	curr = curr + 4;
+	;
+
+	unsigned long sym_size = 0;
+	unsigned long offset = 0;
+	if (kallsyms_lookup_size_offset_fn && kallsyms_lookup_size_offset_fn(curr, &sym_size, &offset) && sym_size > offset)
+		curr =  curr + (sym_size - offset); // we can do larger jumps
+	else
+		curr = curr + 4;
+
 	if (curr < end)
 		goto scan_start;
 
 	pr_info("%s: scan done! total items: %zu, iter_count: %lu\n", __func__, kallsyms_hash_array_entry_count, iter_count);
 
-	kfree(symbol_buf);
-	kfree(last_sym);
 	return;
 }
-
 
 static noinline uintptr_t kallsyms_lookup_hashed_name(const char *name)
 {
@@ -199,8 +216,18 @@ static noinline uintptr_t kallsyms_lookup_hashed_name(const char *name)
 
 found:
 	sprint_symbol_no_offset(symbol_buf, entries[i].addr);
+
+	// sanity check, hash collision might occur
+	if (unlikely(!strstarts(symbol_buf, name)))
+		goto collision_found;
+
 	pr_info("%s: %s hash: 0x%llx at 0x%lx\n", __func__, symbol_buf, input_hash, entries[i].addr);
 	return entries[i].addr;
+
+collision_found:
+	// this is unlikely, but hell yeah lets log it if it happens
+	pr_info("%s: chibihash64 collision! name: %s symbol_buf: %s hash: 0x%llx\n", __func__, name, symbol_buf, input_hash);
+	return 0x0;
 }
 
 #if 0

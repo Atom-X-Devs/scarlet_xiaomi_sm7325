@@ -18,10 +18,9 @@
 /**
  *  NOTE: theres no way to hijack sys_reboot and sys_newfstat cleanly.
  *
- *  however, this feature requires kprobes anyway. and this is still highly experimental. (260524)
- *  works the same as lsm_hooks_static.c, where we patch caller's site
- *
- *  tested to work on 4.19 ~ 6.12 aarch64 GKI
+ *  tested to work on:
+ *	- 3.10 ~ 4.14 (partially, no do_faccessat)
+ *	- 4.19 ~ 6.12 GKI
  *
  *  Changelog:
  *	- init, 260524
