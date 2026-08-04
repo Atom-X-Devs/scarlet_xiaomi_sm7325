@@ -191,7 +191,7 @@ static inline bool check_candidate(uintptr_t addr)
 	if (!candidate->cred_free)
 		return false;
 
-#ifdef CONFIG_KALLSYMS // not always available, can also fail, but it wont hurt to try.
+#if 0 //def CONFIG_KALLSYMS // not always available, can also fail, but it wont hurt to try.
 	uintptr_t ksym_ptr = (uintptr_t)kallsyms_lookup_name("selinux_cred_free");
 	if (unlikely(ksym_ptr != (uintptr_t)candidate->cred_free))
 		goto test_fn;
@@ -202,6 +202,7 @@ static inline bool check_candidate(uintptr_t addr)
 test_fn:
 #endif
 
+	// oh yeah I am so confident that this is it
 	pr_info("%s: candidate selinux_cred_free at 0x%lx\n", __func__, (long)candidate->cred_free);
 	return verify_selinux_cred_free((void *)candidate->cred_free);
 }

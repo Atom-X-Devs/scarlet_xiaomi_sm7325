@@ -28,133 +28,13 @@
 // enabled by default
 static bool ksu_selinux_hide_enabled __read_mostly = true;
 
-// sids for avc spoofing
-static u32 ksu_sid __read_mostly = 0;
-static u32 priv_app_sid __read_mostly = 0;
-
-static inline int ksu_selinux_get_sids()
-{
-	int err;
-
-	err = security_secctx_to_secid("u:r:ksu:s0", strlen("u:r:ksu:s0"), &ksu_sid);
-	if (!err)
-		pr_info("selinux_hide: ksu_sid: %u\n", ksu_sid);
-
-	err = security_secctx_to_secid("u:r:priv_app:s0:c512,c768", strlen("u:r:priv_app:s0:c512,c768"), &priv_app_sid);
-	if (!err)
-		pr_info("selinux_hide: priv_app_sid: %u\n", priv_app_sid);
-
-	if (!ksu_sid || !priv_app_sid)
-		return -1;
-
-	return 0;
-}
-
-void ksu_slow_avc_audit(u32 *tsid)
-{
-	if (unlikely(!ksu_selinux_hide_enabled))
-		return;
-
-	if (*tsid != ksu_sid)
-		return;
-
-	pr_info("selinux_hide: slow_avc_audit: replace tsid: %u with priv_app_sid: %u\n", *tsid, priv_app_sid);
-	*tsid = priv_app_sid;
-
-	return;
-}
-
-static bool ksu_should_destroy_context(char *str)
-{
-	if (!str)
-		return false;
-
-	bool status = false;
-
-	mutex_lock(&selinux_hide_list_mutex);
-
-	size_t offset = 0;
-	while (offset < ksu_hide_type_len) {
-		const char *current_entry = ksu_hide_type_list + offset;
-		
-		if (strstr(str, current_entry)) {
-			status = true;
-			goto out_unlock;
-		}
-
-		offset = offset + strlen(current_entry) + 1;
-	}
-
-	// double strstr
-	char *str2 = strchr(str, ' ');
-	if (!str2)
-		goto out_unlock;
-
-	offset = 0;
-	while (offset < ksu_hide_rule_len) {
-		const char *src_rule = ksu_hide_rule_list + offset;
-		size_t src_sz = strlen(src_rule) + 1;
-			
-		const char *tgt_rule = src_rule + src_sz;
-		size_t tgt_sz = strlen(tgt_rule) + 1;
-
-		if (strstr(str, src_rule) && strstr(str2, tgt_rule)) {
-			status = true;
-			goto out_unlock;
-		}
-
-		offset = offset + src_sz + tgt_sz;
-	}
-
-out_unlock:
-	mutex_unlock(&selinux_hide_list_mutex);
-	return status;
-
-}
-
-#if 0
-static bool ksu_should_destroy_context(char *str)
-{
-	if (!str)
-		return false;
-
-	down_read(&ksu_sepolicy_shitlist_lock);
-
-	struct ksu_type_node *t_node;
-	list_for_each_entry(t_node, &ksu_hide_type_list, list) {
-		if (strstr(str, t_node->padded_name)) {
-			up_read(&ksu_sepolicy_shitlist_lock);
-			return true;
-		}
-	}
-
-	// double strstr
-	char *str2 = strchr(str, ' ');
-	if (!str2) {
-		up_read(&ksu_sepolicy_shitlist_lock);
-		return false;
-	}		
-
-	struct ksu_rule_node *r_node;
-	list_for_each_entry(r_node, &ksu_hide_rule_list, list) {
-		if (strstr(str, r_node->src) && strstr(str2, r_node->tgt)) {
-			up_read(&ksu_sepolicy_shitlist_lock);
-			return true;
-		}
-	}
-
-	up_read(&ksu_sepolicy_shitlist_lock);
-	return false;
-}
-#endif
-
 static __always_inline int ksu_hide_setprocattr_inline(const char *name, void *value, size_t size)
 {
 	if (unlikely(!ksu_selinux_hide_enabled))
 		return 0;
 
 	// only hook when seccomp is enabled
-	if (!test_thread_flag(TIF_SECCOMP))
+	if (!ksu_is_seccomp_enabled())
 		return 0;
 
 	// only appuid
@@ -175,9 +55,9 @@ static __always_inline int ksu_hide_setprocattr_inline(const char *name, void *v
 	if (!str)
 		return 0;
 
-	// to make sure its terminated
-	char buf[64] = { 0 };
-	size_t len = (size < 63) ? size : 63;
+	// two cachelines
+	char buf[128] = { 0 };
+	size_t len = (size < 127) ? size : 127;
 
 	memcpy(buf, str, len);
 
@@ -190,67 +70,20 @@ static __always_inline int ksu_hide_setprocattr_inline(const char *name, void *v
 	return 0;
 }
 
-#if defined(CONFIG_KPROBES)
-
-#include <linux/kprobes.h>
-static struct kprobe *slow_avc_audit_kp;
-
-static int slow_avc_audit_pre_handler(struct kprobe *p, struct pt_regs *regs)
-{
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0) && defined(KSU_COMPAT_HAS_SELINUX_STATE)
-	u32 *tsid = (u32 *)&PT_REGS_PARM3(regs);
-#else
-	u32 *tsid = (u32 *)&PT_REGS_PARM2(regs);
-#endif
-
-	ksu_slow_avc_audit(tsid);
-
-	return 0;
-}
-
-#endif // CONFIG_KPROBES
-
-
-static void ksu_selinux_hide_enable() 
-{
-	int ret = ksu_selinux_get_sids();
-	if (ret)
-		pr_info("selinux_hide: sid grab fail?\n");
-
-#if defined(CONFIG_KPROBES)
-	slow_avc_audit_kp = init_kprobe("slow_avc_audit", slow_avc_audit_pre_handler);
-#endif
-
-	ksu_selinux_hide_enabled = true;
-}
-
-static void ksu_selinux_hide_disable()
-{
-#if defined(CONFIG_KPROBES)
-	pr_info("selinux_hide: unregister slow_avc_audit kprobe!\n");
-	destroy_kprobe(&slow_avc_audit_kp);
-#endif
-
-	pr_info("selinux_hide: closing down hooks!\n");
-
-	ksu_selinux_hide_enabled = false;
-}
-
 // selinux_transaction_write hijack
-
 static ssize_t (*selinux_transaction_write_fn)(struct file *file, const char __user *buf, size_t size, loff_t *pos) __read_mostly = NULL;
 static __nocfi ssize_t ksu_selinux_transaction_write(struct file *file, const char __user *buf, size_t size, loff_t *pos)
 {
 	if (unlikely(!ksu_selinux_hide_enabled))
 		goto skip_destroy;
 
-	if (!test_thread_flag(TIF_SECCOMP))
+	if (!ksu_is_seccomp_enabled())
 		goto skip_destroy;
 
 	if (current_uid().val < 10000)
 		goto skip_destroy;
 
+	// two cachelines
 	char kbuf[128] = { 0 };
 	size_t len = (size < 127) ? size : 127;
 
@@ -318,7 +151,7 @@ static __nocfi int ksu_sel_open_handle_status(struct inode *inode, struct file *
 	if (unlikely(!ksu_selinux_hide_enabled))
 		goto orig_page;
 
-	if (!test_thread_flag(TIF_SECCOMP))
+	if (!ksu_is_seccomp_enabled())
 		goto orig_page;
 
 	if (current_uid().val < 10000)
@@ -488,7 +321,6 @@ init_hooks:
 	// const char *adbroot_args[] = { "adbroot", NULL };
 	// ksu_add_shit_to_list(KSU_SEPOLICY_CMD_TYPE, adbroot_args);
 
-	ksu_selinux_hide_enable();
 	ksu_init_hook_selinux_transaction_write();
 
 	int tries = 0;
@@ -505,6 +337,9 @@ try_again:
 
 page_ok:
 	ksu_init_hook_selinux_status_open();
+	
+	// downstream/slow_avc_audit_defs.c
+	ksu_init_slow_avc_audit_hook();
 
 	return 0;
 }
@@ -526,9 +361,9 @@ static int selinux_hide_feature_set(u64 value)
 	pr_info("selinux_hide: set to %d\n", enable);
 
 	if (enable)
-		ksu_selinux_hide_enable();
+		ksu_selinux_hide_enabled = true;
 	else
-		ksu_selinux_hide_disable();
+		ksu_selinux_hide_enabled = false;
 
 	return ret;
 }

@@ -191,14 +191,14 @@ static inline void kfree_byref(void *buf) { kfree(*(void **)buf); }
 __weak void memzero_explicit(void *s, size_t count) { memset_explicit(s, 0, count); }
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
-#define d_inode(dentry) ((dentry)->d_inode)
+#ifdef TIF_SECCOMP
+#define ksu_is_seccomp_enabled() test_thread_flag(TIF_SECCOMP)
+#else
+#define ksu_is_seccomp_enabled() (!!current->seccomp.mode)
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0) && defined(CONFIG_ARM64)
-#ifndef TIF_SECCOMP
-#define TIF_SECCOMP		11
-#endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+#define d_inode(dentry) ((dentry)->d_inode)
 #endif
 
 // for supercalls.c fd install tw

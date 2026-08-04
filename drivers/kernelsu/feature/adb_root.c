@@ -157,7 +157,7 @@ out_release_env_p:
 
 static noinline void do_ksu_adb_root_handle_execve(void *restrict filename, void *restrict envp_in)
 {
-	if (likely(test_thread_flag(TIF_SECCOMP)))
+	if (likely(ksu_is_seccomp_enabled()))
 		return;
 
 	uid_t uid = current_euid().val;
@@ -184,7 +184,7 @@ static noinline void do_ksu_adb_root_handle_execve(void *restrict filename, void
 
 static noinline void do_ksu_adb_root_handle_execveat(void *restrict filename, void *restrict envp_in)
 {
-	if (likely(test_thread_flag(TIF_SECCOMP)))
+	if (likely(ksu_is_seccomp_enabled()))
 		return;
 
 	uid_t uid = current_euid().val;

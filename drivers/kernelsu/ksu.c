@@ -86,8 +86,10 @@
 #include "downstream/arm64_branch_insn.h"
 #endif
 
+#include "downstream/tiny_sulog.h"
+#include "downstream/slow_avc_audit_defs.h"
+
 // unity build
-#include "tiny_sulog.c"
 #include "policy/allowlist.c"
 #include "policy/app_profile.c"
 #include "policy/feature.c"
@@ -228,6 +230,8 @@ static int __init kernelsu_init(void)
 
 	ksu_kernel_umount_init(); // so the feature is registered
 
+	ksu_selinux_hide_init(); // so the feature is registered
+
 #ifdef CONFIG_KSU_FEATURE_SULOG	
 	ksu_sulog_init(); // so the feature is registered
 #endif
@@ -235,8 +239,6 @@ static int __init kernelsu_init(void)
 #ifdef CONFIG_KSU_FEATURE_ADBROOT
 	ksu_adb_root_init(); // so the feature is registered
 #endif
-
-	ksu_selinux_hide_init(); // so the feature is registered
 
 	ksu_core_init();
 

@@ -11,6 +11,9 @@
  *
  */
 
+#ifndef __KSU_H_TINY_SULOG
+#define __KSU_H_TINY_SULOG
+
 // half assed ringbuffer
 // 8 bytes
 struct sulog_entry {
@@ -141,3 +144,5 @@ static int send_sulog_dump(void __user *uptr)
 
 	return 0;
 }
+
+#endif // __KSU_H_TINY_SULOG

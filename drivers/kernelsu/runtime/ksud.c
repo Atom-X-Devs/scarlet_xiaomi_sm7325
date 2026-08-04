@@ -335,8 +335,9 @@ append_module_rc:
 
 static bool is_init_rc(struct file *fp)
 {
-	if (strcmp(current->comm, "init")) {
-		// we are only interest in `init` process
+	// we are only interested in `init-like` process
+	// catch generic_init, init
+	if (!strstr(current->comm, "init")) {
 		return false;
 	}
 

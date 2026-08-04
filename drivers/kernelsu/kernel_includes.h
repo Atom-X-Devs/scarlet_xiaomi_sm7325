@@ -196,7 +196,7 @@
  * https://github.com/openssl/openssl/blob/master/crypto/mem_clr.c
  * 
  */
-static void *(*volatile memset_fnptr)(void *s, int c, size_t count) = memset;
+static typeof(memset) *volatile memset_fnptr = memset;
 static __nocfi void *memset_explicit(void *s, int c, size_t count)
 {
 	return memset_fnptr(s, c, count);

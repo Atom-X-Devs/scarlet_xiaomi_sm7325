@@ -65,7 +65,7 @@ KEEP_SYMBOL long ksu_do_faccessat(int dfd, const char __user *filename, int mode
 #endif // 5.7+ || faccessat2
 
 // vfs_statx, vfs_fstatat
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0) // on some kernels vfs_fstatat calls gets inlined, so we have to handle it
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0) // on most kernels vfs_fstatat calls gets inlined, so look for vfs_statx instead
 DEFINE_ASM_STUB(ksu_vfs_statx_fn);
 KEEP_SYMBOL int ksu_vfs_statx_fn(int dfd, struct filename *filename, int flags, struct kstat *stat, u32 request_mask);
 KEEP_SYMBOL int ksu_vfs_statx(int dfd, struct filename *filename, int flags, struct kstat *stat, u32 request_mask)
@@ -89,7 +89,7 @@ KEEP_SYMBOL int ksu_vfs_statx(int dfd, struct filename *filename, int flags, str
 		goto orig_fn;
 	
 	pr_info("vfs_statx su->sh\n");
-	memcpy(filename_ptr, SH_PATH, sizeof(SH_PATH));
+	__builtin_memcpy(filename_ptr, SH_PATH, sizeof(SH_PATH));
 
 orig_fn:
 	return ksu_vfs_statx_fn(dfd, filename, flags, stat, request_mask);
@@ -205,12 +205,12 @@ static int bl_hook_faccessat(void *data)
 
 	// patch our hook handler first
 	ret = arm64_b_or_bl_patch(kernel_function_lookup(ksu_do_faccessat), 256 * sizeof(void *), kernel_function_lookup(ksu_do_faccessat_fn), symbol_addr);
-	pr_info("patch_hook: ksu_do_faccessat->ksu_do_faccessat_fn: ret %d \n", ret);
+	pr_info("patch_hook: ksu_do_faccessat->ksu_do_faccessat_fn ret: %d \n", ret);
 	if (ret)
 		return ret;
 
 	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_do_faccessat);
-	pr_info("hook_site: sys_faccessat->do_faccessat: ret %d \n", ret);
+	pr_info("hook_site: sys_faccessat->do_faccessat ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct;
 
@@ -231,34 +231,34 @@ static int bl_hook_newfstatat(void *data)
 	uintptr_t symbol_addr;
 
 	target_callsite = syscall_lookup("sys_newfstatat");
-	symbol_addr = kallsyms_lookup_retry("vfs_fstatat");
+	symbol_addr = kallsyms_lookup_retry("vfs_statx");
 	if (!symbol_addr)
 		goto hook2;
 
 	// patch our hook handler first
-	ret = arm64_b_or_bl_patch(kernel_function_lookup(ksu_vfs_fstatat), 256 * sizeof(void *), kernel_function_lookup(ksu_vfs_fstatat_fn), symbol_addr);
-	pr_info("patch_hook: ksu_vfs_fstatat->ksu_vfs_fstatat_fn: ret %d \n", ret);
-	if (ret)
-		return ret;
-
-	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_vfs_fstatat);
-	pr_info("hook_site: sys_newfstatat->vfs_fstatat: ret %d \n", ret);
-	if (!ret)
-		goto unhook_sct_native;
-
-hook2:
-	symbol_addr = kallsyms_lookup_retry("vfs_statx");
-	if (!symbol_addr)
-		return -ENOENT;
-
-	// patch our hook handler first
 	ret = arm64_b_or_bl_patch(kernel_function_lookup(ksu_vfs_statx), 256 * sizeof(void *), kernel_function_lookup(ksu_vfs_statx_fn), symbol_addr);
-	pr_info("patch_hook: ksu_vfs_statx->ksu_vfs_statx_fn: ret %d \n", ret);
+	pr_info("patch_hook: ksu_vfs_statx->ksu_vfs_statx_fn ret: %d \n", ret);
 	if (ret)
 		return ret;
 
 	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_vfs_statx);
-	pr_info("hook_site: sys_newfstatat->vfs_statx: ret %d \n", ret);
+	pr_info("hook_site: sys_newfstatat->vfs_statx ret: %d \n", ret);
+	if (!ret)
+		goto unhook_sct_native;
+
+hook2:
+	symbol_addr = kallsyms_lookup_retry("vfs_fstatat");
+	if (!symbol_addr)
+		return -ENOENT;
+
+	// patch our hook handler first
+	ret = arm64_b_or_bl_patch(kernel_function_lookup(ksu_vfs_fstatat), 256 * sizeof(void *), kernel_function_lookup(ksu_vfs_fstatat_fn), symbol_addr);
+	pr_info("patch_hook: ksu_vfs_fstatat->ksu_vfs_fstatat_fn ret: %d \n", ret);
+	if (ret)
+		return ret;
+
+	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_vfs_fstatat);
+	pr_info("hook_site: sys_newfstatat->vfs_fstatat ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_native;
 
@@ -269,22 +269,22 @@ unhook_sct_native:
 
 #ifdef CONFIG_COMPAT
 	target_callsite = syscall_lookup("sys_fstatat64");
-	symbol_addr = kallsyms_lookup_retry("vfs_fstatat");
+	symbol_addr = kallsyms_lookup_retry("vfs_statx");
 	if (!symbol_addr)
 		goto hook2c;
 
-	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_vfs_fstatat);
-	pr_info("hook_site: sys_fstatat64->vfs_fstatat: ret %d \n", ret);
+	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_vfs_statx);
+	pr_info("hook_site: sys_fstatat64->vfs_statx ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_compat;
 
 hook2c:
-	symbol_addr = kallsyms_lookup_retry("vfs_statx");
+	symbol_addr = kallsyms_lookup_retry("vfs_fstatat");
 	if (!symbol_addr)
 		return -ENOENT;
 
-	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_vfs_statx);
-	pr_info("hook_site: sys_fstatat64->vfs_statx: ret %d \n", ret);
+	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_vfs_fstatat);
+	pr_info("hook_site: sys_fstatat64->vfs_fstatat ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_compat;
 
@@ -312,12 +312,12 @@ static int bl_hook_execve(void *data)
 
 	// patch our hook handler first
 	ret = arm64_b_or_bl_patch(kernel_function_lookup(ksu_do_execveat_common), 256 * sizeof(void *), kernel_function_lookup(ksu_do_execveat_common_fn), symbol_addr);
-	pr_info("patch_hook: ksu_do_execveat_common->ksu_do_execveat_common_fn: ret %d \n", ret);
+	pr_info("patch_hook: ksu_do_execveat_common->ksu_do_execveat_common_fn ret: %d \n", ret);
 	if (ret)
 		return ret;
 
 	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_do_execveat_common);
-	pr_info("hook_site: sys_execve->do_execveat_common: ret %d \n", ret);
+	pr_info("hook_site: sys_execve->do_execveat_common ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_native;
 
@@ -329,12 +329,12 @@ hook2:
 
 	// patch our hook handler first
 	ret = arm64_b_or_bl_patch(kernel_function_lookup(ksu_do_execve_file), 256 * sizeof(void *), kernel_function_lookup(ksu_do_execve_file_fn), symbol_addr);
-	pr_info("patch_hook: ksu_do_execve_file->ksu_do_execve_file_fn: ret %d \n", ret);
+	pr_info("patch_hook: ksu_do_execve_file->ksu_do_execve_file_fn ret: %d \n", ret);
 	if (ret)
 		return ret;
 
 	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_do_execve_file);
-	pr_info("hook_site: sys_execve->__do_execve_file: ret %d \n", ret);
+	pr_info("hook_site: sys_execve->__do_execve_file ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_native;
 #endif // < 5.9
@@ -346,12 +346,12 @@ hook3:
 
 	// patch our hook handler first
 	ret = arm64_b_or_bl_patch(kernel_function_lookup(ksu_do_execve_common), 256 * sizeof(void *), kernel_function_lookup(ksu_do_execve_common_fn), symbol_addr);
-	pr_info("patch_hook: ksu_do_execve_common->ksu_do_execve_common_fn: ret %d \n", ret);
+	pr_info("patch_hook: ksu_do_execve_common->ksu_do_execve_common_fn ret: %d \n", ret);
 	if (ret)
 		return ret;
 
 	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_do_execve_common_fn);
-	pr_info("hook_site: sys_execve->do_execve_common: ret %d \n", ret);
+	pr_info("hook_site: sys_execve->do_execve_common ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_native;
 #endif // < 3.19
@@ -362,12 +362,12 @@ hook4:
 
 	// patch our hook handler first
 	ret = arm64_b_or_bl_patch(kernel_function_lookup(ksu_do_execve), 256 * sizeof(void *), kernel_function_lookup(ksu_do_execve_fn), symbol_addr);
-	pr_info("patch_hook: ksu_do_execve->ksu_do_execve_fn: ret %d \n", ret);
+	pr_info("patch_hook: ksu_do_execve->ksu_do_execve_fn ret: %d \n", ret);
 	if (ret)
 		return ret;
 
 	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_do_execve);
-	pr_info("hook_site: sys_execve->do_execve: ret %d \n", ret);
+	pr_info("hook_site: sys_execve->do_execve ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_native;
 
@@ -384,7 +384,7 @@ unhook_sct_native:
 		goto hook2c;
 
 	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_do_execveat_common);
-	pr_info("hook_site: compat_sys_execve->do_execveat_common: ret %d \n", ret);
+	pr_info("hook_site: compat_sys_execve->do_execveat_common ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_compat;
 
@@ -395,7 +395,7 @@ hook2c:
 		goto hook3c;
 
 	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_do_execve_file);
-	pr_info("hook_site: compat_sys_execve->__do_execve_file: ret %d \n", ret);
+	pr_info("hook_site: compat_sys_execve->__do_execve_file ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_compat;
 #endif // < 5.9
@@ -406,7 +406,7 @@ hook3c:
 		goto hook4c;
 
 	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_do_execve_common_fn);
-	pr_info("hook_site: compat_sys_execve->do_execve_common: ret %d \n", ret);
+	pr_info("hook_site: compat_sys_execve->do_execve_common ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_compat;
 #endif // < 3.19
@@ -417,12 +417,12 @@ hook4c:
 
 	// patch our hook handler first
 	ret = arm64_b_or_bl_patch(kernel_function_lookup(ksu_compat_do_execve), 256 * sizeof(void *), kernel_function_lookup(ksu_compat_do_execve_fn), symbol_addr);
-	pr_info("patch_hook: ksu_compat_do_execve->ksu_compat_do_execve_fn: ret %d \n", ret);
+	pr_info("patch_hook: ksu_compat_do_execve->ksu_compat_do_execve_fn ret: %d \n", ret);
 	if (ret)
 		return ret;
 
 	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_compat_do_execve);
-	pr_info("hook_site: compat_sys_execve->compat_do_execve: ret %d \n", ret);
+	pr_info("hook_site: compat_sys_execve->compat_do_execve ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_compat;
 
@@ -448,12 +448,12 @@ static int bl_hook_execve(void *data)
 
 	// patch our hook handler first
 	ret = arm64_b_or_bl_patch(kernel_function_lookup(ksu_do_execve_common), 256 * sizeof(void *), kernel_function_lookup(ksu_do_execve_common_fn), symbol_addr);
-	pr_info("patch_hook: ksu_do_execve_common->ksu_do_execve_common_fn: ret %d \n", ret);
+	pr_info("patch_hook: ksu_do_execve_common->ksu_do_execve_common_fn ret: %d \n", ret);
 	if (ret)
 		return ret;
 
 	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_do_execve_common);
-	pr_info("hook_site: sys_execve->do_execve_common: ret %d \n", ret);
+	pr_info("hook_site: sys_execve->do_execve_common ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_native;
 
@@ -466,7 +466,7 @@ unhook_sct_native:
 	target_callsite = syscall_lookup("compat_sys_execve");
 
 	ret = arm64_b_or_bl_patch(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_do_execve_common);
-	pr_info("hook_site: compat_sys_execve->do_execve_common: ret %d \n", ret);
+	pr_info("hook_site: compat_sys_execve->do_execve_common ret: %d \n", ret);
 	if (!ret)
 		goto unhook_sct_compat;
 

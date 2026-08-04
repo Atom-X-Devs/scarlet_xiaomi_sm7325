@@ -124,13 +124,13 @@ static noinline __nocfi void dotted_kallsyms_build_hash_array(void)
 	char *symbol_cache = membuf + KSYM_SYMBOL_LEN;
 
 #ifdef MODULE // https://elixir.bootlin.com/linux/v7.2-rc4/source/kernel/kprobes.c#L1506
-	int (*kallsyms_lookup_size_offset_fn)(unsigned long addr, unsigned long *symbolsize, unsigned long *offset) = NULL;
+	typeof(kallsyms_lookup_size_offset) *kallsyms_lookup_size_offset_fn = NULL;
 	*(void **)&kallsyms_lookup_size_offset_fn = kallsyms_lookup_name("kallsyms_lookup_size_offset");
-	if (!kallsyms_lookup_size_offset_fn)
-		pr_info("%s: kallsyms_lookup_size_offset not found! \n", __func__);
+	bool enable_offset_scan = !!kallsyms_lookup_size_offset_fn;
 #else
 	extern int kallsyms_lookup_size_offset(unsigned long addr, unsigned long *symbolsize, unsigned long *offset);
-	int (*kallsyms_lookup_size_offset_fn)(unsigned long addr, unsigned long *symbolsize, unsigned long *offset) = kallsyms_lookup_size_offset;
+	#define kallsyms_lookup_size_offset_fn kallsyms_lookup_size_offset
+	bool enable_offset_scan = true;
 #endif
 
 	pr_info("%s: hash array init! \n", __func__);
@@ -148,15 +148,22 @@ scan_start:
 	if (!symbol_buf[0])
 		goto step_up;
 
-	// however we should not use cfi_jt for this
-	// what we want is the target of that cfi_jt
-	if (strstr(symbol_buf, ".cfi_jt"))
+	// if current symbol is same as last entry, skip
+	if (!strcmp(symbol_buf, symbol_cache))
 		goto step_up;
 
-	// we should not use isra for this as gcc folded this functiom
-	// to the point that it destroyed calling convention
-	// hooking this is catastrophic!
-	if (strstr(symbol_buf, ".isra."))
+	// symbol is not the same as the last one!
+	// cache this symbol and insert it to our hash array!
+	strscpy(symbol_cache, symbol_buf, KSYM_SYMBOL_LEN);
+
+	// however we should not use cfi_jt for this
+	// what we want is the target of that cfi_jt
+	if (strstr(symbol_buf, ".cfi_"))
+		goto step_up;
+
+	// we should not use isra/constprop/part for this as gcc folded this functiom
+	// this has destroyed calling convention, hooking this is catastrophic!
+	if ( strstr(symbol_buf, ".isra.") || strstr(symbol_buf, ".constprop.") || strstr(symbol_buf, ".part.") )
 		goto step_up;
 
 	// cut it with these to make sure its a match
@@ -168,14 +175,6 @@ scan_start:
 	// terminate on first dot
 	dot_ptr[0] = '\0';
 
-	// if current symbol is same as last entry, skip
-	if (!strcmp(symbol_buf, symbol_cache))
-		goto step_up;
-
-	// symbol is not the same as the last one!
-	// cache this symbol and insert it to our hash array!
-	strscpy(symbol_cache, symbol_buf, KSYM_SYMBOL_LEN);
-
 	insert_to_kallsyms_array(symbol_buf, curr);
 
 step_up:
@@ -183,7 +182,7 @@ step_up:
 
 	unsigned long sym_size = 0;
 	unsigned long offset = 0;
-	if (kallsyms_lookup_size_offset_fn && kallsyms_lookup_size_offset_fn(curr, &sym_size, &offset) && sym_size > offset)
+	if (enable_offset_scan && kallsyms_lookup_size_offset_fn(curr, &sym_size, &offset) && sym_size > offset)
 		curr =  curr + (sym_size - offset); // we can do larger jumps
 	else
 		curr = curr + 4;
@@ -230,74 +229,22 @@ collision_found:
 	return 0x0;
 }
 
-#if 0
-static uintptr_t kallsyms_hunt_for_name(const char *prefix)
-{
-	extern char _stext[], _etext[];
-	uintptr_t start = (uintptr_t)_stext;
-	uintptr_t end = (uintptr_t)_etext;
-	uintptr_t iter_count = 0;
-	uintptr_t curr;
-	uintptr_t dummy_buf;
-	char symbol_buf[KSYM_SYMBOL_LEN];
-
-	if (!prefix)
-		return NULL;
-
-	might_sleep();
-
-	curr = start;
-
-scan_start:
-	iter_count++;
-
-	memset(symbol_buf, 0, sizeof(symbol_buf));
-
-	sprint_symbol_no_offset(symbol_buf, curr);
-
-	if (!strstarts(symbol_buf, prefix))
-		goto step_up;
-
-	// however we should not use cfi_jt for this
-	// what we want is the target of that cfi_jt
-	if (strstr(symbol_buf, "cfi_jt"))
-		goto step_up;
-
-	// TODO: better matching for llvm ('$' thing)
-	// GCC LTO is a-ok!
-
-	// cut it with these to make sure its a match
-	// .llvm.505034 or .lto_priv.0
-	if (symbol_buf[strlen(prefix)] != '.')
-		goto step_up;
-
-	pr_info("%s: %s at 0x%lx iter_count: %lu\n", __func__, symbol_buf, (uintptr_t)curr, iter_count);
-	return curr;
-
-step_up:
-	curr = curr + 4;
-	if (curr < end)
-		goto scan_start;
-
-	pr_info("%s: %s symbol prefix not found! iter_count: %lu \n", __func__, prefix, iter_count);
-	return NULL;
-}
-#endif
-
-// ksu says this isnt always available so lets use an fn ptr to try use it
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0) || defined(CONFIG_MODULES)
+// ksu says this isnt always available so lets use an fn ptr to try use it on LKM
+#if 0 // LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0) || defined(CONFIG_MODULES)
 struct lookup_args {
 	const char *target_name;
 	uintptr_t target_addr;
 };
 
+#ifdef MODULE
+typeof(kallsyms_on_each_symbol) *kallsyms_on_each_symbol_fn __read_mostly = NULL;
+#else
+#define kallsyms_on_each_symbol_fn kallsyms_on_each_symbol
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
-static int noop_kallsyms_on_each_symbol(int (*fn)(void *, const char *, unsigned long),void *data) { return 0; }
-static int (*kallsyms_on_each_symbol_fn)(int (*fn)(void *, const char *, unsigned long),void *data) __read_mostly = noop_kallsyms_on_each_symbol;
 static int kallsyms_on_each_symbol_cb(void *data, const char *name, unsigned long addr)
 #else
-static int noop_kallsyms_on_each_symbol(int (*fn)(void *, const char *, struct module *, unsigned long),void *data) { return 0; }
-static int (*kallsyms_on_each_symbol_fn)(int (*fn)(void *, const char *, struct module *, unsigned long),void *data) __read_mostly = noop_kallsyms_on_each_symbol;
 static int kallsyms_on_each_symbol_cb(void *data, const char *name, struct module *module, unsigned long addr)
 #endif
 {
@@ -308,10 +255,9 @@ static int kallsyms_on_each_symbol_cb(void *data, const char *name, struct modul
 	if (strstr(name, ".cfi_jt"))
 		return 0;
 
-	// we should not use isra for this as gcc folded this functiom
-	// to the point that it destroyed calling convention
-	// hooking this is catastrophic!
-	if (strstr(name, ".isra."))
+	// we should not use isra/constprop/part for this as gcc folded this functiom
+	// this has destroyed calling convention, hooking this is catastrophic!
+	if ( strstr(name, ".isra.") || strstr(name, ".constprop.") || strstr(name, ".part.") )
 		return 0;
 
 	if (strstarts(name, args->target_name)) {
@@ -336,6 +282,25 @@ static noinline __nocfi uintptr_t try_kallsyms_on_each_symbol(const char *name)
 }
 #endif
 
+#ifdef CONFIG_KPROBES // kprobes based symbol resolver.
+static uintptr_t kp_kallsyms_lookup_name(const char *name)
+{
+	struct kprobe *kp __zoffstack(sizeof(*kp));
+	if (!kp)
+		return 0x0;
+
+	kp->symbol_name = name;
+	if (!!register_kprobe(kp))
+		return 0x0;
+
+	uintptr_t addr = (uintptr_t)kp->addr;
+	unregister_kprobe(kp);
+
+	pr_info("%s: success! %s at 0x%lx\n", __func__, name, addr);
+	return addr;
+}
+#endif
+
 // if called within kthread, will try to build a kallsyms hash array when everything failed!
 static noinline uintptr_t kallsyms_lookup_retry(const char *name)
 {
@@ -348,17 +313,19 @@ static noinline uintptr_t kallsyms_lookup_retry(const char *name)
 		goto found;
 
 #ifdef CONFIG_KPROBES
-	addr = (uintptr_t)kp_kallsyms_lookup_name(name);
+	addr = kp_kallsyms_lookup_name(name);
 	if (addr)
 		goto found;
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0) || defined(CONFIG_MODULES)
-	uintptr_t fn_ptr = (uintptr_t)kallsyms_lookup_name("kallsyms_on_each_symbol");
-	if (!fn_ptr)
-		goto skip_on_each_symbol;
+#if 0 // LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0) || defined(CONFIG_MODULES)
+#ifdef MODULE
+	if (!kallsyms_on_each_symbol_fn)
+		*(uintptr_t *)&kallsyms_on_each_symbol_fn = (uintptr_t)kallsyms_lookup_name("kallsyms_on_each_symbol");
 
-	*(uintptr_t *)&kallsyms_on_each_symbol_fn = fn_ptr;
+	if (!kallsyms_on_each_symbol_fn)
+		goto skip_on_each_symbol;
+#endif
 	addr = try_kallsyms_on_each_symbol(name);
 	if (addr)
 		goto found;
@@ -390,14 +357,46 @@ found:
 	return addr;
 }
 
+/*
+ * two possible users so far
+ * this macro based refcounting timebomb is just me being responsible
+ * letting this leak is not actually a big deal, maybe 512kb at most
+ *
+ * "if something was created and no one was around to free it, 
+ *  is it a memory leak? or just permanent cache?"
+ *  -- some retard "developer" using garbage collection
+ *
+ */
+#ifdef CONFIG_KSU_HACK_ARM64_BRANCH_LINK
+#define HASH_ARRAY_USER1 1
+#else
+#define HASH_ARRAY_USER1 0
+#endif
+
+#if defined(CONFIG_AUDIT) && defined(CONFIG_ARM64) && defined(CONFIG_KALLSYMS) && !defined(MODULE)
+#define HASH_ARRAY_USER2 1
+#else
+#define HASH_ARRAY_USER2 0
+#endif
+
+#define TOTAL_HASH_ARRAY_USERS (HASH_ARRAY_USER1 + HASH_ARRAY_USER2)
+
 static noinline void dotted_kallsyms_destroy_hash_array(void)
 {
+	mutex_lock(&kallsyms_hash_array_mutex);
+
+	static volatile int entry_count = 0;
+	
+	entry_count++;
+	if (entry_count != TOTAL_HASH_ARRAY_USERS)
+		goto bail;
+
 	if (!kallsyms_hash_array)
-		return;
+		goto bail;
 
 	pr_info("%s: addr: 0x%lx entries: %u capacity: %u\n", __func__, (uintptr_t)kallsyms_hash_array, kallsyms_hash_array_entry_count, kallsyms_hash_array_capacity);
 
-	memset_explicit(kallsyms_hash_array, 0, kallsyms_hash_array_entry_count * sizeof(struct symbol_hash_entry));
+	memzero_explicit(kallsyms_hash_array, kallsyms_hash_array_entry_count * sizeof(struct symbol_hash_entry));
 
 	kvfree(kallsyms_hash_array);
 
@@ -407,6 +406,13 @@ static noinline void dotted_kallsyms_destroy_hash_array(void)
 
 	const char *hw = "Hello, world!";
 	pr_info("chibihash64: '%s' #: 0x%llx \n", hw, chibihash64_wrapper(hw) );
+
+bail:
+	mutex_unlock(&kallsyms_hash_array_mutex);
 }
+
+#undef HASH_ARRAY_USER1
+#undef HASH_ARRAY_USER2
+#undef TOTAL_HASH_ARRAY_USERS
 
 #endif // __KSU_H_KALLSYMS_COMMON

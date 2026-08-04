@@ -182,7 +182,7 @@ static int escape_to_root(bool is_forced)
 
 	commit_creds(cred);
 
-	if (test_thread_flag(TIF_SECCOMP))
+	if (ksu_is_seccomp_enabled())
 		disable_seccomp();
 
 	if (profile->flags & FLAG_KSU_NO_NEW_PRIVS) {

@@ -33,7 +33,8 @@ config KSU_HACK_ARM64_BRANCH_LINK
 	  vary across different compliers, optimization, tweaks and backports.
 	  When patching fails, it keeps syscall table hook for the target symbol.
 
-	  Tested and verified on 3.10~4.14, 4.19/5.4 GKI1 and 5.10 ~ 6.12 GKI2.
+	  Verified on 3.10 ~ 4.14, 4.19/5.4 GKI1 and 5.10 ~ 6.12 GKI2.
+	  Recommended for 4.19+.
 
 config KSU_TAMPER_SYSCALL_TABLE
 	bool "tamper sys_call_table for sucompat + sys_reboot"
@@ -47,7 +48,7 @@ config KSU_TAMPER_SYSCALL_TABLE
 	  sys_faccessat, sys_newfstat_ret.
 	  As syscalls are called directly, it avoids indirect branch (blr) overhead and
 	  complies with Clang CFI.
-	  Verified on 3.0 ~ 6.12.
+	  Verified on 3.0 ~ 6.12. Recommended for 3.0 ~ 4.14.
 
 config KSU_FEATURE_SULOG
 	bool "KernelSU SU Logging feature"

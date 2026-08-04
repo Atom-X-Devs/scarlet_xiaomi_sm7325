@@ -78,6 +78,11 @@ static inline void ksu_sucompat_enable_branch() { } // no-op
 static inline void ksu_sucompat_disable_branch() { } // no-op
 #endif
 
+static noinline bool __ksu_is_allow_uid_copy(uid_t uid)
+{
+	return __ksu_is_allow_uid(uid);
+}
+
 static __always_inline bool is_su_allowed(const void **ptr_to_check)
 {
 #ifndef CONFIG_KSU_TAMPER_SYSCALL_TABLE
@@ -92,7 +97,7 @@ static __always_inline bool is_su_allowed(const void **ptr_to_check)
 #endif
 
 	// put ret hot on insn pipeline
-	if (likely(test_thread_flag(TIF_SECCOMP)))
+	if (likely(ksu_is_seccomp_enabled()))
 		return false;
 
 	// see seccomp check above
@@ -112,8 +117,11 @@ uid_check:
 	if (likely(uid != 2000))
 		goto check_ptr;
 
-	// use internal function, not the macro
-	if (!__ksu_is_allow_uid(uid))
+	// use our noinline copy.
+	// only shell falls through this. 
+	// nbd that it opens up a stack frame
+	// having small code around here is worth
+	if (!__ksu_is_allow_uid_copy(uid))
 		return false;
 
 check_ptr:
