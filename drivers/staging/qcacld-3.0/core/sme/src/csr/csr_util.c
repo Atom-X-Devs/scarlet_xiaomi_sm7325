@@ -2604,8 +2604,6 @@ uint8_t csr_construct_rsn_ie(struct mac_context *mac, uint32_t sessionId,
 	     (mac, pSirBssDesc, &local_ap_ie))))
 		return ie_len;
 
-	/* get AP RSN cap */
-	qdf_mem_copy(&rsn_cap, local_ap_ie->RSN.RSN_Cap, sizeof(rsn_cap));
 	if (!ap_ie && local_ap_ie)
 		/* locally allocated */
 		qdf_mem_free(local_ap_ie);
@@ -2625,6 +2623,8 @@ uint8_t csr_construct_rsn_ie(struct mac_context *mac, uint32_t sessionId,
 	}
 	self_rsn_cap = (uint16_t)rsn_val;
 
+	/* get AP RSN cap */
+	rsn_cap = pSirBssDesc->neg_rsn_caps;
 	/* If AP is capable then use self capability else set PMF as 0 */
 	if (rsn_cap & WLAN_CRYPTO_RSN_CAP_MFP_ENABLED &&
 	    pProfile->MFPCapable) {
