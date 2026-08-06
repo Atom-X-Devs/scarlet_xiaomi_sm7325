@@ -778,6 +778,85 @@ typedef  enum  {
     WMI_SERVICE_IDLE_POWER_INDICATE_SUPPORT = 498,
     /* Indicates FW support to add Radar type and domain in WMI radar event */
     WMI_SERVICE_RADAR_FLAGS_TYPE_SUPPORT = 499,
+    /* Indicates FW support to perform Master migration when master peer gets deleted */
+    WMI_SERVICE_ML_PEER_MASTER_MIGRATION_SUPPORT = 500,
+    WMI_SERVICE_NAN_AP_ASSISTED_DFS_OPERATION_SUPPORT = 501, /* Indicates FW supports NAN DFS operation */
+    /*
+     * Indicates FW supports TDLS Stats command/event,
+     * used for sending TDLS connect info and TDLS data stats
+     */
+    WMI_SERVICE_TDLS_STATS_SUPPORT = 502,
+    WMI_SERVICE_L3_HEADER_PADDING_ENABLE = 503,
+
+    /* Indicates FW supports Extended OUI Action IDs */
+    WMI_SERVICE_SUPPORTED_EXT_OUI_ACTION_IDS = 504,
+
+    /*
+     * Indicates FW supports cloud based control for whitelist or blacklist
+     * AP configuration
+     */
+    WMI_SERVICE_SUPPORT_WHITELIST_BLACKLIST_AP_CONFIG = 505,
+    /*
+     * Indicate FW support for PASSTHRU VDEV AMPDU Aggregation
+     * and Rate Adaptation
+     */
+    WMI_SERVICE_PASSTHRU_VDEV_AMPDU_RA_SUPPORT = 506,
+    /* FW supports CalDB transmission over WMI */
+    WMI_SERVICE_CALDB_OVER_WMI = 507,
+    /* Indicates FW Supports RTT Proximity Detection (USD ranging) */
+    WMI_SERVICE_RTT_PD = 508,
+    /* Indicates FW support for Channel Hopping Status Report*/
+    WMI_SERVICE_VDEV_CHAN_HOP_STATUS_REPORT = 509,
+    /* Indicates FW support for Predictive roaming */
+    WMI_SERVICE_ROAMING_PREDICTIVE = 510,
+
+    /* Services related to MAPC / C-TDMA (802.11bn) */
+    WMI_SERVICE_CO_AP_CTDMA_SUPPORT = 511,
+    WMI_SERVICE_UHR_CO_AP_CTDMA_TB_PPDU_SUPPORT = 512,
+    WMI_SERVICE_UHR_CO_AP_CTDMA_TXOP_RETURN_SUPPORT = 513,
+
+    /*
+     * Indicates FW supports cloud based control for Uplink Tx Beamformer
+     * AP configuration
+     */
+    WMI_SERVICE_SUPPORT_UL_TX_BEAMFORMER_AP_CONFIG = 514,
+
+    /* Indicates FW supports enable/disable TWT per vdev */
+    WMI_SERVICE_STA_TWT_EN_DIS_VDEV_SUPPORT = 515,
+
+    /*
+     * Indicates FW supports AWGN interference status request via
+     * WMI_PDEV_PARAM_AWGN_INT_STATUS_REQUEST, allowing host to query
+     * the current AWGN CCA segment bitmap (awgn_prev_int_seg) which
+     * is sent back immediately via WMI_DCS_INTERFERENCE_EVENTID.
+     */
+    WMI_SERVICE_AWGN_INT_STATUS_REQUEST_SUPPORT = 516,
+
+    WMI_SERVICE_WMI_ANOMALY_REPORTING = 517,
+
+    /*
+     * Indicates that FW supports C-TAS power indication reporting and
+     * power limit enquiring through cmds WMI_SET_MODIFY_TX_PLIM_CMDID,
+     * WMI_GET_AVG_TX_POWER_CMDID and WMI_GET_TX_POWER_CALLING_CMDID.
+     */
+    WMI_SERVICE_CTAS_PLIM_INDICATION_SUPPORT = 518,
+
+    /*
+     * Indicates FW supports NAN in offload mode
+     * (supplicant-based NAN offload mode architecture).
+     */
+    WMI_SERVICE_NAN_OFFLOAD_MODE_SUPPORT = 519,
+
+    /* WMI_SERVICE_PDEV_SET_CUMAC_CHIP_CMD_SUPPORT:
+     * FW supports handling WMI_PDEV_SET_CUMAC_CHIP_CMDID.
+     * When this service bit is set in wmi_service_ready, the host can
+     * set WMI_RSRC_CFG_HOST_SERVICE_FLAG_CUMAC_CMD_SUPPORT in
+     * wmi_resource_config.host_service_flags to indicate it will send
+     * WMI_PDEV_SET_CUMAC_CHIP_CMDID to trigger wal_mlo_cumac_init().
+     * If the host does not set this flag, FW will call wal_mlo_cumac_init()
+     * from wal_mlo_soc_init() with the default chip id.
+     */
+    WMI_SERVICE_PDEV_SET_CUMAC_CHIP_CMD_SUPPORT = 520,
 
 
     WMI_MAX_EXT2_SERVICE
