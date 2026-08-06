@@ -362,7 +362,7 @@ static int ksu_register_lsm_hook(void *data)
 	ops->bprm_check_security = hook_bprm_check_security;
 #endif
 
-#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE)
+#if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
 	orig_file_permission = ops->file_permission;
 	ops->file_permission = hook_file_permission;
 #endif

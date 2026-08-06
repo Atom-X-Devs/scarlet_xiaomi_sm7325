@@ -16,10 +16,15 @@
  *  SELinux. This is just questionable to do when we want to support a plethora of
  *  non-standard kernels.
  *
- *  While what we are doing here is kinda improper, for most cases
- *  this should be mroe than enough.
+ *  While what we are doing here is kinda improper, for most cases this should be
+ *  more than enough.
  *
- *  this will include write_op / selinux_transaction_write spoofing and then avc spoofing.
+ *  this will hook the ff:
+ *	sel_open_handle_status
+ *	selinux_transaction_write
+ *	selinux_setprocattr
+ *	slow_avc_audit (attempt, not available upstream)
+ *
  *  our goal for this one is to be self contained as much as possible
  *  with only one call from ksu's initcall.
  *
@@ -28,6 +33,7 @@
 // enabled by default
 static bool ksu_selinux_hide_enabled __read_mostly = true;
 
+// selinux_setprocattr handler
 static __always_inline int ksu_hide_setprocattr_inline(const char *name, void *value, size_t size)
 {
 	if (unlikely(!ksu_selinux_hide_enabled))
@@ -102,6 +108,43 @@ skip_destroy:
 	return selinux_transaction_write_fn(file, buf, size, pos);
 }
 
+static void ksu_init_hook_transaction_ops_write()
+{
+	struct path path;
+	const char *selinux_context = "/sys/fs/selinux/context";
+
+	int error = kern_path(selinux_context, LOOKUP_FOLLOW, &path);
+	if (error) {
+		pr_info("selinux_hide: kern_path err: %d\n", error);
+		return;
+	}
+
+	pr_info("selinux_hide: kern_path %s ok!\n", selinux_context);
+
+	if (!path.dentry)
+		goto bail_out;
+
+	if (!d_inode(path.dentry))
+		goto bail_out;		
+
+	struct file_operations *fops = (struct file_operations *)d_inode(path.dentry)->i_fop;
+	if (!fops)
+		goto bail_out;
+
+	if (!fops->write)
+		goto bail_out;
+
+	pr_info("selinux_hide: found transaction_ops->write at 0x%lx \n", (uintptr_t)fops->write);
+	selinux_transaction_write_fn = fops->write;
+
+	int ret = ksu_write_to_readonly_slot((uintptr_t)&fops->write, (uintptr_t)ksu_selinux_transaction_write);
+	pr_info("selinux_hide: transaction_ops->write hijack ret: %d\n", ret);
+
+bail_out:
+	path_put(&path);
+}
+
+// sel_open_handle_status hijack
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0) && defined(KSU_COMPAT_HAS_SELINUX_STATE)
 extern struct selinux_state selinux_state;
 #define ksu_selinux_kernel_status_page() selinux_kernel_status_page(&selinux_state)
@@ -110,7 +153,6 @@ extern struct selinux_state selinux_state;
 #endif
 
 static struct page *ksu_fake_status_page __read_mostly = NULL;
-
 static int ksu_prepare_fake_status_page()
 {
 	struct page *real_page = ksu_selinux_kernel_status_page();
@@ -170,67 +212,7 @@ orig_page:
 	return sel_open_handle_status_fn(inode, filp);
 }
 
-static void ksu_init_hook_selinux_transaction_write()
-{
-	struct path path;
-	const char *selinux_context = "/sys/fs/selinux/context";
-
-	int error = kern_path(selinux_context, LOOKUP_FOLLOW, &path);
-	if (error) {
-		pr_info("selinux_hide: kern_path err: %d\n", error);
-		return;
-	}
-
-	pr_info("selinux_hide: kern_path %s ok!\n", selinux_context);
-
-	if (!path.dentry)
-		goto bail_out;
-
-	if (!d_inode(path.dentry))
-		goto bail_out;		
-
-	struct file_operations *fops = (struct file_operations *)d_inode(path.dentry)->i_fop;
-	if (!fops)
-		goto bail_out;
-
-	if (!fops->write)
-		goto bail_out;
-
-	pr_info("selinux_hide: found transaction_ops->write at 0x%lx \n", (uintptr_t)fops->write);
-	selinux_transaction_write_fn = fops->write;
-
-	unsigned long addr = (unsigned long)&fops->write;
-	unsigned long base = addr & PAGE_MASK;
-	unsigned long offset = addr & ~PAGE_MASK;
-
-	struct page *page = phys_to_page(__pa(base));
-	if (!page)
-		goto bail_out;
-
-	void *writable_addr = vmap(&page, 1, VM_MAP, PAGE_KERNEL);
-	if (!writable_addr)
-		goto bail_out;
-
-	void **target_slot = (void **)((unsigned long)writable_addr + offset);
-				
-	preempt_disable();
-	local_irq_disable();
-
-	WRITE_ONCE(*target_slot, ksu_selinux_transaction_write);
-
-	local_irq_enable();
-	preempt_enable();
-
-	vunmap(writable_addr);
-	smp_mb();
-
-	pr_info("selinux_hide: transaction_ops->write hijacked!\n");
-
-bail_out:
-	path_put(&path);
-}
-
-static void ksu_init_hook_selinux_status_open()
+static void ksu_init_hook_sel_handle_status_ops_open()
 {
 	struct path path;
 	const char *selinux_status = "/sys/fs/selinux/status";
@@ -260,32 +242,8 @@ static void ksu_init_hook_selinux_status_open()
 
 	sel_open_handle_status_fn = fops->open;
 
-	unsigned long addr = (unsigned long)&fops->open;
-	unsigned long base = addr & PAGE_MASK;
-	unsigned long offset = addr & ~PAGE_MASK;
-
-	struct page *page = phys_to_page(__pa(base));
-	if (!page)
-		goto bail_out;
-
-	void *writable_addr = vmap(&page, 1, VM_MAP, PAGE_KERNEL);
-	if (!writable_addr)
-		goto bail_out;
-
-	void **target_slot = (void **)((unsigned long)writable_addr + offset);
-				
-	preempt_disable();
-	local_irq_disable();
-
-	WRITE_ONCE(*target_slot, ksu_sel_open_handle_status);
-					
-	local_irq_enable();
-	preempt_enable();
-
-	vunmap(writable_addr);
-	smp_mb();
-
-	pr_info("selinux_hide: sel_handle_status_ops->open hijacked!\n");
+	int ret = ksu_write_to_readonly_slot((uintptr_t)&fops->open, (uintptr_t)ksu_sel_open_handle_status);
+	pr_info("selinux_hide: sel_handle_status_ops->open hijack ret: %d\n", ret);
 
 bail_out:
 	path_put(&path);
@@ -321,8 +279,6 @@ init_hooks:
 	// const char *adbroot_args[] = { "adbroot", NULL };
 	// ksu_add_shit_to_list(KSU_SEPOLICY_CMD_TYPE, adbroot_args);
 
-	ksu_init_hook_selinux_transaction_write();
-
 	int tries = 0;
 try_again:
 	if (!ksu_prepare_fake_status_page())
@@ -336,9 +292,12 @@ try_again:
 	goto try_again;
 
 page_ok:
-	ksu_init_hook_selinux_status_open();
+	ksu_init_hook_sel_handle_status_ops_open();
+	ksu_init_hook_transaction_ops_write();
+
+	// selinux_setprocattr hook init is on lsm.
 	
-	// downstream/slow_avc_audit_defs.c
+	// downstream/slow_avc_audit_defs.h
 	ksu_init_slow_avc_audit_hook();
 
 	return 0;
