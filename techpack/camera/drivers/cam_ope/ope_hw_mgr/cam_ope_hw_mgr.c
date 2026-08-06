@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2022, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/uaccess.h>
@@ -783,7 +783,7 @@ static int32_t cam_ope_process_request_timer(void *priv, void *data)
 			.path_data_type -
 			CAM_AXI_PATH_DATA_OPE_START_OFFSET;
 
-		if (path_index >= CAM_OPE_MAX_PER_PATH_VOTES) {
+		if (path_index < 0 || path_index >= CAM_OPE_MAX_PER_PATH_VOTES) {
 			CAM_WARN(CAM_OPE,
 				"Invalid path %d, start offset=%d, max=%d",
 				ctx_data->clk_info.axi_path[i]
@@ -1466,7 +1466,7 @@ static bool cam_ope_update_bw_v2(struct cam_ope_hw_mgr *hw_mgr,
 		ctx_data->clk_info.axi_path[i].path_data_type -
 		CAM_AXI_PATH_DATA_OPE_START_OFFSET;
 
-		if (path_index >= CAM_OPE_MAX_PER_PATH_VOTES) {
+		if (path_index < 0 || path_index >= CAM_OPE_MAX_PER_PATH_VOTES) {
 			CAM_WARN(CAM_OPE,
 				"Invalid path %d, start offset=%d, max=%d",
 				ctx_data->clk_info.axi_path[i].path_data_type,
@@ -1503,7 +1503,7 @@ static bool cam_ope_update_bw_v2(struct cam_ope_hw_mgr *hw_mgr,
 		ctx_data->clk_info.axi_path[i].path_data_type -
 			CAM_AXI_PATH_DATA_OPE_START_OFFSET;
 
-		if (path_index >= CAM_OPE_MAX_PER_PATH_VOTES) {
+		if (path_index < 0 || path_index >= CAM_OPE_MAX_PER_PATH_VOTES) {
 			CAM_WARN(CAM_OPE,
 				"Invalid path %d, start offset=%d, max=%d",
 				ctx_data->clk_info.axi_path[i].path_data_type,
@@ -2899,7 +2899,7 @@ static int cam_ope_mgr_remove_bw(struct cam_ope_hw_mgr *hw_mgr, int ctx_id)
 		ctx_data->clk_info.axi_path[i].path_data_type -
 		CAM_AXI_PATH_DATA_OPE_START_OFFSET;
 
-		if (path_index >= CAM_OPE_MAX_PER_PATH_VOTES) {
+		if (path_index < 0 || path_index >= CAM_OPE_MAX_PER_PATH_VOTES) {
 			CAM_WARN(CAM_OPE,
 				"Invalid path %d, start offset=%d, max=%d",
 				ctx_data->clk_info.axi_path[i].path_data_type,
