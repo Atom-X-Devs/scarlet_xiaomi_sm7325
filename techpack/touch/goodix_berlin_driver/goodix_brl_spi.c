@@ -176,11 +176,11 @@ static int goodix_spi_read(struct device *dev, unsigned int addr,
 	memcpy(data, &rx_buf[SPI_READ_PREFIX_LEN - 1], len);
 
 err_spi_transfer:
-	if (rx_buf != goodix_spi_bus.rx_buf)
-		kfree(rx_buf);
-err_alloc_tx_buf:
 	if (tx_buf != goodix_spi_bus.tx_buf)
 		kfree(tx_buf);
+err_alloc_tx_buf:
+	if (rx_buf != goodix_spi_bus.rx_buf)
+		kfree(rx_buf);
 err_alloc_rx_buf:
 	mutex_unlock(&goodix_spi_bus.mutex);
 	return ret;
