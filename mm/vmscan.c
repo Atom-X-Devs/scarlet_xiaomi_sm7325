@@ -2669,7 +2669,7 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 			}
 		}
 
-		cond_resched();
+		cond_resched_tasks_rcu_qs();
 
 		/*
 		 * For high-order allocations, nr_to_reclaim may be smaller
