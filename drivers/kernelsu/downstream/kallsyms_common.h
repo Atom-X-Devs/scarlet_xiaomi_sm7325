@@ -51,7 +51,7 @@ static inline void *old_kvrealloc(const void *p, size_t oldsize, size_t newsize,
 	return newp;
 }
 
-static noinline void insert_to_kallsyms_array(const char *str, uintptr_t addr)
+static inline void insert_to_kallsyms_array(const char *str, uintptr_t addr)
 {
 	if (!str || !addr)
 		return;
@@ -85,12 +85,11 @@ skip_anti_dup:
 	size_t old_sz = kallsyms_hash_array_capacity * sizeof(struct symbol_hash_entry);
 	size_t new_sz = new_cap * sizeof(struct symbol_hash_entry);
 
-	pr_info("%s: hash array resized! %ld -> %ld bytes \n", __func__, old_sz, new_sz);
-
 	void *new_array = old_kvrealloc(kallsyms_hash_array, old_sz, new_sz, GFP_KERNEL);
 	if (!new_array)
 		return;
 
+	pr_info("%s: hash array resized! %ld -> %ld bytes \n", __func__, old_sz, new_sz);
 	kallsyms_hash_array = new_array;
 	kallsyms_hash_array_capacity = new_cap;
 	entries = kallsyms_hash_array;
@@ -132,7 +131,7 @@ no_fn:
 #define kallsyms_lookup_size_offset ksu_kallsyms_lookup_size_offset
 #endif
 
-static noinline __nocfi void dotted_kallsyms_build_hash_array(void)
+static noinline void dotted_kallsyms_build_hash_array(void)
 {
 	extern char _stext[], _etext[];
 	uintptr_t start = (uintptr_t)_stext;
@@ -140,7 +139,7 @@ static noinline __nocfi void dotted_kallsyms_build_hash_array(void)
 	uintptr_t iter_count = 0;
 	uintptr_t curr;
 
-	might_sleep();
+	cond_resched();
 
 	char *membuf __zoffstack(KSYM_SYMBOL_LEN * 2);
 	if (!membuf)
@@ -328,7 +327,6 @@ static inline uintptr_t kp_kallsyms_lookup_name(const char *name)
 // if called within kthread, will try to build a kallsyms hash array when everything failed!
 static noinline uintptr_t kallsyms_lookup_retry(const char *name)
 {
-	char namebuf[KSYM_NAME_LEN];
 	if (!name)
 		return 0x0;
 
@@ -376,6 +374,8 @@ skip_on_each_symbol:
 	return kallsyms_lookup_hashed_name(name);
 	
 found:
+	;
+	char namebuf[KSYM_NAME_LEN];
 	sprint_symbol_no_offset(namebuf, addr);
 	pr_info("%s: %s addr: 0x%lx \n", __func__, namebuf, addr);
 	return addr;

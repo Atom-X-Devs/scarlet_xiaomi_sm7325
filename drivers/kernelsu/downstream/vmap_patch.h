@@ -66,7 +66,7 @@ static noinline int ksu_write_to_readonly_slot(uintptr_t slot_ptr, uintptr_t new
 
 	void **target_slot = (void **)((uintptr_t)writable_addr + offset);
 
-	patch_ptr_slot_kick_cpu(target_slot, new_ptr);
+	patch_ptr_slot_kick_cpu(target_slot, (void *)new_ptr);
 
 	vunmap(writable_addr);
 	smp_mb();
@@ -118,7 +118,7 @@ static noinline void read_and_replace_syscall(void *old_ptr, unsigned long sysca
 	*(void **)old_ptr = *target_slot;
 	barrier();
 
-	patch_ptr_slot_kick_cpu(target_slot, new_ptr);
+	patch_ptr_slot_kick_cpu(target_slot, (void *)new_ptr);
 
 	vunmap(writable_addr);
 	smp_mb(); 

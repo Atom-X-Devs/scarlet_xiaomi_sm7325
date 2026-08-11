@@ -13,7 +13,7 @@
 
 // selinux_ops (LSM), security_operations struct tampering for ultra legacy
 
-static uintptr_t selinux_ops_addr = NULL;
+static uintptr_t selinux_ops_addr = 0x0;
 
 static int (*orig_setprocattr) (struct task_struct *p, char *name, void *value, size_t size) __read_mostly = NULL;
 static int hook_setprocattr(struct task_struct *p, char *name, void *value, size_t size)
