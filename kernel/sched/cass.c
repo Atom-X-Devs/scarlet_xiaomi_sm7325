@@ -32,7 +32,6 @@ struct cass_cpu_cand {
 	unsigned long cap_max;
 	unsigned long cap_no_therm;
 	unsigned long cap_orig;
-	unsigned long cap_actual;
 	unsigned long therm_press;
 	unsigned long eff_util;
 	unsigned long hard_util;
@@ -137,10 +136,6 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 			goto done;
 	}
 
-	/* Prefer the CPU with higher actual capacity */
-	if (cass_cmp(a->cap_actual, b->cap_actual))
-		goto done;
-
 	/* Prefer the CPU that isn't the single fastest one in the system */
 	if (cass_cmp(cass_prime_cpu(b), cass_prime_cpu(a)))
 		goto done;
@@ -190,6 +185,10 @@ bool cass_cpu_better(const struct cass_cpu_cand *a,
 
 	/* Prefer the current CPU for sync wakes */
 	if (sync && (cass_eq(a->cpu, this_cpu) || !cass_cmp(b->cpu, this_cpu)))
+		goto done;
+
+	/* Prefer the CPU with higher capacity */
+	if (cass_cmp(a->cap, b->cap))
 		goto done;
 
 	/* Prefer the previous CPU */
@@ -273,9 +272,6 @@ static int cass_best_cpu(struct task_struct *p, int prev_cpu, bool sync, bool rt
 			curr->therm_press = 0;
 		else
 			curr->therm_press = curr->cap_orig - curr->cap_max;
-
-		/* Actual available capacity after thermal pressure */
-		curr->cap_actual = curr->cap_orig - curr->therm_press;
 
 		/* Prefer the CPU that more closely meets the uclamp minimum */
 		if (curr->cap_max < uc_min && curr->cap_max < best->cap_max)
