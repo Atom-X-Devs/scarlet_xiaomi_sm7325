@@ -480,11 +480,6 @@ static int __qseecom_scm_call2_locked(uint32_t smc_id, struct qseecom_scm_desc *
 		ret = qcom_scm_qseecom_call(smc_id, desc, false);
 		if ((ret == -EBUSY) || (desc && (desc->ret[0] == -QSEE_RESULT_FAIL_APP_BUSY))) {
 			mutex_unlock(&app_access_lock);
-			/*
-			 * Since app_access_lock() is not being held here, we can
-			 * consider this as a safe freeze point.
-			 */
-			try_to_freeze();
 			msleep(QSEECOM_SCM_EBUSY_WAIT_MS);
 			mutex_lock(&app_access_lock);
 		}
