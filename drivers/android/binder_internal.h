@@ -357,9 +357,10 @@ struct binder_ref {
 
 /**
  * struct binder_priority - scheduler policy, priority and uclamp
- * @sched_policy            scheduler policy
- * @prio                    [100..139] for SCHED_NORMAL, [0..99] for FIFO/RT
- * @uclamp                  [0..1024] for UCLAMP_MIN & UCLAMP_MAX
+ * @sched_policy:           scheduler policy
+ * @prio:                   [100..139] for SCHED_NORMAL, [0..99] for FIFO/RT
+ * @uclamp:                 [0..1024] for UCLAMP_MIN & UCLAMP_MAX
+ *
  * The binder driver supports inheriting the following scheduler policies:
  * SCHED_NORMAL
  * SCHED_BATCH
