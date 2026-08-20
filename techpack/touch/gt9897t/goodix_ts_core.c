@@ -1046,26 +1046,18 @@ static int goodix_parse_dt_resolution(struct device_node *node,
 
 static int goodix_get_panel_type(struct goodix_ts_core *ts_data)
 {
-	int i = 0, j;
+	int i = 0;
 	u8 *lockdown = ts_data->lockdown_info;
 	__maybe_unused struct goodix_config_info *panel_list =
 		ts_data->board_data.config_array;
 
-	for (j = 0; j < 60; j++) {
-		if (lockdown[1] == 0x42) {
-			i = 1;
-			ts_info("This is CSOT Display Panel!");
-			break;
-		}
-		if (lockdown[1] == 0x36) {
-			i = 0;
-			ts_info("This is TM Display Panel!");
-			break;
-		}
-
-		mdelay(1000);
-	}
-	if (i != 0 && i != 1) {
+	if (lockdown[1] == 0x42) {
+		i = 1;
+		pr_info("[GTP-INF]: This is CSOT Display Panel!");
+	} else if (lockdown[1] == 0x36) {
+		i = 0;
+		pr_info("[GTP-INF]: This is TM Display Panel!");
+	} else {
 		i = 2;
 	}
 
@@ -1076,7 +1068,7 @@ static int goodix_get_panel_type(struct goodix_ts_core *ts_data)
 		return ts_data->board_data.panel_index;
 	}
 
-	ts_debug("match panle type, fw is [%s], cfg is [%s]",
+	ts_debug("match panel type, fw is [%s], cfg is [%s]",
 		 panel_list[i].gdx_fw_name, panel_list[i].gdx_cfg_name);
 
 	return ts_data->board_data.panel_index;
@@ -1101,8 +1093,15 @@ void goodix_match_fw(struct goodix_ts_core *ts_data)
 	struct goodix_ts_board_data *ts = &ts_data->board_data;
 
 	ts_info("start match fw name");
-	if (is_lockdown_empty(ts_data->lockdown_info))
+	if (is_lockdown_empty(ts_data->lockdown_info)) {
+		/*
+		 * Wait 1s before populating lockdown since hardware isn't
+		 * ready yet. Peak Xiaomi moment!
+		 */
+		msleep(1000);
 		goodix_ts_get_lockdowninfo(ts_data);
+	}
+
 	if (goodix_get_panel_type(ts_data) < 0) {
 		ts->fw_name = TS_DEFAULT_FIRMWARE;
 		ts->cfg_bin_name = TS_DEFAULT_CFG_BIN;
