@@ -1177,6 +1177,7 @@ static int brl_after_event_handler(struct goodix_ts_core *cd)
 	return hw_ops->write(cd, misc->touch_data_addr, &sync_clean, 1);
 }
 
+#ifdef CONFIG_TOUCHSCREEN_GOODIX_BRL_DEBUG
 #define GOODIX_CMD_RAWDATA 2
 #define GOODIX_CMD_COORD 0
 static int brl_get_capacitance_data(struct goodix_ts_core *cd,
@@ -1277,6 +1278,13 @@ exit:
 	goodix_ts_blocking_notify(NOTIFY_ESD_ON, NULL);
 	return ret;
 }
+#else
+static int brl_get_capacitance_data(struct goodix_ts_core *cd,
+				    struct ts_rawdata_info *info)
+{
+	return -EINVAL;
+}
+#endif
 
 #define GOODIX_CHARGER_ON 0x10
 #define GOODIX_CHARGER_OFF 0x11
