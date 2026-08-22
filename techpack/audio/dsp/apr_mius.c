@@ -173,6 +173,7 @@ fail_cmd:
 	return ret;
 }
 
+extern int us_afe_callback(int data);
 int32_t mius_apr_set_parameter(int32_t port_id, uint32_t param_id,
 					u8 *user_params, int32_t length)
 {
@@ -185,6 +186,7 @@ int32_t mius_apr_set_parameter(int32_t port_id, uint32_t param_id,
 		module_id = MIUS_ULTRASOUND_MODULE_RX;
 
 	if (param_id == MIUS_ULTRASOUND_UPLOAD_NONE) {
+		ret = (int32_t)us_afe_callback((const uint32_t)ups_event);
 		return ret;
 	}
 
@@ -212,8 +214,10 @@ int32_t mius_process_apr_payload(uint32_t *payload)
 	payload_size = payload[2] & 0xFFFF;
 	if (payload[3] == 0 || payload[3] == 1) {
 		ups_event = payload[3];
+		ret = (int32_t)us_afe_callback((const uint32_t)payload[3]);
 	} else {
 		ups_event = ups_event ^ 1;
+		ret = (int32_t)us_afe_callback((uint32_t)ups_event);
 	}
 
 	if (ret != 0) {
