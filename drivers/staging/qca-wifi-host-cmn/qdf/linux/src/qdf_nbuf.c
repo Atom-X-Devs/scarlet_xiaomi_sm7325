@@ -545,7 +545,7 @@ struct sk_buff *__qdf_nbuf_alloc(qdf_device_t osdev, size_t size, int reserve,
 		size += (align - 1);
 
 	if (in_interrupt() || irqs_disabled() || in_atomic()) {
-		flags = GFP_ATOMIC;
+		flags = GFP_ATOMIC | __GFP_NOWARN;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 		/*
 		 * Observed that kcompactd burns out CPU to make order-3 page.
@@ -615,7 +615,7 @@ __qdf_nbuf_t __qdf_nbuf_alloc_no_recycler(size_t size, int reserve, int align,
 	if (align)
 		size += (align - 1);
 
-	nbuf = alloc_skb(size, GFP_ATOMIC);
+	nbuf = alloc_skb(size, GFP_ATOMIC | __GFP_NOWARN);
 	if (!nbuf)
 		goto ret_nbuf;
 
@@ -2362,7 +2362,7 @@ static QDF_NBUF_TRACK *qdf_nbuf_track_alloc(void)
 		return new_node;
 
 	if (in_interrupt() || irqs_disabled() || in_atomic())
-		flags = GFP_ATOMIC;
+		flags = GFP_ATOMIC | __GFP_NOWARN;
 
 	return kmem_cache_alloc(nbuf_tracking_cache, flags);
 }
