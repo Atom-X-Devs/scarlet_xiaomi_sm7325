@@ -217,7 +217,9 @@ enum xm_property_id {
 	XM_PROP_BQ2597X_BATTERY_VOLTAGE,
 	XM_PROP_COOL_MODE,
 #endif
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 	XM_PROP_BQ2597X_SLAVE_CONNECTOR,
+#endif
 	XM_PROP_BT_TRANSFER_START,
 	XM_PROP_MASTER_SMB1396_ONLINE,
 	XM_PROP_MASTER_SMB1396_IIN,
@@ -240,8 +242,13 @@ enum xm_property_id {
 	XM_PROP_TX_ADAPTER,
 	XM_PROP_OP_MODE,
 	XM_PROP_WLS_DIE_TEMP,
-	XM_PROP_WLS_CAR_ADAPTER,
+#ifdef CONFIG_MACH_XIAOMI_LISA
 	XM_PROP_WLS_TX_SPEED,
+#endif
+	XM_PROP_WLS_CAR_ADAPTER,
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
+	XM_PROP_WLS_TX_SPEED,
+#endif
 	/**********************/
 	XM_PROP_INPUT_SUSPEND,
 	XM_PROP_REAL_TYPE,
@@ -3004,6 +3011,7 @@ static ssize_t cool_mode_show(struct class *c,
 static CLASS_ATTR_RW(cool_mode);
 #endif
 
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 static ssize_t bq2597x_slave_connector_show(struct class *c,
 					struct class_attribute *attr, char *buf)
 {
@@ -3019,6 +3027,7 @@ static ssize_t bq2597x_slave_connector_show(struct class *c,
 	return scnprintf(buf, PAGE_SIZE, "%u\n", pst->prop[XM_PROP_BQ2597X_SLAVE_CONNECTOR]);
 }
 static CLASS_ATTR_RO(bq2597x_slave_connector);
+#endif
 
 static ssize_t bt_transfer_start_store(struct class *c,
 					struct class_attribute *attr,
@@ -4615,7 +4624,9 @@ static struct attribute *xiaomi_battery_class_attrs[] = {
 	&class_attr_bq2597x_battery_voltage.attr,
 	&class_attr_cool_mode.attr,
 #endif
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 	&class_attr_bq2597x_slave_connector.attr,
+#endif
 	&class_attr_bt_transfer_start.attr,
 	&class_attr_master_smb1396_online.attr,
 	&class_attr_master_smb1396_iin.attr,
