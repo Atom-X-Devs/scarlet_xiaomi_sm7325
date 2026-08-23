@@ -20,16 +20,6 @@ config GOODIX_FINGERPRINT
 
 	  To compile this driver as a module, choose M here.
 
-config FPC_FINGERPRINT
-	tristate "FPC fingerprint driver"
-	depends on INPUT_FINGERPRINT
-	help
-	  Say Y here to enable support for FPC fingerprint driver.
-
-	  If unsure, say N.
-
-	  To compile this driver as a module, choose M here.
-
 config XIAOMI_FINGERPRINT
 	tristate "Xiaomi fingerprint driver"
 	depends on INPUT_FINGERPRINT && !MACH_XIAOMI_LISA
