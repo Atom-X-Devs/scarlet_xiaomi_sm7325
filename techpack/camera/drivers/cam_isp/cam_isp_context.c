@@ -874,7 +874,7 @@ static int __cam_isp_ctx_handle_buf_done_for_req_list(
 		req_isp->cdm_reset_before_apply = false;
 		req_isp->num_acked = 0;
 		req_isp->num_deferred_acks = 0;
-#ifdef CONFIG_MACH_XIAOMI
+#ifdef REDWOOD_CAM
 		req_isp->bubble_detected = false;
 #else
 		/*

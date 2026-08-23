@@ -458,7 +458,7 @@ static int cam_flash_ops(struct cam_flash_ctrl *flash_ctrl,
 	return 0;
 }
 
-#ifdef CONFIG_MACH_XIAOMI
+#ifdef REDWOOD_CAM
 enum Flash_torch_Type FlashtorchType = cam_flash_Type_off;
 #endif
 
@@ -475,7 +475,7 @@ int cam_flash_off(struct cam_flash_ctrl *flash_ctrl)
 		cam_res_mgr_led_trigger_event(flash_ctrl->switch_trigger,
 			(enum led_brightness)LED_SWITCH_OFF);
 
-#ifdef CONFIG_MACH_XIAOMI
+#ifdef REDWOOD_CAM
 	FlashtorchType = cam_flash_Type_off;
 #endif
 	if ((flash_ctrl->i2c_data.streamoff_settings.is_settings_valid) &&
@@ -495,7 +495,7 @@ static int cam_flash_low(
 	struct cam_flash_frame_setting *flash_data)
 {
 	int i = 0, rc = 0;
-#ifdef CONFIG_MACH_XIAOMI
+#ifdef REDWOOD_CAM
 	static int lastcur = 0;
 #endif
 
@@ -510,7 +510,7 @@ static int cam_flash_low(
 				flash_ctrl->flash_trigger[i],
 				LED_OFF);
 
-#ifdef CONFIG_MACH_XIAOMI
+#ifdef REDWOOD_CAM
 	if (flash_ctrl->switch_trigger)
 		cam_res_mgr_led_trigger_event(flash_ctrl->switch_trigger,
 			(enum led_brightness)LED_SWITCH_OFF);
@@ -528,7 +528,7 @@ static int cam_flash_low(
 		CAMERA_SENSOR_FLASH_OP_FIRELOW);
 	if (rc)
 		CAM_ERR(CAM_FLASH, "Fire Torch failed: %d", rc);
-#ifdef CONFIG_MACH_XIAOMI
+#ifdef REDWOOD_CAM
 	else
 		FlashtorchType = cam_flash_Type_low;
 
@@ -559,7 +559,7 @@ static int cam_flash_high(
 		CAMERA_SENSOR_FLASH_OP_FIREHIGH);
 	if (rc)
 		CAM_ERR(CAM_FLASH, "Fire Flash Failed: %d", rc);
-#ifdef CONFIG_MACH_XIAOMI
+#ifdef REDWOOD_CAM
 	else
 		FlashtorchType = cam_flash_Type_low;
 #endif
