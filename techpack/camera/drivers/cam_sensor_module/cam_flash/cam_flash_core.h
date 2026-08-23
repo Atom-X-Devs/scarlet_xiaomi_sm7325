@@ -9,7 +9,7 @@
 #include <media/cam_sensor.h>
 #include "cam_flash_dev.h"
 
-#ifdef CONFIG_MACH_XIAOMI
+#ifdef REDWOOD_CAM
 enum Flash_torch_Type
 {
     cam_flash_Type_off     = 0x0,
