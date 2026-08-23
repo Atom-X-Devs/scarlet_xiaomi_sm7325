@@ -299,6 +299,7 @@ enum xm_property_id {
 	XM_PROP_FG1_TAMBIENT,
 	XM_PROP_FG1_TREMQ,
 	XM_PROP_FG1_TFULLQ,
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 	XM_PROP_FG1_SEAL_STATE,
 	XM_PROP_FG1_SEAL_SET,
 	XM_PROP_FG1_DF_CHECK,
@@ -311,16 +312,19 @@ enum xm_property_id {
 	XM_PROP_FG1_TIME_OT,
 	XM_PROP_FG1_TIME_UT,
 	XM_PROP_FG1_TIME_LT,
+#endif
 #ifdef CONFIG_BQ_CLOUD_AUTHENTICATION
 	XM_PROP_SERVER_SN,
 	XM_PROP_SERVER_RESULT,
 	XM_PROP_ADSP_RESULT,
 #endif
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 	XM_PROP_SHIPMODE_COUNT_RESET,
 	XM_PROP_SPORT_MODE,
 	XM_PROP_CELL1_VOLT,
 	XM_PROP_CELL2_VOLT,
 	XM_PROP_FG_VENDOR_ID,
+#endif
 #ifdef CONFIG_AI_RSOC
 	XM_PROP_FG1_RSOC,
 	XM_PROP_FG1_AI,
@@ -1521,7 +1525,11 @@ static u8 get_quick_charge_type(struct battery_chg_dev *bcdev)
 		return QUICK_CHARGE_NORMAL;
 
 	if (real_charger_type == POWER_SUPPLY_USB_TYPE_PD_PPS && verify_digiest == 1) {
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 		if (apdo_max >= 50)
+#else
+		if (apdo_max >= 120)
+#endif
 			return QUICK_CHARGE_SUPER;
 		else
 			return QUICK_CHARGE_TURBE;
@@ -3264,6 +3272,7 @@ static ssize_t voter_debug_show(struct class *c,
 }
 static CLASS_ATTR_RW(voter_debug);
 
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 static ssize_t power_max_show(struct class *c,
 			struct class_attribute *attr, char *buf)
 {
@@ -3295,6 +3304,7 @@ static ssize_t power_max_show(struct class *c,
 	return scnprintf(buf, PAGE_SIZE, "%u", 0);
 }
 static CLASS_ATTR_RO(power_max);
+#endif
 
 static ssize_t input_suspend_store(struct class *c,
 					struct class_attribute *attr,
@@ -4037,6 +4047,7 @@ static ssize_t fg1_ai_show(struct class *c,
 static CLASS_ATTR_RO(fg1_ai);
 #endif
 
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 static ssize_t fg1_seal_set_store(struct class *c,
 					struct class_attribute *attr,
 					const char *buf, size_t count)
@@ -4250,6 +4261,7 @@ static ssize_t fg1_time_lt_show(struct class *c,
 	return scnprintf(buf, PAGE_SIZE, "%d\n", pst->prop[XM_PROP_FG1_TIME_LT]);
 }
 static CLASS_ATTR_RO(fg1_time_lt);
+#endif
 
 static ssize_t fg1_fcc_soh_show(struct class *c,
 					struct class_attribute *attr, char *buf)
@@ -4479,7 +4491,7 @@ static ssize_t adsp_result_show(struct class *c,
 static CLASS_ATTR_RO(adsp_result);
 #endif
 
-
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 static ssize_t shipmode_count_reset_store(struct class *c,
 					struct class_attribute *attr,
 					const char *buf, size_t count)
@@ -4515,7 +4527,6 @@ static ssize_t shipmode_count_reset_show(struct class *c,
 	return scnprintf(buf, PAGE_SIZE, "%u\n", pst->prop[XM_PROP_SHIPMODE_COUNT_RESET]);
 }
 static CLASS_ATTR_RW(shipmode_count_reset);
-
 
 static ssize_t sport_mode_store(struct class *c,
 					struct class_attribute *attr,
@@ -4600,6 +4611,7 @@ static ssize_t fg_vendor_show(struct class *c,
 	return scnprintf(buf, PAGE_SIZE, "%d\n", pst->prop[XM_PROP_FG_VENDOR_ID]);
 }
 static CLASS_ATTR_RO(fg_vendor);
+#endif
 
 static struct attribute *xiaomi_battery_class_attrs[] = {
 	&class_attr_real_type.attr,
@@ -4675,6 +4687,7 @@ static struct attribute *xiaomi_battery_class_attrs[] = {
 	&class_attr_fg1_tambient.attr,
 	&class_attr_fg1_tremq.attr,
 	&class_attr_fg1_tfullq.attr,
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 	&class_attr_fg1_seal_state.attr,
 	&class_attr_fg1_seal_set.attr,
 	&class_attr_fg1_df_check.attr,
@@ -4687,17 +4700,20 @@ static struct attribute *xiaomi_battery_class_attrs[] = {
 	&class_attr_fg1_time_ot.attr,
 	&class_attr_fg1_time_ut.attr,
 	&class_attr_fg1_time_lt.attr,
+#endif
 #if defined(CONFIG_BQ_CLOUD_AUTHENTICATION)
 	&class_attr_server_sn.attr,
 	&class_attr_server_result.attr,
 	&class_attr_adsp_result.attr,
 #endif
+#ifdef CONFIG_MACH_XIAOMI_REDWOOD
 	&class_attr_shipmode_count_reset.attr,
 	&class_attr_sport_mode.attr,
 	&class_attr_power_max.attr,
 	&class_attr_cell1_volt.attr,
 	&class_attr_cell2_volt.attr,
 	&class_attr_fg_vendor.attr,
+#endif
 	NULL,
 };
 
