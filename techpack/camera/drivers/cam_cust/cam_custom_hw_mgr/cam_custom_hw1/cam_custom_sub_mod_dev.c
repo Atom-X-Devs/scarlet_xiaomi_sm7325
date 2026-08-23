@@ -133,9 +133,7 @@ free_hw_intf:
 static void cam_custom_hw_sub_mod_component_unbind(
 	struct device *dev, struct device *master_dev, void *data)
 {
-#ifdef CONFIG_DEBUG_KERNEL
 	struct platform_device *pdev = to_platform_device(dev);
-#endif
 
 	CAM_DBG(CAM_CUSTOM, "Unbinding component: %s", pdev->name);
 }

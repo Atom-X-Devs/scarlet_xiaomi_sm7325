@@ -64,7 +64,6 @@ struct cam_sfe_path_data {
 	cam_hw_mgr_event_cb_func                  event_cb;
 };
 
-#ifdef CONFIG_DEBUG_KERNEL
 static const char *cam_sfe_top_res_id_to_string(
 	uint32_t res_id)
 {
@@ -85,7 +84,6 @@ static const char *cam_sfe_top_res_id_to_string(
 		return "";
 	}
 }
-#endif
 
 static struct cam_axi_vote *cam_sfe_top_delay_bw_reduction(
 	struct cam_sfe_top_priv *top_priv,

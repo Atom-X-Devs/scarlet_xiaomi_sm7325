@@ -96,7 +96,6 @@ static int cam_icp_dump_io_cfg(struct cam_icp_hw_ctx_data *ctx_data,
 	return rc;
 }
 
-#ifdef CONFIG_DEBUG_KERNEL
 static const char *cam_icp_dev_type_to_name(
 	uint32_t dev_type)
 {
@@ -111,7 +110,6 @@ static const char *cam_icp_dev_type_to_name(
 		return "Invalid dev type";
 	}
 }
-#endif
 
 static int cam_icp_send_ubwc_cfg(struct cam_icp_hw_mgr *hw_mgr)
 {
@@ -2006,7 +2004,6 @@ static int cam_icp_mgr_cleanup_ctx(struct cam_icp_hw_ctx_data *ctx_data)
 	return 0;
 }
 
-#ifdef CONFIG_DEBUG_KERNEL
 static const char *cam_icp_error_handle_id_to_type(
 	uint32_t error_handle)
 {
@@ -2070,7 +2067,6 @@ static const char *cam_icp_error_handle_id_to_type(
 	}
 	return name;
 }
-#endif
 
 static int cam_icp_mgr_handle_frame_process(uint32_t *msg_ptr, int flag)
 {

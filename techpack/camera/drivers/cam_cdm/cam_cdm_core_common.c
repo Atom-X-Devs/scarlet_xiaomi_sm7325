@@ -820,9 +820,7 @@ int cam_cdm_process_cmd(void *hw_priv,
 	}
 	case CAM_CDM_HW_INTF_DUMP_DBG_REGS:
 	{
-#ifdef CONFIG_DEBUG_KERNEL
 		uint32_t *handle = cmd_args;
-#endif
 
 		if (sizeof(uint32_t) != arg_size) {
 			CAM_ERR(CAM_CDM,

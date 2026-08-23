@@ -207,7 +207,6 @@ static void __cam_isp_ctx_update_state_monitor_array(
 		jiffies_to_msecs(jiffies) - ctx_isp->init_timestamp;
 }
 
-#ifdef CONFIG_DEBUG_KERNEL
 static const char *__cam_isp_ctx_substate_val_to_type(
 	enum cam_isp_ctx_activated_substate type)
 {
@@ -255,7 +254,6 @@ static const char *__cam_isp_hw_evt_val_to_type(
 		return "CAM_ISP_EVENT_INVALID";
 	}
 }
-#endif
 
 static void __cam_isp_ctx_dump_state_monitor_array(
 	struct cam_isp_context *ctx_isp)
@@ -913,9 +911,7 @@ static int __cam_isp_ctx_handle_early_buf_done(
 	int i, rc = 0;
 
 	struct cam_isp_ctx_req *req_isp = (struct cam_isp_ctx_req *) req->req_priv;
-#ifdef CONFIG_DEBUG_KERNEL
 	struct cam_context *ctx = ctx_isp->base;
-#endif
 
 	for (i = 0; i < req_isp->num_fence_map_out; i++) {
 		if (req_isp->early_fence_map_index[i] == 1) {
@@ -1114,9 +1110,7 @@ static int __cam_isp_handle_deferred_buf_done(
 	int rc = 0;
 	struct cam_isp_ctx_req *req_isp =
 		(struct cam_isp_ctx_req *) req->req_priv;
-#ifdef CONFIG_DEBUG_KERNEL
 	struct cam_context *ctx = ctx_isp->base;
-#endif
 
 	CAM_DBG(CAM_ISP,
 		"ctx[%d] : Req %llu : Handling %d deferred buf_dones num_acked=%d, bubble_handling=%d",
@@ -3417,10 +3411,8 @@ static int __cam_isp_ctx_apply_req_in_sof(
 	struct cam_context *ctx, struct cam_req_mgr_apply_request *apply)
 {
 	int rc = 0;
-#ifdef CONFIG_DEBUG_KERNEL
 	struct cam_isp_context *ctx_isp =
 		(struct cam_isp_context *) ctx->ctx_priv;
-#endif
 
 	CAM_DBG(CAM_ISP, "current Substate[%s]",
 		__cam_isp_ctx_substate_val_to_type(
@@ -3443,10 +3435,8 @@ static int __cam_isp_ctx_apply_req_in_epoch(
 	struct cam_context *ctx, struct cam_req_mgr_apply_request *apply)
 {
 	int rc = 0;
-#ifdef CONFIG_DEBUG_KERNEL
 	struct cam_isp_context *ctx_isp =
 		(struct cam_isp_context *) ctx->ctx_priv;
-#endif
 
 	CAM_DBG(CAM_ISP, "current Substate[%s]",
 		__cam_isp_ctx_substate_val_to_type(
@@ -3469,10 +3459,8 @@ static int __cam_isp_ctx_apply_req_in_bubble(
 	struct cam_context *ctx, struct cam_req_mgr_apply_request *apply)
 {
 	int rc = 0;
-#ifdef CONFIG_DEBUG_KERNEL
 	struct cam_isp_context *ctx_isp =
 		(struct cam_isp_context *) ctx->ctx_priv;
-#endif
 
 	CAM_DBG(CAM_ISP, "current Substate[%s]",
 		__cam_isp_ctx_substate_val_to_type(
@@ -4583,10 +4571,8 @@ static int __cam_isp_ctx_rdi_only_apply_req_top_state(
 	struct cam_context *ctx, struct cam_req_mgr_apply_request *apply)
 {
 	int rc = 0;
-#ifdef CONFIG_DEBUG_KERNEL
 	struct cam_isp_context *ctx_isp =
 		(struct cam_isp_context *) ctx->ctx_priv;
-#endif
 
 	CAM_DBG(CAM_ISP, "current Substate[%s]",
 		__cam_isp_ctx_substate_val_to_type(
