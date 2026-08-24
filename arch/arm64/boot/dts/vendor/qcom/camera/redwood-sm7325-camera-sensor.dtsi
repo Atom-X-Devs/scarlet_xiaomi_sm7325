@@ -6,14 +6,6 @@
 	};
 };
 
-&pm8008j_chip {
-	status = "disabled";
-};
-
-&pm8008j_ldo {
-	status = "disabled";
-};
-
 &L2I {
 	regulator-min-microvolt = <1200000>;
 	regulator-max-microvolt = <1200000>;

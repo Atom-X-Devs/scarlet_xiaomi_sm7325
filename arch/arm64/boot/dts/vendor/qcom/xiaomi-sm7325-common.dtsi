@@ -6,6 +6,17 @@
 #include "yupik-thermal-overlay.dtsi"
 
 /*
+ * pm8008j PMIC and LDO are not used by Xiaomi SM7325 platform
+ */
+&pm8008j_chip {
+	status = "disabled";
+};
+
+&pm8008j_ldo {
+	status = "disabled";
+};
+
+/*
  * PM7325B devices not used by Xiaomi SM7325 platform
  */
 &bcl_soc {
