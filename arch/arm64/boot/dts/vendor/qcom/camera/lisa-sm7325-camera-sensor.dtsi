@@ -276,7 +276,7 @@
 		pinctrl-0 = <&cam_sensor_active_front
 					&cam_front_mclk_active>;
 		pinctrl-1 = <&cam_sensor_suspend_front
-					&cam_front_mclk_active>;
+					&cam_front_mclk_suspend>;
 		gpios = <&tlmm 64 0>,
 				<&tlmm 20 0>;
 		gpio-reset = <1>;
