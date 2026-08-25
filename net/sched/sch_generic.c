@@ -1132,7 +1132,7 @@ static void transition_one_qdisc(struct net_device *dev,
 
 	rcu_assign_pointer(dev_queue->qdisc, new_qdisc);
 	if (need_watchdog_p) {
-		dev_queue->trans_start = 0;
+		dev_queue->trans_start = jiffies;
 		*need_watchdog_p = 1;
 	}
 }
