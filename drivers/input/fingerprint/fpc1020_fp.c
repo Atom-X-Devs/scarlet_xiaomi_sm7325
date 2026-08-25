@@ -336,11 +336,8 @@ static int device_prepare(struct fpc1020_data *fpc1020, bool enable)
 		select_pin_ctl(fpc1020, "fpc1020_reset_reset");
 
 		fpc1020->vreg = regulator_get(dev, "fp_vdd_vreg");
-		if (IS_ERR_OR_NULL(fpc1020->vreg)) {
-			rc = PTR_ERR(fpc1020->vreg);
-			rc = rc ? rc : -EINVAL;
-			dev_err(dev, "fp_vdd_vreg regulator get failed %d!\n", rc);
-			fpc1020->vreg = NULL;
+		if (fpc1020->vreg == NULL) {
+			dev_err(dev, "fp_vdd_vreg regulator get failed!\n");
 			goto exit;
 		}
 
