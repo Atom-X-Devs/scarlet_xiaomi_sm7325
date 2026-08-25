@@ -281,7 +281,6 @@
 		fpc,gpio_rst = <&tlmm 43 0x0>;
 		fpc,gpio_irq = <&tlmm 34 0x0>;
 		fp_vdd_vreg-supply = <&L3C>;
-		fpc,enable-on-boot;
 		pinctrl-names = "fpc1020_reset_reset",
 						"fpc1020_reset_active",
 						"fpc1020_irq_active";
