@@ -292,3 +292,19 @@ void fuse_passthrough_release(struct fuse_passthrough *passthrough)
 		passthrough->cred = NULL;
 	}
 }
+
+int fuse_passthrough_fadvise(struct fuse_file *ff, loff_t offset, loff_t len, int advice)
+{
+	struct file *backing_file = ff->passthrough.filp;
+	const struct cred *old_cred;
+	int ret;
+
+	if (!backing_file)
+		return -EINVAL;
+
+	old_cred = override_creds(ff->passthrough.cred);
+	ret = vfs_fadvise(backing_file, offset, len, advice);
+	revert_creds(old_cred);
+
+	return ret;
+}
