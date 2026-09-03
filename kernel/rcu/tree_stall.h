@@ -591,7 +591,8 @@ static void print_other_cpu_stall(unsigned long gp_seq, unsigned long gps)
 	rcu_check_gp_kthread_expired_fqs_timer();
 	rcu_check_gp_kthread_starvation();
 
-	panic_on_rcu_stall();
+	if (rcu_seq_current(&rcu_state.gp_seq) == gp_seq)
+		panic_on_rcu_stall();
 
 	rcu_force_quiescent_state();  /* Kick them all. */
 }
@@ -600,11 +601,15 @@ static void print_cpu_stall(unsigned long gps)
 {
 	int cpu;
 	unsigned long flags;
+	unsigned long gp_seq;
 	struct rcu_data *rdp = this_cpu_ptr(&rcu_data);
 	struct rcu_node *rnp = rcu_get_root();
 	long totqlen = 0;
 
 	lockdep_assert_irqs_disabled();
+
+	/* Capture gp_seq early to detect stall-ended-before-panic. */
+	gp_seq = READ_ONCE(rcu_state.gp_seq);
 
 	/* Kick and suppress, if so configured. */
 	rcu_stall_kick_kthreads();
@@ -639,7 +644,8 @@ static void print_cpu_stall(unsigned long gps)
 			   jiffies + 3 * rcu_jiffies_till_stall_check() + 3);
 	raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 
-	panic_on_rcu_stall();
+	if (rcu_seq_current(&rcu_state.gp_seq) == gp_seq)
+		panic_on_rcu_stall();
 
 	/*
 	 * Attempt to revive the RCU machinery by forcing a context switch.
