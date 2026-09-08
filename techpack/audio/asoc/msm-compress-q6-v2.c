@@ -801,10 +801,13 @@ static void compr_event_handler(uint32_t opcode,
 		} else if ((bytes_available == cstream->runtime->fragment_size)
 			   && atomic_read(&prtd->drain)) {
 			prtd->last_buffer = 1;
+			atomic_set(&prtd->xrun, 0);
 			msm_compr_send_buffer(prtd);
 			prtd->last_buffer = 0;
-		} else
+		} else {
+			atomic_set(&prtd->xrun, 0);
 			msm_compr_send_buffer(prtd);
+		}
 
 		spin_unlock_irqrestore(&prtd->lock, flags);
 		break;
@@ -968,6 +971,7 @@ static void compr_event_handler(uint32_t opcode,
 					pr_debug("CMD_RUN_V2 Insufficient data to send. break out\n");
 					atomic_set(&prtd->xrun, 1);
 				} else {
+					atomic_set(&prtd->xrun, 0);
 					msm_compr_send_buffer(prtd);
 				}
 			}
