@@ -190,9 +190,9 @@ struct binder_buffer *binder_alloc_prepare_to_free(struct binder_alloc *alloc,
 {
 	struct binder_buffer *buffer;
 
-	mutex_lock(&alloc->mutex);
+	spin_lock(&alloc->lock);
 	buffer = binder_alloc_prepare_to_free_locked(alloc, user_ptr);
-	mutex_unlock(&alloc->mutex);
+	spin_unlock(&alloc->lock);
 	return buffer;
 }
 
@@ -344,35 +344,34 @@ static int binder_install_single_page(struct binder_alloc *alloc,
 		goto out;
 	}
 
-	ret = binder_page_insert(alloc, addr, page);
-	switch (ret) {
-	case -EBUSY:
-		/*
-		 * EBUSY is ok. Someone installed the pte first but the
-		 * alloc->pages[index] has not been updated yet. Discard
-		 * our page and look up the one already installed.
-		 */
-		ret = 0;
+	mutex_lock(&alloc->install_mutex);
+
+	/* Someone may have installed it already; check under alloc->lock */
+	spin_lock(&alloc->lock);
+	if (binder_get_installed_page(alloc, index)) {
+		spin_unlock(&alloc->lock);
+		mutex_unlock(&alloc->install_mutex);
 		binder_free_page(page);
-		page = binder_page_lookup(alloc, addr);
-		if (!page) {
-			pr_err("%d: failed to find page at offset %lx\n",
-			       alloc->pid, addr - alloc->vm_start);
-			ret = -ESRCH;
-			break;
-		}
-		fallthrough;
-	case 0:
-		/* Mark page installation complete and safe to use */
-		binder_set_installed_page(alloc, index, page);
-		break;
-	default:
+		ret = 0;
+		goto out;
+	}
+	spin_unlock(&alloc->lock);
+
+	ret = binder_page_insert(alloc, addr, page);
+	if (ret) {
 		binder_free_page(page);
 		pr_err("%d: %s failed to insert page at offset %lx with %d\n",
 		       alloc->pid, __func__, addr - alloc->vm_start, ret);
-		ret = -ENOMEM;
-		break;
+		mutex_unlock(&alloc->install_mutex);
+		goto out;
 	}
+
+	/* Mark page installation complete under alloc->lock */
+	spin_lock(&alloc->lock);
+	binder_set_installed_page(alloc, index, page);
+	spin_unlock(&alloc->lock);
+
+	mutex_unlock(&alloc->install_mutex);
 out:
 	mmput_async(alloc->mm);
 	return ret;
@@ -695,10 +694,10 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 	if (!next)
 		return ERR_PTR(-ENOMEM);
 
-	mutex_lock(&alloc->mutex);
+	spin_lock(&alloc->lock);
 	buffer = binder_alloc_new_buf_locked(alloc, next, size, is_async);
 	if (IS_ERR(buffer)) {
-		mutex_unlock(&alloc->mutex);
+		spin_unlock(&alloc->lock);
 		goto out;
 	}
 
@@ -706,7 +705,7 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 	buffer->offsets_size = offsets_size;
 	buffer->extra_buffers_size = extra_buffers_size;
 	buffer->pid = current->tgid;
-	mutex_unlock(&alloc->mutex);
+	spin_unlock(&alloc->lock);
 
 	ret = binder_install_buffer_pages(alloc, buffer, size);
 	if (ret) {
@@ -891,9 +890,9 @@ void binder_alloc_free_buf(struct binder_alloc *alloc,
 		binder_alloc_clear_buf(alloc, buffer);
 		buffer->clear_on_free = false;
 	}
-	mutex_lock(&alloc->mutex);
+	spin_lock(&alloc->lock);
 	binder_free_buf_locked(alloc, buffer);
-	mutex_unlock(&alloc->mutex);
+	spin_unlock(&alloc->lock);
 }
 
 /**
@@ -986,7 +985,14 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 	struct binder_buffer *buffer;
 
 	buffers = 0;
-	mutex_lock(&alloc->mutex);
+	/*
+	 * Hold install_mutex to serialize against the shrinker, which may
+	 * access this alloc after dropping alloc->lock to zap pages. This
+	 * also keeps pages[] stable so the loops below can drop alloc->lock
+	 * for the sleeping memset and page free.
+	 */
+	mutex_lock(&alloc->install_mutex);
+	spin_lock(&alloc->lock);
 	BUG_ON(alloc->mapped);
 
 	while ((n = rb_first(&alloc->allocated_buffers))) {
@@ -996,7 +1002,9 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 		BUG_ON(buffer->transaction);
 
 		if (buffer->clear_on_free) {
+			spin_unlock(&alloc->lock);
 			binder_alloc_clear_buf(alloc, buffer);
+			spin_lock(&alloc->lock);
 			buffer->clear_on_free = false;
 		}
 		binder_free_buf_locked(alloc, buffer);
@@ -1027,15 +1035,18 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 
 			on_lru = list_lru_del(&binder_freelist,
 					      page_to_lru(page));
+			spin_unlock(&alloc->lock);
 			binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
 				     "%s: %d: page %d %s\n",
 				     __func__, alloc->pid, i,
 				     on_lru ? "on lru" : "active");
 			binder_free_page(page);
 			page_count++;
+			spin_lock(&alloc->lock);
 		}
 	}
-	mutex_unlock(&alloc->mutex);
+	spin_unlock(&alloc->lock);
+	mutex_unlock(&alloc->install_mutex);
 	kvfree(alloc->pages);
 	if (alloc->mm)
 		mmdrop(alloc->mm);
@@ -1059,7 +1070,7 @@ void binder_alloc_print_allocated(struct seq_file *m,
 	struct binder_buffer *buffer;
 	struct rb_node *n;
 
-	mutex_lock(&alloc->mutex);
+	spin_lock(&alloc->lock);
 	for (n = rb_first(&alloc->allocated_buffers); n; n = rb_next(n)) {
 		buffer = rb_entry(n, struct binder_buffer, rb_node);
 		seq_printf(m, "  buffer %d: %lx size %zd:%zd:%zd %s\n",
@@ -1069,7 +1080,7 @@ void binder_alloc_print_allocated(struct seq_file *m,
 			   buffer->extra_buffers_size,
 			   buffer->transaction ? "active" : "delivered");
 	}
-	mutex_unlock(&alloc->mutex);
+	spin_unlock(&alloc->lock);
 }
 
 /**
@@ -1090,7 +1101,7 @@ void binder_alloc_print_pages(struct seq_file *m,
 	 * Make sure the binder_alloc is fully initialized, otherwise we might
 	 * read inconsistent state.
 	 */
-	mutex_lock(&alloc->mutex);
+	spin_lock(&alloc->lock);
 	if (binder_alloc_is_mapped(alloc)) {
 		for (i = 0; i < alloc->buffer_size / PAGE_SIZE; i++) {
 			page = binder_get_installed_page(alloc, i);
@@ -1102,7 +1113,7 @@ void binder_alloc_print_pages(struct seq_file *m,
 				lru++;
 		}
 	}
-	mutex_unlock(&alloc->mutex);
+	spin_unlock(&alloc->lock);
 	seq_printf(m, "  pages: %d:%d:%d\n", active, lru, free);
 	seq_printf(m, "  pages high watermark: %zu\n", alloc->pages_high);
 }
@@ -1118,10 +1129,10 @@ int binder_alloc_get_allocated_count(struct binder_alloc *alloc)
 	struct rb_node *n;
 	int count = 0;
 
-	mutex_lock(&alloc->mutex);
+	spin_lock(&alloc->lock);
 	for (n = rb_first(&alloc->allocated_buffers); n != NULL; n = rb_next(n))
 		count++;
-	mutex_unlock(&alloc->mutex);
+	spin_unlock(&alloc->lock);
 	return count;
 }
 
@@ -1180,12 +1191,15 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 	}
 
 	/*
-	 * Use trylock: the install side may hold alloc->mutex while its
+	 * Use trylock: the install side may hold install_mutex while its
 	 * vm_insert_page() recurses into reclaim and re-enters this shrinker
 	 * on the same thread, so blocking here would self-deadlock.
 	 */
-	if (!mutex_trylock(&alloc->mutex))
-		goto err_get_alloc_mutex_failed;
+	if (!mutex_trylock(&alloc->install_mutex))
+		goto err_get_install_mutex_failed;
+
+	if (!spin_trylock(&alloc->lock))
+		goto err_get_alloc_lock_failed;
 
 	/*
 	 * Since a binder_alloc can only be mapped once, we ensure
@@ -1203,6 +1217,7 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 	trace_binder_unmap_kernel_end(alloc, index);
 
 	list_lru_isolate(lru, item);
+	spin_unlock(&alloc->lock);
 	spin_unlock(lock);
 
 	if (vma) {
@@ -1212,7 +1227,7 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 
 		trace_binder_unmap_user_end(alloc, index);
 	}
-	mutex_unlock(&alloc->mutex);
+	mutex_unlock(&alloc->install_mutex);
 
 	if (mm_locked)
 		mmap_read_unlock(mm);
@@ -1225,8 +1240,10 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 	return LRU_REMOVED_RETRY;
 
 err_invalid_vma:
-	mutex_unlock(&alloc->mutex);
-err_get_alloc_mutex_failed:
+	spin_unlock(&alloc->lock);
+err_get_alloc_lock_failed:
+	mutex_unlock(&alloc->install_mutex);
+err_get_install_mutex_failed:
 	if (mm_locked)
 		mmap_read_unlock(mm);
 	else
@@ -1268,7 +1285,8 @@ void binder_alloc_init(struct binder_alloc *alloc)
 	alloc->pid = current->tgid;
 	alloc->mm = current->mm;
 	mmgrab(alloc->mm);
-	mutex_init(&alloc->mutex);
+	spin_lock_init(&alloc->lock);
+	mutex_init(&alloc->install_mutex);
 	INIT_LIST_HEAD(&alloc->buffers);
 }
 
