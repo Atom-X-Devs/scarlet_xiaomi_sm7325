@@ -32,6 +32,7 @@
 #include <linux/bit_spinlock.h>
 #include <linux/rculist_bl.h>
 #include <linux/list_lru.h>
+#include <linux/freezer.h>
 #include "internal.h"
 #include "mount.h"
 
@@ -2541,7 +2542,7 @@ static void d_wait_lookup(struct dentry *dentry)
 		do {
 			set_current_state(TASK_UNINTERRUPTIBLE);
 			spin_unlock(&dentry->d_lock);
-			schedule();
+			freezable_schedule();
 			spin_lock(&dentry->d_lock);
 		} while (d_in_lookup(dentry));
 	}
