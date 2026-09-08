@@ -1016,14 +1016,15 @@ void sde_connector_helper_bridge_disable(struct drm_connector *connector)
 
 	c_conn->allow_bl_update = false;
 #ifdef CONFIG_MACH_XIAOMI
-	display->panel->bl_config.allow_bl_update = false;
+	if (display && display->panel)
+		display->panel->bl_config.allow_bl_update = false;
 #endif
 }
 
 void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn = NULL;
-	struct dsi_display *display;
+	struct dsi_display *display = NULL;
 	struct sde_kms *sde_kms;
 
 	sde_kms = _sde_connector_get_kms(connector);
@@ -1059,7 +1060,8 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 	}
 	c_conn->panel_dead = false;
 #ifdef CONFIG_MACH_XIAOMI
-	display->panel->bl_config.allow_bl_update = true;
+	if (display && display->panel)
+		display->panel->bl_config.allow_bl_update = true;
 #endif
 }
 
