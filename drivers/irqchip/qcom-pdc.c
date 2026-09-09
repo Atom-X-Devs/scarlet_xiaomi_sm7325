@@ -24,10 +24,8 @@
 #include <linux/ipc_logging.h>
 
 #define PDC_MAX_IRQS		168
-#define PDC_IPC_LOG_SZ		2
-
-#define PDC_MAX_IRQS		168
 #define PDC_MAX_GPIO_IRQS	256
+#define PDC_IPC_LOG_SZ		2
 
 #define CLEAR_INTR(reg, intr)	(reg & ~(1 << intr))
 #define ENABLE_INTR(reg, intr)	(reg | (1 << intr))
@@ -543,7 +541,6 @@ fail:
 	return ret;
 }
 
-
 #ifdef MODULE
 static int qcom_pdc_probe(struct platform_device *pdev)
 {
@@ -553,7 +550,7 @@ static int qcom_pdc_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id qcom_pdc_match_table[] = {
-	{ .compatible = "qcom,lahaina-pdc" },
+	{ .compatible = "qcom,sdm845-pdc" },
 	{}
 };
 MODULE_DEVICE_TABLE(of, qcom_pdc_match_table);
@@ -567,8 +564,7 @@ static struct platform_driver qcom_pdc_driver = {
 };
 module_platform_driver(qcom_pdc_driver);
 #else
-IRQCHIP_DECLARE(qcom_pdc, "qcom,pdc", qcom_pdc_init);
-IRQCHIP_DECLARE(pdc_lahaina, "qcom,lahaina-pdc", qcom_pdc_init);
+IRQCHIP_DECLARE(pdc_sdm845, "qcom,sdm845-pdc", qcom_pdc_init);
 #endif
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. Power Domain Controller");
