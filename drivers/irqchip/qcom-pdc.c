@@ -445,8 +445,12 @@ fail:
 	return ret;
 }
 
+#ifdef MODULE
 IRQCHIP_PLATFORM_DRIVER_BEGIN(qcom_pdc)
 IRQCHIP_MATCH("qcom,pdc", qcom_pdc_init)
 IRQCHIP_PLATFORM_DRIVER_END(qcom_pdc)
+#else
+IRQCHIP_DECLARE(qcom_pdc, "qcom,pdc", qcom_pdc_init);
+#endif
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. Power Domain Controller");
 MODULE_LICENSE("GPL v2");
