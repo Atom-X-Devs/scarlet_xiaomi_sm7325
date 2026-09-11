@@ -76,7 +76,6 @@ FILLDIR_RETURN_TYPE my_actor(MY_ACTOR_CTX_ARG, const char *name,
 			     unsigned int d_type)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,19,0)
-	// then pull it out of the void
 	struct dir_context *ctx = (struct dir_context *)ctx_void;
 #endif
 	struct my_dir_context *my_ctx =
@@ -125,7 +124,7 @@ FILLDIR_RETURN_TYPE my_actor(MY_ACTOR_CTX_ARG, const char *name,
 	}
 
 	// now put this on candidate_path
-	if (d_type == DT_REG && namelen == 8 && !memcmp(name, "base.apk", 8)) {
+	if (d_type == DT_REG && namelen == 8 && !__builtin_memcmp(name, "base.apk", 8)) {
 		snprintf(candidate_path, DATA_PATH_LEN, "%s/%.*s", my_ctx->parent_dir, namelen, name);
 	}
 
@@ -171,7 +170,7 @@ static noinline void search_manager(const char *path, int depth, struct list_hea
 						      .stop = &stop };
 
 			// destroy buffer on every iteration
-			candidate_path[0] = '\0';
+			candidate_path[0] = 0;
 
 			if (stop)
 				goto skip_iterate;

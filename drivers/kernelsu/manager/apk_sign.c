@@ -132,8 +132,6 @@ static __always_inline bool check_v2_signature(char *path, unsigned expected_siz
 
 	bool v2_signing_valid = false;
 	int v2_signing_blocks = 0;
-	bool v3_signing_exist = false;
-	bool v3_1_signing_exist = false;
 
 	int i;
 
@@ -249,16 +247,12 @@ static __always_inline bool check_v2_signature(char *path, unsigned expected_siz
 		if (id == 0x7109871au) {
 			v2_signing_blocks++;
 			v2_signing_valid = check_block(fp, &pos, pair_end, expected_size, expected_sha256);
-		} else if (id == 0xf05368c0u) {
-			// http://aospxref.com/android-14.0.0_r2/xref/frameworks/base/core/java/android/util/apk/ApkSignatureSchemeV3Verifier.java#73
-			v3_signing_exist = true;
-		} else if (id == 0x1b93ad61u) {
-			// http://aospxref.com/android-14.0.0_r2/xref/frameworks/base/core/java/android/util/apk/ApkSignatureSchemeV3Verifier.java#74
-			v3_1_signing_exist = true;
-		} else {
+		} else if (id != 0x42726577u) { // APK verity padding
+			// https://cs.android.com/android/platform/superproject/+/android-latest-release:tools/apksig/src/main/java/com/android/apksig/internal/apk/ApkSigningBlockUtils.java;l=102;drc=ebe4dfd4fd6550c949a6c7c2427484bf5e96500b
 #ifdef CONFIG_KSU_DEBUG
-			pr_info("Unknown id: 0x%08x\n", id);
+			pr_info("Unexpected signature block id: 0x%08x\n", id);
 #endif
+			goto invalid;
 		}
 		pos = pair_end;
 	}
@@ -276,11 +270,6 @@ invalid:
 	v2_signing_valid = false;
 clean:
 	filp_close(fp, 0);
-
-	if (v2_signing_valid && (v3_signing_exist || v3_1_signing_exist)) {
-		pr_err("Unexpected v3 signature scheme found!\n");
-		return false;
-	}
 
 	return v2_signing_valid;
 }
@@ -362,13 +351,7 @@ bool is_manager_apk(char *path)
 	}
 #endif
 
-	 // kernelsu official
-	if (check_v2_signature(path, EXPECTED_SIZE, EXPECTED_HASH))
-		return true;
-
-	// KOWX712/KernelSU
-	if (check_v2_signature(path, 0x375, "484fcba6e6c43b1fb09700633bf2fb4758f13cb0b2f4457b80d075084b26c588"))
-		return true;
-
-	return false;
+	return (check_v2_signature(path, EXPECTED_SIZE, EXPECTED_HASH)  // kernelsu official
+		|| check_v2_signature(path, 0x375, "484fcba6e6c43b1fb09700633bf2fb4758f13cb0b2f4457b80d075084b26c588")  // KOWX712/KernelSU
+	);
 }
