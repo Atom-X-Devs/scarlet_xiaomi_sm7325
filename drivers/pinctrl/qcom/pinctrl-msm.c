@@ -1010,11 +1010,10 @@ static void msm_dirconn_uncfg_reg(struct irq_data *d, u32 offset)
 	raw_spin_lock_irqsave(&pctrl->lock, flags);
 	g = &pctrl->soc->groups[d->hwirq];
 
-	writel_relaxed(val, pctrl->regs[g->tile] + g->dir_conn_reg
-		       + (offset * 4));
-	val = msm_readl_intr_cfg(pctrl, g);
+	writel_relaxed(val, pctrl->regs + g->dir_conn_reg + (offset * 4));
+	val = readl_relaxed(pctrl->regs + g->intr_cfg_reg);
 	val &= ~BIT(g->dir_conn_en_bit);
-	msm_writel_intr_cfg(val, pctrl, g);
+	writel_relaxed(val, pctrl->regs + g->intr_cfg_reg);
 	raw_spin_unlock_irqrestore(&pctrl->lock, flags);
 }
 
