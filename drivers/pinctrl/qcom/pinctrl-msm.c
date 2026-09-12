@@ -1309,6 +1309,7 @@ int msm_qup_read(unsigned int mode)
 
 	return -ENOENT;
 }
+EXPORT_SYMBOL(msm_qup_read);
 
 /*
  * msm_gpio_mpm_wake_set - API to make interrupt wakeup capable
