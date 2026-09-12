@@ -137,26 +137,8 @@ static int msm_pinmux_request(struct pinctrl_dev *pctldev, unsigned offset)
 {
 	struct msm_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
 	struct gpio_chip *chip = &pctrl->chip;
-	int ret;
 
-	ret = gpiochip_line_is_valid(chip, offset) ? 0 : -EINVAL;
-	if (!ret && pctrl->mpm_wake_ctl)
-		msm_gpio_mpm_wake_set(offset, false);
-
-	return ret;
-}
-
-static int msm_pinmux_free(struct pinctrl_dev *pctldev, unsigned int offset)
-{
-	struct msm_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
-	struct gpio_chip *chip = &pctrl->chip;
-	int ret;
-
-	ret = gpiochip_line_is_valid(chip, offset) ? 0 : -EINVAL;
-	if (!ret && pctrl->mpm_wake_ctl)
-		msm_gpio_mpm_wake_set(offset, true);
-
-	return ret;
+	return gpiochip_line_is_valid(chip, offset) ? 0 : -EINVAL;
 }
 
 static int msm_get_functions_count(struct pinctrl_dev *pctldev)
@@ -240,7 +222,6 @@ static int msm_pinmux_request_gpio(struct pinctrl_dev *pctldev,
 
 static const struct pinmux_ops msm_pinmux_ops = {
 	.request		= msm_pinmux_request,
-	.free			= msm_pinmux_free,
 	.get_functions_count	= msm_get_functions_count,
 	.get_function_name	= msm_get_function_name,
 	.get_function_groups	= msm_get_function_groups,
@@ -1224,9 +1205,6 @@ static int msm_gpio_irq_set_wake(struct irq_data *d, unsigned int on)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
-
-	if (pctrl->mpm_wake_ctl)
-		msm_gpio_mpm_wake_set(d->hwirq, on);
 
 	if (d->parent_data)
 		irq_chip_set_wake_parent(d, on);
