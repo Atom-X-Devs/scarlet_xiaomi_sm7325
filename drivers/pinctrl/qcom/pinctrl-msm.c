@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
- * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -46,7 +46,6 @@
  * @restart_nb:     restart notifier block.
  * @irq:            parent irq for the TLMM irq_chip.
  * @n_dir_conns:    The number of pins directly connected to GIC.
- * @mpm_wake_ctl:   MPM wakeup capability control enable.
  * @lock:           Spinlock to protect register resources as well
  *                  as msm_pinctrl data structures.
  * @enabled_irqs:   Bitmap of currently enabled irqs.
@@ -66,7 +65,6 @@ struct msm_pinctrl {
 	struct irq_chip irq_chip;
 	int irq;
 	int n_dir_conns;
-	bool mpm_wake_ctl;
 
 	raw_spinlock_t lock;
 
@@ -1567,9 +1565,6 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 		if (IS_ERR(pctrl->regs[0]))
 			return PTR_ERR(pctrl->regs[0]);
 	}
-
-	pctrl->mpm_wake_ctl = of_property_read_bool(pdev->dev.of_node,
-					"qcom,tlmm-mpm-wake-control");
 
 	msm_pinctrl_setup_pm_reset(pctrl);
 
