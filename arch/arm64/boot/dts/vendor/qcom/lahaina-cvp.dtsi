@@ -1,5 +1,5 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
-#include <dt-bindings/soc/qcom,ipcc.h>
+#include <dt-bindings/mailbox/qcom-ipcc.h>
 #include <dt-bindings/interconnect/qcom,lahaina.h>
 #include <dt-bindings/clock/qcom,videocc-lahaina.h>
 

@@ -9,7 +9,7 @@
 #include <dt-bindings/interconnect/qcom,icc.h>
 #include <dt-bindings/interconnect/qcom,yupik.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
-#include <dt-bindings/soc/qcom,ipcc.h>
+#include <dt-bindings/mailbox/qcom-ipcc.h>
 #include <dt-bindings/soc/qcom,dcc_v2.h>
 #include <dt-bindings/soc/qcom,rpmh-rsc.h>
 #include <dt-bindings/spmi/spmi.h>
