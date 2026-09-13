@@ -208,11 +208,10 @@ static int binderfs_binder_device_create(struct inode *ref_inode,
 	}
 
 	inode->i_private = device;
+	binder_add_device(device);
 	d_instantiate(dentry, inode);
 	fsnotify_create(root->d_inode, dentry);
 	inode_unlock(d_inode(root));
-
-	binder_add_device(device);
 
 	return 0;
 
