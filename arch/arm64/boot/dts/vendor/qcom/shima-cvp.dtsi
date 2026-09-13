@@ -1,5 +1,5 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
-#include <dt-bindings/soc/qcom,ipcc.h>
+#include <dt-bindings/mailbox/qcom-ipcc.h>
 #include <dt-bindings/interconnect/qcom,shima.h>
 #include <dt-bindings/clock/qcom,videocc-shima.h>
 
