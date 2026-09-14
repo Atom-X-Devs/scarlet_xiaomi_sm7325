@@ -86,18 +86,6 @@ static int irq_sw_resend(struct irq_desc *desc)
 }
 #endif
 
-static int try_retrigger(struct irq_desc *desc)
-{
-	if (desc->irq_data.chip->irq_retrigger)
-		return desc->irq_data.chip->irq_retrigger(&desc->irq_data);
-
-#ifdef CONFIG_IRQ_DOMAIN_HIERARCHY
-	return irq_chip_retrigger_hierarchy(&desc->irq_data);
-#else
-	return 0;
-#endif
-}
-
 /*
  * IRQ resend
  *
@@ -125,7 +113,8 @@ int check_irq_resend(struct irq_desc *desc, bool inject)
 
 	desc->istate &= ~IRQS_PENDING;
 
-	if (!try_retrigger(desc))
+	if (!desc->irq_data.chip->irq_retrigger ||
+	    !desc->irq_data.chip->irq_retrigger(&desc->irq_data))
 		err = irq_sw_resend(desc);
 
 	/* If the retrigger was successfull, mark it with the REPLAY bit */
