@@ -100,9 +100,6 @@ static bool check_block(struct file *fp, loff_t *pos, loff_t block_end, unsigned
 	}
 
 	char *memory __offstack(CERT_MAX_LENGTH + SHA256_DIGEST_SIZE + SHA256_DIGEST_SIZE * 2 + 1);
-	if (!memory)
-		return false;
-
 	char *cert = memory;
 	if (!read_exact(fp, cert, certificate_size, pos, certificates_end))
 		return false;

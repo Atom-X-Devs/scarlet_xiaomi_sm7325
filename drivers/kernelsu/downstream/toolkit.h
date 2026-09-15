@@ -61,25 +61,22 @@ change_manager_uid:
 	pr_info("toolkit: ksu_set_manager_appid to: %d\n", cmd);
 	ksu_set_manager_appid(cmd);
 
-	if (cmd == ksu_get_manager_appid()) {
-		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply)))
-			pr_info("toolkit: reply fail\n");
-	}
-	return 0;
+	if (cmd != ksu_get_manager_appid())
+		return 0;
+	
+	return !!copy_to_user((void __user *)*arg, &reply, sizeof(reply));
 
 get_sulog_dump_v2:
 	if (!!send_sulog_dump(*arg))
 		return 0;
 
-	copy_to_user((void __user *)*arg, &reply, sizeof(reply));
-	return 0;
+	return !!copy_to_user((void __user *)*arg, &reply, sizeof(reply));
 
 change_ksuver:
 	pr_info("toolkit: ksu_change_ksuver to: %d\n", cmd);
 	ksuver_override = cmd;
 
-	copy_to_user((void __user *)*arg, &reply, sizeof(reply));
-	return 0;
+	return !!copy_to_user((void __user *)*arg, &reply, sizeof(reply));
 
 // WARNING!!! triple ptr zone! ***
 // https://wiki.c2.com/?ThreeStarProgrammer
@@ -134,10 +131,10 @@ change_spoof_uname:
 		pr_info("toolkit: original uname saved: %s %s\n", original_release_buf, original_version_buf);
 	}
 
-	// so user can reset
-	if (!strcmp(release_buf, "default"))
+	constexpr char d[] = "default";
+	if (!__builtin_memcmp(release_buf, d, sizeof(d)))
 		memcpy(release_buf, original_release_buf, sizeof(release_buf));
-	if (!strcmp(version_buf, "default"))
+	if (!__builtin_memcmp(version_buf, d, sizeof(d)))
 		memcpy(version_buf, original_version_buf, sizeof(version_buf));
 
 	pr_info("toolkit: spoofing kernel to: %s - %s\n", release_buf, version_buf);
@@ -150,17 +147,15 @@ change_spoof_uname:
 	up_write(&uts_sem);
 
 	// we write our confirmation on **
-	copy_to_user((void __user *)*arg, &reply, sizeof(reply));
-	return 0;
+	return !!copy_to_user((void __user *)*arg, &reply, sizeof(reply));
+	
 } // scope --
 
 change_ksuflags:
 	pr_info("toolkit: ksu_change_ksuflags to: %d\n", cmd);
 	ksuflags_override = cmd;
 
-	copy_to_user((void __user *)*arg, &reply, sizeof(reply));
-	return 0;
-
+	return !!copy_to_user((void __user *)*arg, &reply, sizeof(reply));
 }
 
 #endif // __KSU_H_TOOLKIT

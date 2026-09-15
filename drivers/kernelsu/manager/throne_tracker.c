@@ -146,8 +146,6 @@ static noinline void search_manager(const char *path, int depth, struct list_hea
 	unsigned long data_app_magic = 0;
 
 	char *memory __offstack(sizeof(struct data_path) + DATA_PATH_LEN);
-	if (!memory)
-		return;
 
 	// First depth
 	struct data_path *data = (struct data_path *)memory;
