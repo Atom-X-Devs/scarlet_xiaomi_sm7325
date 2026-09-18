@@ -28,9 +28,10 @@
 #include "include/uapi/sulog.h"
 
 // includes
-#include "include/klog.h"
 #include "include/arch.h"
+#include "include/klog.h"
 #include "include/ksu.h"
+#include "include/util.h"
 
 // selinux includes
 #include "avc_ss.h"

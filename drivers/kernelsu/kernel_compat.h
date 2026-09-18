@@ -169,15 +169,6 @@ static noinline ssize_t ksu_kernel_write_compat(struct file *p, const void *buf,
 #define TWA_RESUME 1
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
-#define ksu_close_fd close_fd
-// this is ksys_close, however that is spotty to use, as 5.10 backported close_fd and rekt ksys_close
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
-#define ksu_close_fd(fd) __close_fd(current->files, fd)
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
-#define ksu_close_fd sys_close
-#endif
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
 static inline struct file *ksu_dentry_open(const struct path *path, int flags, const struct cred *cred)
 {
@@ -375,11 +366,6 @@ static ssize_t ksu_strscpy_pad(char *dest, const char *src, size_t count)
 #define d_is_reg(dentry) S_ISREG((dentry)->d_inode->i_mode)
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0)
-struct user_struct *ksu_alloc_uid(kuid_t uid) { return alloc_uid(current_user_ns(), uid); }
-#define alloc_uid ksu_alloc_uid
-#endif
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0) && !defined(KSU_HAS_ITERATE_DIR)
 struct dir_context { const filldir_t actor; loff_t pos; };
 #define iterate_dir(file, ctx) vfs_readdir(file, (ctx)->actor, ctx)
@@ -484,6 +470,11 @@ typedef struct { uid_t val; } ksu_kuid_t;
 static inline ksu_kuid_t current_uid() { return *(ksu_kuid_t *)(&current_cred()->uid); }
 static inline ksu_kuid_t current_euid() { return *(ksu_kuid_t *)(&current_cred()->euid); }
 #endif // < 3.14
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0)
+static inline struct user_struct *ksu_alloc_uid(uid_t uid) { return alloc_uid(current_user_ns(), uid); }
+#define alloc_uid(uid) ksu_alloc_uid(ksu_get_uid_t(uid))
+#endif
 
 #if defined(CONFIG_KEYS) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
 
