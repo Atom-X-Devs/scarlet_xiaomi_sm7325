@@ -149,14 +149,11 @@ static __always_inline bool check_v2_signature(char *path, unsigned expected_siz
 
 	path_put(&kpath);
 
-	struct file *fp = filp_open(path, O_RDONLY, 0);
+	struct file *fp = ksu_filp_open_nonotify(path, O_RDONLY | O_NOATIME);
 	if (IS_ERR(fp)) {
-		// pr_err("open %s error.\n", path);
+		pr_err("open %s error.\n", path);
 		return false;
 	}
-
-	// disable inotify for this file
-	fp->f_mode |= FMODE_NONOTIFY;
 
 	file_size = vfs_llseek(fp, 0, SEEK_END);
 	if (file_size < 0)
@@ -348,7 +345,13 @@ bool is_manager_apk(char *path)
 	}
 #endif
 
-	return (check_v2_signature(path, EXPECTED_SIZE, EXPECTED_HASH)  // kernelsu official
-		|| check_v2_signature(path, 0x375, "484fcba6e6c43b1fb09700633bf2fb4758f13cb0b2f4457b80d075084b26c588")  // KOWX712/KernelSU
-	);
+	// kernelsu official
+	if (check_v2_signature(path, EXPECTED_SIZE, EXPECTED_HASH))
+		return true;
+
+	// KOWX712/KernelSU
+	if (check_v2_signature(path, 0x375, "484fcba6e6c43b1fb09700633bf2fb4758f13cb0b2f4457b80d075084b26c588"))
+		return true;
+
+	return false;
 }

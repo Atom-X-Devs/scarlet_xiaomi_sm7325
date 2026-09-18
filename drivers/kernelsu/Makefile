@@ -11,8 +11,8 @@ MDIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 $(info -- KDIR: $(KDIR))
 $(info -- MDIR: $(MDIR))
 
-# compliant to last upstream kernel change as of a27e0c3d
-CFLAGS_ksu.o += -DKSU_VERSION=32714
+# compliant to last upstream kernel change as of bd64b676
+CFLAGS_ksu.o += -DKSU_VERSION=32723
 
 ifndef KSU_EXPECTED_SIZE
 KSU_EXPECTED_SIZE := 0x033b
@@ -66,8 +66,15 @@ $(info -- KernelSU/compat: exported policy_rwlock found!)
 CFLAGS_ksu.o += -DKSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK
 endif
 
+# branch link hook vfs_statx, this newer version uses struct filename
+ifeq ($(shell grep "int vfs_statx" $(srctree)/fs/stat.c 2>/dev/null | grep -q "struct filename" 2>/dev/null; echo $$?),0)
+# $(info -- KernelSU/compat: vfs_statx has struct filename argument!)
+CFLAGS_ksu.o += -DKSU_HAS_VFS_STATX2
+endif
+
 # branch link hook, do_faccessat
 ifeq ($(shell grep "long do_faccessat" $(srctree)/fs/open.c 2>/dev/null | grep -q "flags" 2>/dev/null; echo $$?),0)
+# $(info -- KernelSU/compat: do_faccessat has flags argument!)
 CFLAGS_ksu.o += -DKSU_HAS_FACCESSAT2
 endif
 

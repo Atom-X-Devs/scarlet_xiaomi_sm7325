@@ -132,9 +132,9 @@ change_spoof_uname:
 	}
 
 	constexpr char d[] = "default";
-	if (!__builtin_memcmp(release_buf, d, sizeof(d)))
+	if (!memcmp_inline(release_buf, d, sizeof(d)))
 		memcpy(release_buf, original_release_buf, sizeof(release_buf));
-	if (!__builtin_memcmp(version_buf, d, sizeof(d)))
+	if (!memcmp_inline(version_buf, d, sizeof(d)))
 		memcpy(version_buf, original_version_buf, sizeof(version_buf));
 
 	pr_info("toolkit: spoofing kernel to: %s - %s\n", release_buf, version_buf);
