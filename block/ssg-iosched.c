@@ -41,8 +41,8 @@ extern void blk_sec_stats_account_io_done(
 
 #define MAX_ASYNC_WRITE_RQS	8
 
-static const int read_expire = HZ / 2;		/* max time before a read is submitted. */
-static const int write_expire = 5 * HZ;		/* ditto for writes, these limits are SOFT! */
+static const int read_expire = HZ / 20;		/* max time before a read is submitted. */
+static const int write_expire = HZ;		/* ditto for writes, these limits are SOFT! */
 static const int max_write_starvation = 2;	/* max times reads can starve a write */
 static const int congestion_threshold = 90;	/* percentage of congestion threshold */
 static const int max_tgroup_io_ratio = 50;	/* maximum service ratio for each thread group */
@@ -585,7 +585,7 @@ static int ssg_init_queue(struct request_queue *q, struct elevator_type *e)
 	ssg->fifo_expire[READ] = read_expire;
 	ssg->fifo_expire[WRITE] = write_expire;
 	ssg->max_write_starvation = max_write_starvation;
-	ssg->front_merges = 1;
+	ssg->front_merges = 0;
 
 	atomic_set(&ssg->allocated_rqs, 0);
 	atomic_set(&ssg->async_write_rqs, 0);
