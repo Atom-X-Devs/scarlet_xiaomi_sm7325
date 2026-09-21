@@ -1110,10 +1110,9 @@ static inline void set_protect_slice(struct cfs_rq *cfs_rq, struct sched_entity 
 
 	/* If there are shorter slices than se's one */
 	if (slice != se->slice) {
+		vprot = min_vruntime(vprot, se->vruntime + calc_delta_fair(slice, se));
 		if (sched_feat(PREEMPT_SHORT))
 			vprot = min_vruntime(vprot, ineligible_vruntime(cfs_rq));
-		else
-			vprot = min_vruntime(vprot, se->vruntime + calc_delta_fair(slice, se));
 	}
 
 	se->vprot = vprot;
