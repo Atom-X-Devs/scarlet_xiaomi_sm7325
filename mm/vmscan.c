@@ -2675,6 +2675,18 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 
 		cond_resched();
 
+		/*
+		 * For high-order allocations, nr_to_reclaim may be smaller
+		 * than what is needed to make a block of the requested order
+		 * available for compaction. When memory is plentiful, keep
+		 * reclaiming until at least compact_gap() pages have been
+		 * freed so the target order can actually be satisfied.
+		 */
+		if (global_reclaim(sc) &&
+		    sc->nr_reclaimed + nr_reclaimed >=
+		    max(nr_to_reclaim, compact_gap(sc->order)))
+			break;
+
 		if (nr_reclaimed < nr_to_reclaim || scan_adjusted)
 			continue;
 
@@ -2782,6 +2794,15 @@ static inline bool should_continue_reclaim(struct pglist_data *pgdat,
 	 * where always a non-zero amount of pages were scanned.
 	 */
 	if (!nr_reclaimed)
+		return false;
+
+	/*
+	 * Stop once the overall reclaim goal is met, using the same
+	 * max(nr_to_reclaim, compact_gap()) threshold as the early exits
+	 * in shrink_node_memcg(), so the retry decision here stays
+	 * consistent with where reclaim actually stops.
+	 */
+	if (sc->nr_reclaimed >= max(sc->nr_to_reclaim, compact_gap(sc->order)))
 		return false;
 
 	/* If compaction would go ahead or the allocation would succeed, stop */
