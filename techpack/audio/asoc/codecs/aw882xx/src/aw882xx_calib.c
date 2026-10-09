@@ -54,13 +54,7 @@ static DEFINE_MUTEX(g_cali_lock);
 
 #ifdef AW_CALI_STORE_EXAMPLE
  /*write cali to persist file example*/
-#ifndef CONFIG_MACH_XIAOMI
 #define AWINIC_CALI_FILE  "/mnt/vendor/persist/factory/audio/aw_cali.bin"
-#else
-#define AWINIC_CALI_FILE_WRITE  "/data/vendor/cit/aw_cali.bin"
-#define AWINIC_CALI_FILE_READ  "/mnt/vendor/persist/audio/aw_cali.bin"
-#endif
-
 #define AW_INT_DEC_DIGIT 10
 
 static void aw_fs_read(struct file *file, char *buf, size_t count, loff_t *pos)
@@ -90,21 +84,12 @@ static int aw_cali_write_cali_re_to_file(int32_t cali_re, int channel)
 	mm_segment_t fs;
 #endif
 
-#ifndef CONFIG_MACH_XIAOMI
 	fp = filp_open(AWINIC_CALI_FILE, O_RDWR | O_CREAT, 0644);
 	if (IS_ERR(fp)) {
 		aw_pr_err("channel:%d open %s failed, error=%ld",
 		channel, AWINIC_CALI_FILE, PTR_ERR(fp));
 		return -EINVAL;
 	}
-#else
-	fp = filp_open(AWINIC_CALI_FILE_WRITE, O_RDWR | O_CREAT, 0644);
-	if (IS_ERR(fp)) {
-		aw_pr_err("channel:%d open %s failed, error=%ld",
-		channel, AWINIC_CALI_FILE_WRITE, PTR_ERR(fp));
-		return -EINVAL;
-	}
-#endif
 
 	pos = AW_INT_DEC_DIGIT * channel;
 
@@ -148,21 +133,12 @@ static int aw_cali_get_read_cali_re(int32_t *cali_re, int channel)
 
 	char *re_buf = NULL;
 
-#ifndef CONFIG_MACH_XIAOMI
 	fp = filp_open(AWINIC_CALI_FILE, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		aw_pr_err("channel:%d open %s failed, error=%ld",
 			channel, AWINIC_CALI_FILE, PTR_ERR(fp));
 		return -EINVAL;
 	}
-#else
-	fp = filp_open(AWINIC_CALI_FILE_READ, O_RDONLY, 0);
-	if (IS_ERR(fp)) {
-		aw_pr_err("channel:%d open %s failed, error=%ld",
-			channel, AWINIC_CALI_FILE_READ, PTR_ERR(fp));
-		return -EINVAL;
-	}
-#endif
 
 	pos = AW_INT_DEC_DIGIT * channel;
 
@@ -1633,7 +1609,10 @@ static struct class_attribute class_att_re_range =
 
 static struct class aw_cali_class = {
 	.name = "smartpa",
+#ifdef AW_KERNEL_VER_OVER_6_4_0
+#else
 	.owner = THIS_MODULE,
+#endif
 };
 
 static void aw_cali_class_attr_init(struct aw_device *aw_dev)
@@ -1975,7 +1954,13 @@ static int aw_cali_misc_ops_msg(struct aw_device *aw_dev, unsigned long arg)
 	case AW_IOCTL_MSG_WR_DSP:
 		return aw_cali_misc_write_dsp(aw_dev, &ioctl_msg);
 	case AW_IOCTL_MSG_IOCTL:
+	{
+		if ((uint32_t)(ioctl_msg.opcode_id) == AW_IOCTL_MSG) {
+			aw_dev_err(aw_dev->dev, "Invalid opcode id (AW_IOCTL_MSG) under AW_IOCTL_MSG_IOCTL");
+			return -EINVAL;
+		}
 		return aw_cali_misc_ops(aw_dev, ioctl_msg.opcode_id, (unsigned long)ioctl_msg.data_buf);
+	}
 	default:
 		aw_dev_err(aw_dev->dev, "unsupported msg type %d", ioctl_msg.type);
 		return -EINVAL;
@@ -2239,7 +2224,7 @@ static int aw_cali_misc_switch_dev(struct file *filp, struct aw_device *aw_dev, 
 	struct aw_device *local_dev = NULL;
 
 	/* get sel dev str */
-	ret = sscanf(cmd_buf, "dev_sel:%s", dev_select);
+	ret = sscanf(cmd_buf, "dev_sel:%49s", dev_select);
 	if (ret <= 0)
 		return -EINVAL;
 

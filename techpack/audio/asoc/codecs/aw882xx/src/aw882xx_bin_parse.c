@@ -39,10 +39,9 @@
 #include "aw882xx_log.h"
 
 
-#define AWINIC_CODE_VERSION "V0.0.7-V1.0.4"	/* "code version"-"excel version" */
+#define AWINIC_CODE_VERSION "V0.0.8-V1.0.4"	/* "code version"-"excel version" */
 
-/*#define DEBUG_LOG_LEVEL*/
-
+#define DEBUG_LOG_LEVEL
 #ifdef DEBUG_LOG_LEVEL
 #define DBG(fmt, arg...) \
 	pr_debug("AWINIC_BIN %s,line= %d,"fmt, __func__, __LINE__, ##arg)
@@ -382,8 +381,8 @@ static int aw_parse_bin_header_1_0_0(struct aw_bin *bin)
 
 		break;
 	default:
-		DBG_ERR("aw_bin_parse Unrecognized this bin data type\n");
-		return -EINVAL;
+		DBG_ERR("aw_bin_parse Unrecognized this bin data type:0x%x\n", bin_data_type);
+		//return -EINVAL;
 	}
 	return 0;
 }
@@ -750,6 +749,87 @@ parse_bin_failed:
 	return ret;
 }
 
+
+int aw_dev_dsp_data_order(struct aw_device *aw_dev,
+				uint8_t *data, uint32_t data_len)
+{
+	int i = 0;
+	uint8_t tmp_val = 0;
+
+	aw_dev_dbg(aw_dev->dev, "enter");
+
+	if (data_len % 2 != 0) {
+		aw_dev_dbg(aw_dev->dev, "data_len:%d unsupported", data_len);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < data_len; i += 2) {
+		tmp_val = data[i];
+		data[i] = data[i + 1];
+		data[i + 1] = tmp_val;
+	}
+
+	return 0;
+}
+
+
+static int aw_dev_prof_parse_multi_bin(struct aw_device *aw_dev,
+		uint8_t *data, uint32_t data_len, struct aw_prof_desc *prof_desc)
+{
+	struct aw_bin *aw_bin = NULL;
+	int i;
+	int ret;
+
+	aw_bin = devm_kzalloc(aw_dev->dev,
+		data_len + sizeof(struct aw_bin), GFP_KERNEL);
+	if (aw_bin == NULL)
+		return -ENOMEM;
+
+
+	aw_bin->info.len = data_len;
+	memcpy(aw_bin->info.data, data, data_len);
+
+	ret = aw_parsing_bin_file(aw_bin);
+	if (ret < 0) {
+		aw_dev_err(aw_dev->dev, "parse bin failed");
+		goto parse_bin_failed;
+	}
+
+	for (i = 0; i < aw_bin->all_bin_parse_num; i++) {
+		if (aw_bin->header_info[i].bin_data_type == DATA_TYPE_REGISTER) {
+			prof_desc->sec_desc[AW_PROFILE_DATA_TYPE_REG].len = aw_bin->header_info[i].valid_data_len;
+			prof_desc->sec_desc[AW_PROFILE_DATA_TYPE_REG].data = data + aw_bin->header_info[i].valid_data_addr;
+		} else if (aw_bin->header_info[i].bin_data_type == DATA_TYPE_DSP_REG) {
+			ret = aw_dev_dsp_data_order(aw_dev, data + aw_bin->header_info[i].valid_data_addr,
+					aw_bin->header_info[i].valid_data_len);
+			if (ret < 0)
+				return ret;
+
+			prof_desc->sec_desc[AW_PROFILE_DATA_TYPE_DSP].len = aw_bin->header_info[i].valid_data_len;
+			prof_desc->sec_desc[AW_PROFILE_DATA_TYPE_DSP].data = data + aw_bin->header_info[i].valid_data_addr;
+		} else if (aw_bin->header_info[i].bin_data_type == DATA_TYPE_DSP_FW) {
+			ret = aw_dev_dsp_data_order(aw_dev, data + aw_bin->header_info[i].valid_data_addr,
+					aw_bin->header_info[i].valid_data_len);
+			if (ret < 0)
+				return ret;
+
+			//prof_desc->fw_ver = aw_bin->header_info[i].app_version;
+			prof_desc->sec_desc[AW_PROFILE_DATA_TYPE_DSP_FW].len = aw_bin->header_info[i].valid_data_len;
+			prof_desc->sec_desc[AW_PROFILE_DATA_TYPE_DSP_FW].data = data + aw_bin->header_info[i].valid_data_addr;
+		}
+	}
+	devm_kfree(aw_dev->dev, aw_bin);
+	aw_bin = NULL;
+	prof_desc->prof_st = AW_PROFILE_OK;
+	return 0;
+
+parse_bin_failed:
+	devm_kfree(aw_dev->dev, aw_bin);
+	aw_bin = NULL;
+	return ret;
+}
+
+
 static int aw_dev_parse_data_by_sec_type(struct aw_device *aw_dev, struct aw_cfg_hdr *cfg_hdr,
 			struct aw_cfg_dde *prof_hdr, struct aw_prof_desc *scene_prof_desc)
 {
@@ -768,6 +848,10 @@ static int aw_dev_parse_data_by_sec_type(struct aw_device *aw_dev, struct aw_cfg
 		return aw882xx_monitor_parse_fw(&aw_dev->monitor_desc,
 				(uint8_t *)cfg_hdr + prof_hdr->data_offset,
 				prof_hdr->data_size);
+	case ACF_SEC_TYPE_MUTLBIN:
+		return aw_dev_prof_parse_multi_bin(aw_dev,
+				(uint8_t *)cfg_hdr + prof_hdr->data_offset,
+				prof_hdr->data_size, scene_prof_desc);
 	}
 
 	return 0;
@@ -970,6 +1054,7 @@ static int aw_dev_parse_get_scene_count_v1_0_0_0(struct aw_device *aw_dev,
 		(struct aw_cfg_dde_v_1_0_0_0 *)(aw_cfg->data + cfg_hdr->a_hdr_offset);
 	int i = 0;
 
+	/*reg-bin AW_DEV_TYPE_ID*/
 	for (i = 0; i < cfg_hdr->a_ddt_num; ++i) {
 		if (((cfg_dde[i].data_type == ACF_SEC_TYPE_REG) ||
 			(cfg_dde[i].data_type == ACF_SEC_TYPE_HDR_REG)) &&
@@ -982,10 +1067,38 @@ static int aw_dev_parse_get_scene_count_v1_0_0_0(struct aw_device *aw_dev,
 		}
 	}
 
+	/*reg-bin AW_DEV_DEFAULT_TYPE_ID*/
 	if ((*count) == 0) {
 		for (i = 0; i < cfg_hdr->a_ddt_num; ++i) {
 			if (((cfg_dde[i].data_type == ACF_SEC_TYPE_REG) ||
 				(cfg_dde[i].data_type == ACF_SEC_TYPE_HDR_REG)) &&
+					(cfg_dde[i].type == AW_DEV_DEFAULT_TYPE_ID) &&
+					(aw_dev->channel == cfg_dde[i].dev_index) &&
+					(aw_dev->chip_id == cfg_dde[i].chip_id)) {
+				(*count)++;
+				(*is_default) = 1;
+			}
+		}
+	}
+
+	/*mutli-bin AW_DEV_TYPE_ID*/
+	if ((*count) == 0) {
+		for (i = 0; i < cfg_hdr->a_ddt_num; ++i) {
+			if ((cfg_dde[i].data_type == ACF_SEC_TYPE_MUTLBIN) &&
+					(cfg_dde[i].type == AW_DEV_TYPE_ID) &&
+						((aw_dev->i2c->adapter->nr == cfg_dde[i].dev_bus) &&
+						(aw_dev->i2c->addr == cfg_dde[i].dev_addr)) &&
+							(aw_dev->chip_id == cfg_dde[i].chip_id)) {
+				(*count)++;
+				(*is_default) = 0;
+			}
+		}
+	}
+
+	/*mutli-bin AW_DEV_DEFAULT_TYPE_ID*/
+	if ((*count) == 0) {
+		for (i = 0; i < cfg_hdr->a_ddt_num; ++i) {
+			if ((cfg_dde[i].data_type == ACF_SEC_TYPE_MUTLBIN)  &&
 					(cfg_dde[i].type == AW_DEV_DEFAULT_TYPE_ID) &&
 					(aw_dev->channel == cfg_dde[i].dev_index) &&
 					(aw_dev->chip_id == cfg_dde[i].chip_id)) {
@@ -1072,6 +1185,18 @@ static int aw_dev_parse_drv_type_v_1_0_0_0(struct aw_device *aw_dev,
 			aw_dev_err(aw_dev->dev, "parse monitor bin failed");
 			return ret;
 		}
+		break;
+	case ACF_SEC_TYPE_MUTLBIN:
+		ret = aw_dev_prof_parse_multi_bin(aw_dev,
+					(uint8_t *)prof_hdr + cfg_dde->data_offset,
+					cfg_dde->data_size, &prof_info->prof_desc[*cur_scene_id]);
+		if (ret < 0) {
+			aw_dev_err(aw_dev->dev, "parse multi bin failed");
+			return ret;
+		}
+		prof_info->prof_desc[*cur_scene_id].prf_str = cfg_dde->dev_profile_str;
+		prof_info->prof_desc[*cur_scene_id].id = cfg_dde->dev_profile;
+		(*cur_scene_id)++;
 		break;
 	default:
 		aw_dev_err(aw_dev->dev, "unsupport bin type!");
@@ -1267,11 +1392,12 @@ int aw882xx_dev_parse_acf(struct aw_device *aw_dev, struct aw_container *aw_cfg)
 	aw_dev_info(aw_dev->dev, "enter");
 
 	cfg_hdr = (struct aw_cfg_hdr *)aw_cfg->data;
+	aw_dev_info(aw_dev->dev, "a_hdr_version 0x%x", cfg_hdr->a_hdr_version);
 	switch (cfg_hdr->a_hdr_version) {
 	case AW_CFG_HDR_VER_0_0_0_1:
 		ret = aw_dev_parse_acf_by_hdr(aw_dev, cfg_hdr);
 		if (ret < 0) {
-			aw_dev_err(aw_dev->dev, "hdr_cersion[0x%x] parse failed",
+			aw_dev_err(aw_dev->dev, "hdr_version[0x%x] parse failed",
 						cfg_hdr->a_hdr_version);
 			return ret;
 		}
@@ -1279,7 +1405,7 @@ int aw882xx_dev_parse_acf(struct aw_device *aw_dev, struct aw_container *aw_cfg)
 	case AW_CFG_HDR_VER_1_0_0_0:
 		ret = aw_dev_parse_acf_by_hdr_v_1_0_0_0(aw_dev, aw_cfg);
 		if (ret < 0) {
-			aw_dev_err(aw_dev->dev, "hdr_cersion[0x%x] parse failed",
+			aw_dev_err(aw_dev->dev, "hdr_version[0x%x] parse failed",
 						cfg_hdr->a_hdr_version);
 			return ret;
 		}

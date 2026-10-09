@@ -15,7 +15,7 @@
 #define __AW882XX_DSP_H__
 
 #define AW_QCOM_PLATFORM
-/*#define AW_AUDIOREACH_PLATFORM*/
+//#define AW_AUDIOREACH_PLATFORM
 
 /*#define AW_QCOM_ADM_MSG*/
 
@@ -106,6 +106,15 @@ int aw882xx_dsp_write_vol_offset(struct aw_device *aw_dev,
 												int32_t voltage_offset);
 int aw882xx_dsp_read_vol_offset(struct aw_device *aw_dev,
 												int32_t *voltage_offset);
+int aw882xx_dsp_write_volume(struct aw_device *aw_dev, char *data,
+												unsigned int data_len);
+int aw882xx_dsp_write_ramp_enable(struct aw_device *aw_dev, int32_t ramp_enable);
+int aw882xx_dsp_write_ramp_params(struct aw_device *aw_dev, char *data,
+												unsigned int data_len);
+int aw882xx_dsp_read_run_state_avg(struct aw_device *aw_dev, char *data,
+												unsigned int data_len);
+int aw882xx_dsp_read_dtc_status(struct aw_device *aw_dev, char *data, unsigned int data_len);
+int aw882xx_dsp_write_dtc_status(struct aw_device *aw_dev, char *data, unsigned int data_len);
 #ifdef AW_ALGO_AUTH_DSP
 int aw882xx_dsp_read_algo_auth_data(struct aw_device *aw_dev,
 		char *data, unsigned int data_len);

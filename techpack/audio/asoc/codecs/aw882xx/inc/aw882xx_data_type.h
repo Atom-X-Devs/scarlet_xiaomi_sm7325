@@ -39,8 +39,8 @@ struct aw_msg_hdr {
 
 
 enum aw_cfg_hdr_version {
-	AW_CFG_HDR_VER_0_0_0_1 = 0x00000001,
-	AW_CFG_HDR_VER_1_0_0_0 = 0x01000000,
+	AW_CFG_HDR_VER_0_0_0_1 = 0x00000001, /*fix scene*/
+	AW_CFG_HDR_VER_1_0_0_0 = 0x01000000, /*radom scene*/
 };
 
 enum aw_cfg_dde_type {
@@ -67,6 +67,7 @@ enum aw_sec_type {
 enum profile_data_type {
 	AW_PROFILE_DATA_TYPE_REG = 0,
 	AW_PROFILE_DATA_TYPE_DSP,
+	AW_PROFILE_DATA_TYPE_DSP_FW,
 	AW_PROFILE_DATA_TYPE_MAX,
 };
 
@@ -93,7 +94,7 @@ enum aw_profile_status {
 struct aw_cfg_hdr {
 	uint32_t a_id;					/*acf file ID 0xa15f908*/
 	char a_project[PROJECT_NAME_MAX];		/*project name*/
-	char a_custom[CUSTOMER_NAME_MAX];		/*custom name :huawei xiaomi vivo oppo*/
+	char a_custom[CUSTOMER_NAME_MAX];		/*custom name*/
 	char a_version[CFG_VERSION_MAX];		/*author update version*/
 	uint32_t a_author_id;				/*author id*/
 	uint32_t a_ddt_size;				/*sub section table entry size*/

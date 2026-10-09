@@ -192,6 +192,11 @@ enum aw_monitor_mode {
 	AW_MON_HAL_MODE,
 };
 
+enum aw_monitor_source {
+	AW_MON_REG_DATA = 0,
+	AW_MON_SYS_DATA,
+};
+
 /******************************************************************
  * struct aw882xx monitor
  *******************************************************************/
@@ -204,6 +209,8 @@ struct aw_monitor_desc {
 	uint8_t samp_count;
 	uint8_t db_offset;
 	uint8_t monitor_mode;
+	uint8_t monitor_data_src;
+	int16_t reg_temp_scale;
 
 	uint32_t pre_vmax;
 	struct aw_monitor_trace temp_trace;
