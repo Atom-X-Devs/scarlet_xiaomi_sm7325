@@ -34,12 +34,13 @@
 
 #else
 
-#define aw_dev_err(dev, format, ...) no_printk(format, ##__VA_ARGS__, dev)
-#define aw_dev_info(dev, format, ...) no_printk(format, ##__VA_ARGS__, dev)
-#define aw_dev_dbg(dev, format, ...) no_printk(format, ##__VA_ARGS__, dev)
+#define aw_dev_err(dev, format, ...) no_printk(format, dev, ##__VA_ARGS__)
+#define aw_dev_info(dev, format, ...) no_printk(format, dev, ##__VA_ARGS__)
+#define aw_dev_dbg(dev, format, ...) no_printk(format, dev, ##__VA_ARGS__)
 #define aw_pr_err(format, ...) no_printk(format, ##__VA_ARGS__)
 #define aw_pr_info(format, ...) no_printk(format, ##__VA_ARGS__)
 #define aw_pr_dbg(format, ...) no_printk(format, ##__VA_ARGS__)
+
 #endif
 
 #endif

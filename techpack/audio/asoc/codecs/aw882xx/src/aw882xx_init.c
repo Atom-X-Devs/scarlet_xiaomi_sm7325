@@ -477,7 +477,7 @@ static void aw_pid_2055a_dev_init(struct aw_device *aw_pa)
 }
 
 
-static int aw_pid_2055_dev_check(struct aw_device *aw_pa)
+static void aw_pid_2055_dev_check(struct aw_device *aw_pa)
 {
 	unsigned int reg_data = 0;
 
@@ -498,7 +498,6 @@ static int aw_pid_2055_dev_check(struct aw_device *aw_pa)
 					AW_PID_2055_INIT_CHECK_VALUE);
 	usleep_range(AW_3000_US, AW_3000_US + 10);
 
-	return 0;
 }
 /******************************************************
  *
@@ -848,6 +847,239 @@ static void aw_pid_2308_dev_init(struct aw_device *aw_pa)
 	aw_pa->dsmzth_desc.name = "btn 2308 dsmzth";
 }
 
+
+/******************************************************
+ *
+ * aw882xx_init pid 2407
+ *
+ ******************************************************/
+
+static void aw_pid_2407_dev_init(struct aw_device *aw_pa)
+{
+
+	aw_pa->reg_num = AW_PID_2407_REG_MAX;
+	/*call aw device init func*/
+	memcpy(aw_pa->monitor_name, AW_PID_2407_MONITOR_FILE, strlen(AW_PID_2407_MONITOR_FILE));
+
+	aw_pa->ops.aw_get_irq_type = aw_get_irq_nobst_type;
+
+	aw_pa->work_mode.reg = AW_REG_NONE;
+
+	aw_pa->wr_desc.reg = AW_SYSCTRL_REG;
+	aw_pa->wr_desc.mask = AW_PID_2407_I2C_WEN_MASK;
+	aw_pa->wr_desc.enable = AW_PID_2407_I2C_WEN_ENABLE_VALUE;
+	aw_pa->wr_desc.disable = AW_PID_2407_I2C_WEN_DISABLE_VALUE;
+	aw_pa->wr_desc.name = "btn pid 2407 IIC Write EN";
+
+
+	aw_pa->txen_desc.reg = AW_SYSCTRL_REG;
+	aw_pa->txen_desc.mask = AW_PID_2407_I2STXEN_MASK;
+	aw_pa->txen_desc.enable = AW_PID_2407_I2STXEN_ENABLE_VALUE;
+	aw_pa->txen_desc.disable = AW_PID_2407_I2STXEN_DISABLE_VALUE;
+
+
+	aw_pa->sysst_desc.reg = AW_SYSST_REG;
+	aw_pa->sysst_desc.mask = AW_PID_2407_SYSST_CHECK_MASK;
+	aw_pa->sysst_desc.st_check = AW_PID_2407_NO_SWS_SYSST_CHECK;
+	aw_pa->sysst_desc.st_sws_check = AW_PID_2407_SWS_SYSST_CHECK;
+	aw_pa->sysst_desc.pll_check = AW_PID_2407_IIS_CHECK;
+
+
+	aw_pa->spin_desc.rx_desc.reg = AW_SYSCTRL2_REG;
+	aw_pa->spin_desc.rx_desc.mask = AW_CHSEL_MASK;
+	aw_pa->spin_desc.rx_desc.left_val = AW_CHSEL_LEFT_VALUE;
+	aw_pa->spin_desc.rx_desc.right_val = AW_CHSEL_RIGHT_VALUE;
+
+
+	aw_pa->uls_hmute_desc.reg = AW_REG_NONE;
+
+	aw_pa->auth_desc.reg_in = AW_TESTIN_REG;
+	aw_pa->auth_desc.reg_out = AW_TESTOUT_REG;
+
+	aw_pa->cco_mux_desc.reg = AW_REG_NONE;
+	aw_pa->voltage_desc.reg = AW_REG_NONE;
+	aw_pa->temp_desc.reg = AW_REG_NONE;
+	aw_pa->ipeak_desc.reg = AW_REG_NONE;
+
+	aw_pa->bop_desc.reg = AW_REG_NONE;
+	aw_pa->noise_gate_desc.reg = AW_REG_NONE;
+
+	aw_pa->ef_desc.count = 2;
+	aw_pa->ef_desc.sequence[0].reg = AW_PID_2407_LOCKH_REG;
+	aw_pa->ef_desc.sequence[0].mask = AW_EF_LOCK_MASK;
+	aw_pa->ef_desc.sequence[0].check_val = AW_EF_LOCK_ENABLE_VALUE;
+	aw_pa->ef_desc.sequence[1].reg = AW_PID_2407_LOCKL_REG;
+	aw_pa->ef_desc.sequence[1].mask = AW_EF_LOCK_MASK;
+	aw_pa->ef_desc.sequence[1].check_val = AW_EF_LOCK_ENABLE_VALUE;
+}
+
+
+/******************************************************
+ *
+ * aw882xx_init pid 2329
+ *
+ ******************************************************/
+
+static void aw_pid_2329_dev_init(struct aw_device *aw_pa)
+{
+	aw_pa->reg_num = AW_PID_2329_REG_MAX;
+	/*call aw device init func*/
+	memcpy(aw_pa->monitor_name, AW_PID_2329_MONITOR_FILE, strlen(AW_PID_2329_MONITOR_FILE));
+
+	aw_pa->cco_mux_desc.reg = AW_REG_NONE;
+
+	aw_pa->ipeak_desc.reg = AW_PID_2329_BSTCTRL1_REG;
+	aw_pa->ipeak_desc.mask = AW_PID_2329_BST_IPEAK_MASK;
+
+	aw_pa->auth_desc.reg_in = AW_TESTIN_REG;
+	aw_pa->auth_desc.reg_out = AW_TESTOUT_REG;
+
+	aw_pa->wr_desc.reg = AW_SYSCTRL_REG;
+	aw_pa->wr_desc.mask = AW_PID_2329_I2C_WEN_MASK;
+	aw_pa->wr_desc.enable = AW_PID_2329_I2C_WEN_ENABLE_VALUE;
+	aw_pa->wr_desc.disable = AW_PID_2329_I2C_WEN_DISABLE_VALUE;
+	aw_pa->wr_desc.name = "btn pid 2329 IIC Write EN";
+
+	aw_pa->lpc_desc.reg = AW_PID_2329_LPC_REG;
+	aw_pa->lpc_desc.mask = AW_PID_2329_LPC_DETEN_MASK;
+	aw_pa->lpc_desc.enable = AW_PID_2329_LPC_DETEN_ENABLE_VALUE;
+	aw_pa->lpc_desc.disable = AW_PID_2329_LPC_DETEN_DISABLE_VALUE;
+	aw_pa->lpc_desc.name = "btn pid 2329 lpc";
+
+	aw_pa->monitor_desc.reg_temp_scale = AW_PID_2329_TEMP_SCALE;
+}
+/******************************************************
+ *
+ * aw882xx_init pid 2330
+ *
+ ******************************************************/
+static void aw_pid_2330_dev_init(struct aw_device *aw_pa)
+{
+	aw_pa->reg_num = AW_PID_2330_REG_MAX;
+	/*call aw device init func*/
+	memcpy(aw_pa->monitor_name, AW_PID_2330_MONITOR_FILE, strlen(AW_PID_2330_MONITOR_FILE));
+	// mpd_desc and dsmzth_desc exists but is not necessary because no iv
+	aw_pa->cco_mux_desc.reg = AW_REG_NONE;
+	aw_pa->noise_gate_desc.reg = AW_PID_2330_NOISE_GATE_REG;
+	aw_pa->temp_desc.reg = AW_REG_NONE;
+
+	aw_pa->ipeak_desc.reg = AW_PID_2330_BSTCTRL3_REG;
+	aw_pa->ipeak_desc.mask = AW_PID_2330_BST_IPEAK_MASK;
+
+	aw_pa->auth_desc.reg_in = AW_TESTIN_REG;
+	aw_pa->auth_desc.reg_out = AW_TESTOUT_REG;
+
+	aw_pa->wr_desc.reg = AW_SYSCTRL_REG;
+	aw_pa->wr_desc.mask = AW_PID_2330_I2C_WEN_MASK;
+	aw_pa->wr_desc.enable = AW_PID_2330_I2C_WEN_ENABLE_VALUE;
+	aw_pa->wr_desc.disable = AW_PID_2330_I2C_WEN_DISABLE_VALUE;
+	aw_pa->wr_desc.name = "btn pid 2330 IIC Write EN";
+
+	aw_pa->ef_desc.sequence[0].reg = AW_PID_2330_EF_LOCK_H_REG;
+	aw_pa->ef_desc.sequence[1].reg = AW_PID_2330_EF_LOCK_L_REG;
+}
+
+/******************************************************
+ *
+ * aw882xx_init pid 2418
+ *
+ ******************************************************/
+static int aw_pid_2418_get_voltage_offset(struct aw_device *aw_dev, int32_t *offset)
+{
+	int ret = 0;
+	signed char val = -1;
+	int32_t temp = -1;
+	unsigned int reg_value = 0;
+
+	ret = aw_dev->ops.aw_i2c_read(aw_dev->i2c, AW_PID_2418_EFCTRL2_REG, &reg_value);
+	aw_dev_dbg(aw_dev->dev, "get addr %x val 0x%x",
+						AW_PID_2418_EFCTRL2_REG, reg_value);
+
+	val = (signed char)(reg_value & 0x00ff);
+	temp = val;
+	*offset = temp << 1;
+	aw_dev_info(aw_dev->dev, "get vol offset val %d", *offset);
+	return ret;
+}
+
+static void aw_pid_2418_dev_init(struct aw_device *aw_pa)
+{
+	aw_pa->reg_num = AW_PID_2418_REG_MAX;
+	/*call aw device init func*/
+	memcpy(aw_pa->monitor_name, AW_PID_2418_MONITOR_FILE, strlen(AW_PID_2418_MONITOR_FILE));
+
+	aw_pa->ops.aw_get_voltage_offset = aw_pid_2418_get_voltage_offset;
+	aw_pa->ops.aw_reg_val_to_db = aw_direct_reg_val_to_db;
+	aw_pa->ops.aw_db_val_to_reg = aw_direct_db_val_to_reg;
+
+	aw_pa->psm_desc.reg = AW_PID_2418_SYSCTRL2_REG;
+	aw_pa->psm_desc.mask = AW_PID_2418_PSM_EN_MASK;
+	aw_pa->psm_desc.enable = AW_PID_2418_PSM_EN_ENABLE_VALUE;
+	aw_pa->psm_desc.disable = AW_PID_2418_PSM_EN_DISABLE_VALUE;
+	aw_pa->psm_desc.name = "btn 2418 psm";
+
+	aw_pa->mpd_desc.reg = AW_PID_2418_SYSCTRL2_REG;
+	aw_pa->mpd_desc.mask = AW_PID_2418_EN_MPD_MASK;
+	aw_pa->mpd_desc.enable = AW_PID_2418_EN_MPD_ENABLE_VALUE;
+	aw_pa->mpd_desc.disable = AW_PID_2418_EN_MPD_DISABLE_VALUE;
+	aw_pa->mpd_desc.name = "btn 2418 mpd";
+
+	aw_pa->dsmzth_desc.reg = AW_PID_2418_NGCTRL3_REG;
+	aw_pa->dsmzth_desc.mask = AW_PID_2418_DSMZTH_MASK;
+	aw_pa->dsmzth_desc.enable = AW_PID_2418_DSMZTH_21P33MS_VALUE;
+	aw_pa->dsmzth_desc.disable = AW_PID_2418_DSMZTH_NO_RESET_VALUE;
+	aw_pa->dsmzth_desc.name = "btn 2418 dsmzth";
+
+	aw_pa->txen_desc.reg = AW_PID_2418_I2SCTRL3_REG;
+	aw_pa->txen_desc.mask = AW_PID_2418_I2STXEN_MASK;
+	aw_pa->txen_desc.enable = AW_PID_2418_I2STXEN_ENABLE_VALUE;
+	aw_pa->txen_desc.disable = AW_PID_2418_I2STXEN_DISABLE_VALUE;
+
+	aw_pa->voltage_desc.reg = AW_PID_2418_VBAT_REG;
+	aw_pa->voltage_desc.int_bit = AW_PID_2418_MONITOR_INT_10BIT;
+	aw_pa->voltage_desc.vbat_range = AW_PID_2418_MONITOR_VBAT_RANGE;
+
+	aw_pa->temp_desc.reg = AW_PID_2418_TEMP_REG;
+	aw_pa->temp_desc.neg_mask = AW_PID_2418_MONITOR_TEMP_NEG_MASK;
+	aw_pa->temp_desc.sign_mask = AW_PID_2418_MONITOR_TEMP_SIGN_MASK;
+
+	aw_pa->monitor_desc.reg_temp_scale = AW_PID_2418_TEMP_SCALE;
+
+	aw_pa->dither_desc.reg = AW_PID_2418_DBGCTRL_REG;
+	aw_pa->dither_desc.mask = AW_PID_2418_DITHER_EN_MASK;
+	aw_pa->dither_desc.enable = AW_PID_2418_DITHER_EN_ENABLE_VALUE;
+	aw_pa->dither_desc.disable = AW_PID_2418_DITHER_EN_DISABLE_VALUE;
+	aw_pa->dither_desc.name = "btn 2418 dither";
+
+	aw_pa->cco_mux_desc.reg = AW_PID_2418_DBGCTRL_REG;
+	aw_pa->cco_mux_desc.mask = AW_PID_2418_CCO_MUX_MASK;
+	aw_pa->cco_mux_desc.divided_val = AW_PID_2418_CCO_MUX_DIVIDED_VALUE;
+	aw_pa->cco_mux_desc.bypass_val = AW_PID_2418_CCO_MUX_BYPASS_VALUE;
+
+	aw_pa->auth_desc.reg_in = AW_PID_2418_TESTIN_REG;
+	aw_pa->auth_desc.reg_out = AW_PID_2418_TESTOUT_REG;
+
+	aw_pa->ipeak_desc.reg = AW_PID_2418_BSTCTRL14_REG;
+	aw_pa->ipeak_desc.mask = AW_PID_2418_BST_IPEAK_MASK;
+
+	aw_pa->noise_gate_desc.reg = AW_PID_2418_NGCTRL3_REG;
+	aw_pa->noise_gate_desc.mask = AW_PID_2418_NOISE_GATE_EN_MASK;
+	aw_pa->noise_gate_desc.enable = AW_PID_2418_NOISE_GATE_EN_ENABLE_VALUE;
+	aw_pa->noise_gate_desc.disable = AW_PID_2418_NOISE_GATE_EN_DISABLE_VALUE;
+	aw_pa->noise_gate_desc.name = "btn 2418 noise gate";
+
+	aw_pa->ef_desc.count = 1;
+	aw_pa->ef_desc.sequence[0].reg = AW_PID_2418_EFRH2_REG;
+	aw_pa->ef_desc.sequence[0].mask = AW_PID_2418_EF_LOCK_TRIM_MASK;
+	aw_pa->ef_desc.sequence[0].check_val = AW_PID_2418_EF_LOCK_TRIM_LOCKED_VALUE;
+
+	aw_pa->lpc_desc.reg = AW_PID_2418_LPC_REG;
+	aw_pa->lpc_desc.mask = AW_PID_2418_LPC_DETEN_MASK;
+	aw_pa->lpc_desc.enable = AW_PID_2418_LPC_DETEN_ENABLE_VALUE;
+	aw_pa->lpc_desc.disable = AW_PID_2418_LPC_DETEN_DISABLE_VALUE;
+	aw_pa->lpc_desc.name = "btn 2418 lpc";
+}
+
 /******************************************************
  *
  * aw882xx_init common
@@ -944,6 +1176,8 @@ void aw_dev_init_cmm(struct aw_device *aw_pa)
 	aw_pa->bop_desc.disable = AW_BOP_EN_DISABLE_VALUE;
 	aw_pa->bop_desc.name = "btn bop";
 
+	aw_pa->monitor_desc.reg_temp_scale = AW_MONITOR_TEMP_SCALE_DEFAULT;
+
 	aw_pa->soft_rst.reg = AW_SOFT_RST_REG;
 	aw_pa->soft_rst.reg_value = AW_SOFT_RST_VAL;
 
@@ -969,6 +1203,7 @@ void aw_dev_init_cmm(struct aw_device *aw_pa)
 	aw_pa->vcalb_desc.vcalkl_reg = AW_REG_NONE;
 	aw_pa->profctrl_desc.reg = AW_REG_NONE;
 	aw_pa->bstctrl_desc.reg = AW_REG_NONE;
+	aw_pa->wr_desc.reg = AW_REG_NONE;
 
 	aw_pa->ef_desc.count = 2;
 	aw_pa->ef_desc.sequence[0].reg = AW_LOCKH_REG;
@@ -977,50 +1212,65 @@ void aw_dev_init_cmm(struct aw_device *aw_pa)
 	aw_pa->ef_desc.sequence[1].reg = AW_LOCKL_REG;
 	aw_pa->ef_desc.sequence[1].mask = AW_EF_LOCK_MASK;
 	aw_pa->ef_desc.sequence[1].check_val = AW_EF_LOCK_ENABLE_VALUE;
+
+	aw_pa->lpc_desc.reg = AW_REG_NONE;
+	aw_pa->lpc_desc.mask = 0;
+	aw_pa->lpc_desc.enable = 0;
+	aw_pa->lpc_desc.disable = 0;
+	aw_pa->lpc_desc.name = "btn none dither";
+}
+
+
+static struct aw_dev_attr aw_dev_attr_array[] = {
+	AW_DEV_ATTR(PID_1852_ID, aw_pid_1852_dev_init),
+	AW_DEV_ATTR(PID_2013_ID, aw_pid_2013_dev_init),
+	AW_DEV_ATTR(PID_2032_ID, aw_pid_2032_dev_init),
+	AW_DEV_ATTR(PID_2055_ID, aw_pid_2055_dev_check),
+	AW_DEV_ATTR(PID_2071_ID, aw_pid_2071_dev_init),
+	AW_DEV_ATTR(PID_2113_ID, aw_pid_2113_dev_init),
+	AW_DEV_ATTR(PID_2116_ID, aw_pid_2116_dev_init),
+	AW_DEV_ATTR(PID_2308_ID, aw_pid_2308_dev_init),
+	AW_DEV_ATTR(PID_2329_ID, aw_pid_2329_dev_init),
+	AW_DEV_ATTR(PID_2330_ID, aw_pid_2330_dev_init),
+	AW_DEV_ATTR(PID_2407_ID, aw_pid_2407_dev_init),
+	AW_DEV_ATTR(PID_2418_ID, aw_pid_2418_dev_init),
+};
+
+
+int aw882xx_chipid_auth(unsigned int chip_id)
+{
+	int cnt = ARRAY_SIZE(aw_dev_attr_array);
+	int i;
+
+	for (i = 0; i < cnt; i++) {
+		if (chip_id == aw_dev_attr_array[i].pid)
+			return 0;
+	}
+
+	return -EINVAL;
 }
 
 
 int aw882xx_init(struct aw_device *aw_pa)
 {
-	int ret = 0;
+	int cnt = ARRAY_SIZE(aw_dev_attr_array);
+	int i;
 
 	aw_dev_init_cmm(aw_pa);
 
-	switch (aw_pa->chip_id) {
-	case PID_1852_ID: {
-		aw_pid_1852_dev_init(aw_pa);
-	} break;
-	case PID_2013_ID: {
-		aw_pid_2013_dev_init(aw_pa);
-	} break;
-	case PID_2032_ID: {
-		aw_pid_2032_dev_init(aw_pa);
-	} break;
-	case PID_2055_ID: {
-		aw_pid_2055_dev_check(aw_pa);
-	} break;
-	case PID_2071_ID: {
-		aw_pid_2071_dev_init(aw_pa);
-	} break;
-	case PID_2113_ID: {
-		aw_pid_2113_dev_init(aw_pa);
-	} break;
-	case PID_2116_ID: {
-		aw_pid_2116_dev_init(aw_pa);
-	} break;
-	case PID_2308_ID: {
-		aw_pid_2308_dev_init(aw_pa);
-	} break;
-	default:
+	for (i = 0; i < cnt; i++) {
+		if (aw_pa->chip_id == aw_dev_attr_array[i].pid) {
+			aw_dev_attr_array[i].dev_init(aw_pa);
+			break;
+		}
+	}
+
+	if (i == cnt) {
 		aw_dev_err(aw_pa->dev, "unsupported chip id 0x%04x", aw_pa->chip_id);
 		return -EINVAL;
 	}
 
-	ret = aw882xx_dev_check_ef_lock(aw_pa);
-	if (ret < 0) {
-		aw_dev_err(aw_pa->dev, "ef has not been locked");
-		return ret;
-	}
+	aw882xx_dev_check_ef_lock(aw_pa);
 
 	return aw882xx_dev_probe(aw_pa);
 }
