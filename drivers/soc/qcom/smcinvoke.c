@@ -1170,7 +1170,7 @@ static int smcinvoke_create_bridge(struct smcinvoke_mem_obj *mem_obj)
 	if (dma_buf_flags & ION_FLAG_SECURE) {
 		ret = ion_populate_vm_list(dma_buf_flags, vmid_list, nelems);
 		if (ret)
-			goto exit_free_vmid_list;
+			goto exit_free_perms_list;
 
 		for (i = 0; i < nelems; i++)
 			perms_list[i] = msm_secure_get_vmid_perms(vmid_list[i]);
@@ -1187,7 +1187,7 @@ static int smcinvoke_create_bridge(struct smcinvoke_mem_obj *mem_obj)
 		mem_obj->is_smcinvoke_created_shmbridge = true;
 	} else if (ret == -EEXIST) {
 		ret = 0;
-		goto exit;
+		goto exit_free_perms_list;
 	} else {
 		pr_err("creation of shm bridge for mem_region_id %d failed ret %d\n",
 		       mem_obj->mem_region_id, ret);
