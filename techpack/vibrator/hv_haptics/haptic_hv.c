@@ -891,7 +891,8 @@ static int input_upload_effect(struct input_dev *dev, struct ff_effect *effect,
 	case FF_PERIODIC:
 		if (effect->u.periodic.waveform != FF_CUSTOM) {
 			aw_err("Only support custom waveforms\n");
-			return -EINVAL;
+			ret = -EINVAL;
+			goto out;
 		}
 
 		if (effect->u.periodic.custom_len == sizeof(custom_data)) {
