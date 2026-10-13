@@ -40,8 +40,6 @@ extern struct device *global_spi_parent_device;
 
 static int goodix_send_ic_config(struct goodix_ts_core *cd, int type);
 
-static void goodix_set_gesture_work(struct work_struct *work);
-
 /* show driver infomation */
 static ssize_t driver_info_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
