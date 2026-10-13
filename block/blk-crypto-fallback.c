@@ -348,6 +348,7 @@ static bool blk_crypto_fallback_encrypt_bio(struct bio **bio_ptr)
 	enc_bio->bi_private = src_bio;
 	enc_bio->bi_end_io = blk_crypto_fallback_encrypt_endio;
 	*bio_ptr = enc_bio;
+	ret = true;
 
 	enc_bio = NULL;
 	goto out_free_ciph_req;
