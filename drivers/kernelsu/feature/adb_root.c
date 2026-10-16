@@ -153,7 +153,7 @@ envp_count_done:
 		return -EFAULT;
 
 	*(void ***)envp_arg = (void **)envp_array_p;
-	pr_info("new envp array blasted to userspace\n");
+	pr_info("%s: new envp array blasted to userspace\n", __func__);
 	return 0;	
 }
 

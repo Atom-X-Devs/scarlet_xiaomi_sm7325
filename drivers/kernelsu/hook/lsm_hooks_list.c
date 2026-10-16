@@ -75,15 +75,12 @@ capability_fn:
 static void *setprocattr_fn __read_mostly = nullptr;
 static __nocfi int ksu_setprocattr_new(const char *name, void *value, size_t size)
 {
-	assume(!!setprocattr_fn);
 	ksu_hide_setprocattr_inline(name, value, size);
 	return ((typeof(ksu_setprocattr_new) *)setprocattr_fn)(name, value, size);
 }
 
 static __nocfi int ksu_setprocattr_old(struct task_struct *p, char *name, void *value, size_t size)
 {
-	assume(!!setprocattr_fn);
-
 	ksu_hide_setprocattr_inline(name, value, size);
 	return ((typeof(ksu_setprocattr_old) *)setprocattr_fn)(p, name, value, size);
 }

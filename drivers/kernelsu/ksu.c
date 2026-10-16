@@ -70,6 +70,10 @@
 #include "selinux/selinux.h"
 #include "selinux/sepolicy.h"
 
+#ifdef CONFIG_KSU_DISABLE_32BIT_HOOKS
+#undef CONFIG_COMPAT
+#endif
+
 #ifdef CONFIG_KPROBES
 #include "downstream/kprobes_common.h"
 #endif
@@ -77,6 +81,9 @@
 #ifdef CONFIG_KALLSYMS
 #include "external/chibihash64.h"
 #include "downstream/kallsyms_common.h"
+#else
+#define find_kernel_symbol_exact(...) ({ 0x0; })
+#define ksu_lookup_kernel_symbols(...) ({ -ENOSYS; })
 #endif
 
 #ifdef CONFIG_ARM64
@@ -307,31 +314,25 @@ static int __init kernelsu_lkm_init(void)
 	// list_del(&THIS_MODULE->list);
 	kobject_del(&THIS_MODULE->mkobj.kobj); // tiann/KernelSU fefb02e
 
+#if 0
 	if (current->pid == 1)
 		return 0;
 
-	// pid not 1, late load
-	
 	escape_to_root_forced();
 
-	// turn off vfs_read hook
 	stop_vfs_read_hook();
-
 	apply_kernelsu_rules();
 	cache_sid();
 	setup_ksu_cred();
-
 	on_post_fs_data();
 	on_boot_completed();
-
 	ksu_feature_apply_forced();
 
 	if (!!getenforce())
 		return 0;
-	
 	pr_info("Permissive SELinux, enforcing\n");
 	setenforce(true);
-
+#endif
 	return 0;
 }
 
