@@ -11,39 +11,20 @@ MDIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 $(info -- KDIR: $(KDIR))
 $(info -- MDIR: $(MDIR))
 
-# compliant to last upstream kernel change as of 8627946d
-CFLAGS_ksu.o += -DKSU_VERSION=32700
+# compliant to last upstream kernel change as of a7f37595
+CFLAGS_ksu.o += -DKSU_VERSION=32794
 
-ifndef KSU_EXPECTED_SIZE
+KSU_PACKAGE_NAME := me.weishu.kernelsu
 KSU_EXPECTED_SIZE := 0x033b
-endif
-
-ifndef KSU_EXPECTED_HASH
 KSU_EXPECTED_HASH := c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
-endif
 
-ifdef KSU_MANAGER_PACKAGE
-CFLAGS_ksu.o += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
-$(info -- KernelSU Manager package name: $(KSU_MANAGER_PACKAGE))
-endif
+#$(info -- KernelSU Manager package name: $(KSU_PACKAGE_NAME))
+#$(info -- KernelSU Manager signature size: $(KSU_EXPECTED_SIZE))
+#$(info -- KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
 
-# $(info -- KernelSU Manager signature size: $(KSU_EXPECTED_SIZE))
-# $(info -- KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
-
+CFLAGS_ksu.o += -DKSU_PACKAGE_NAME=\"$(KSU_PACKAGE_NAME)\"
 CFLAGS_ksu.o += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
 CFLAGS_ksu.o += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
-
-# uncommon, but wont hurt, check for 3-arg security_add_hooks
-ifeq ($(shell grep -A1 "void security_add_hooks" $(srctree)/include/linux/lsm_hooks.h 2>/dev/null | grep -q lsm 2>/dev/null; echo $$?),0)
-$(info -- KernelSU/compat: security_add_hooks v2 found!)
-CFLAGS_ksu.o += -DKSU_COMPAT_SECURITY_ADD_HOOKS_V2
-endif
-
-# see security_delete_hooks
-ifeq ($(shell grep -A5 "^struct security_hook_list" $(srctree)/include/linux/lsm_hooks.h 2>/dev/null | grep -q "struct hlist_node" 2>/dev/null; echo $$?),0)
-$(info -- KernelSU/compat: security_hook_list - hlist_node found!)
-CFLAGS_ksu.o += -DKSU_COMPAT_SECURITY_DELETE_HOOKS_HLIST
-endif
 
 ifeq ($(shell grep -q "^struct security_operations selinux_ops" $(srctree)/security/selinux/hooks.c; echo $$?),0)
 $(info -- KernelSU/compat: exported selinux_ops found!)
@@ -56,6 +37,12 @@ endif
 
 ifeq ($(shell grep -q "struct selinux_state " $(srctree)/security/selinux/include/security.h; echo $$?),0)
 CFLAGS_ksu.o += -DKSU_COMPAT_HAS_SELINUX_STATE
+endif
+
+# UL, look for iterate_dir on ‎fs/readdir.c
+ifeq ($(shell grep -q "^int iterate_dir" $(srctree)/fs/readdir.c 2>/dev/null; echo $$?),0)
+$(info -- KernelSU/compat: iterate_dir found!)
+CFLAGS_ksu.o += -DKSU_HAS_ITERATE_DIR
 endif
 
 ifeq ($(shell grep -q "struct type_datum \*\*type_val_to_struct;" $(srctree)/security/selinux/ss/policydb.h; echo $$?),0)
@@ -72,13 +59,15 @@ $(info -- KernelSU/compat: exported policy_rwlock found!)
 CFLAGS_ksu.o += -DKSU_COMPAT_HAS_EXPORTED_POLICY_RWLOCK
 endif
 
-ifeq ($(shell grep -q "cpus_ptr;" $(srctree)/include/linux/sched.h; echo $$?),0)
-$(info -- KernelSU/compat: backported cpus_ptr found!)
-CFLAGS_ksu.o += -DKSU_COMPAT_HAS_BACKPORTED_CPUS_PTR
+# branch link hook vfs_statx, this newer version uses struct filename
+ifeq ($(shell grep "int vfs_statx" $(srctree)/fs/stat.c 2>/dev/null | grep -q "struct filename" 2>/dev/null; echo $$?),0)
+# $(info -- KernelSU/compat: vfs_statx has struct filename argument!)
+CFLAGS_ksu.o += -DKSU_HAS_VFS_STATX2
 endif
 
 # branch link hook, do_faccessat
 ifeq ($(shell grep "long do_faccessat" $(srctree)/fs/open.c 2>/dev/null | grep -q "flags" 2>/dev/null; echo $$?),0)
+# $(info -- KernelSU/compat: do_faccessat has flags argument!)
 CFLAGS_ksu.o += -DKSU_HAS_FACCESSAT2
 endif
 
@@ -86,12 +75,6 @@ endif
 ifeq ($(shell grep -q "read_iter" $(srctree)/include/linux/fs.h 2>/dev/null; echo $$?),0)
 $(info -- KernelSU/compat: f_op->read_iter found!)
 CFLAGS_ksu.o += -DKSU_HAS_FOP_READ_ITER
-endif
-
-# UL, look for iterate_dir on ‎fs/readdir.c
-ifeq ($(shell grep -q "^int iterate_dir" $(srctree)/fs/readdir.c 2>/dev/null; echo $$?),0)
-$(info -- KernelSU/compat: iterate_dir found!)
-CFLAGS_ksu.o += -DKSU_HAS_ITERATE_DIR
 endif
 
 CFLAGS_ksu.o += $(call cc-option, -Wno-declaration-after-statement)
@@ -108,6 +91,7 @@ CFLAGS_ksu.o += $(call cc-option, -Wno-format)
 CFLAGS_ksu.o += $(call cc-option, -Wno-macro-redefined)
 CFLAGS_ksu.o += $(call cc-option, -Wno-incompatible-pointer-types-discards-qualifiers)
 CFLAGS_ksu.o += $(call cc-option, -Wno-discarded-qualifiers)
+CFLAGS_ksu.o += $(call cc-option, -Wno-deprecated-octal-literals)
 
 # dont be too strict
 CFLAGS_REMOVE_ksu.o += -Werror
@@ -124,6 +108,17 @@ CFLAGS_REMOVE_ksu.o += -Oz
 CFLAGS_REMOVE_ksu.o += -Os
 CFLAGS_ksu.o += -O2
 endif
+
+# attempt to enable gnu11 up to gnu2y
+# we skip gnu2x here due to its inconsistency
+CFLAGS_ksu.o += $(call cc-option, -std=gnu11)
+CFLAGS_ksu.o += $(call cc-option, -std=gnu17)
+CFLAGS_ksu.o += $(call cc-option, -std=gnu23)
+CFLAGS_ksu.o += $(call cc-option, -std=gnu2y)
+
+#ifeq ($(shell $(CC) -v 2>&1 | grep -q 'clang'; echo $$?),0)
+# $(info -- KernelSU/CC: clang!)
+#endif
 
 # always inline atomics
 # clang and gcc CAN try to drop a runtime C11 atomics detector

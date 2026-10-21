@@ -27,7 +27,7 @@ struct symbol_hash_entry {
 	uintptr_t addr;
 };
 
-static void *kallsyms_hash_array = NULL;
+static void *kallsyms_hash_array = nullptr;
 static size_t kallsyms_hash_array_entry_count = 0;
 static size_t kallsyms_hash_array_capacity = 0;
 
@@ -45,8 +45,8 @@ static inline void *old_kvrealloc(const void *p, size_t oldsize, size_t newsize,
 		return (void *)p;
 	newp = kvmalloc(newsize, flags);
 	if (!newp)
-		return NULL;
-	__builtin_memcpy(newp, p, oldsize);
+		return nullptr;
+	memcpy(newp, p, oldsize);
 	kvfree(p);
 	return newp;
 }
@@ -68,9 +68,7 @@ static inline void insert_to_kallsyms_array(const char *str, uintptr_t addr)
 			return;
 	}
 
-skip_anti_dup:
-	;
-
+skip_anti_dup:;
 	if (kallsyms_hash_array_entry_count < kallsyms_hash_array_capacity)
 		goto size_is_sufficient;
 
@@ -108,19 +106,18 @@ __weak int sprint_symbol_no_offset(char *buffer, unsigned long address) { return
 #ifdef MODULE // https://elixir.bootlin.com/linux/v7.2-rc4/source/kernel/kprobes.c#L1506
 static noinline __nocfi void ksu_kallsyms_lookup_size_offset(uintptr_t symaddr, unsigned long *sym_size, unsigned long *offset)
 {
-	static typeof(kallsyms_lookup_size_offset) *fn __read_mostly = NULL;
+	static typeof(kallsyms_lookup_size_offset) *fn __read_mostly;
 	static void *state = &&bootstrap;
 	goto *state;
 
 bootstrap:
 	*(void **)&fn = (void *)kallsyms_lookup_name("kallsyms_lookup_size_offset");
-	if (!fn) {
+	if (!!fn)
+		state = &&fn_ok;
+	else
 		state = &&no_fn;
-		goto *state;
-	}
 
-	state = &&fn_ok;
-
+	goto *state;
 fn_ok:
 	fn(symaddr, sym_size, offset);
 	return;
@@ -142,10 +139,7 @@ static noinline void dotted_kallsyms_build_hash_array(void)
 
 	cond_resched();
 
-	char *membuf __zoffstack(KSYM_SYMBOL_LEN * 2);
-	if (!membuf)
-		return;
-
+	char *membuf __offstack(KSYM_SYMBOL_LEN * 2);
 	char *symbol_buf = membuf;
 	char *symbol_cache = membuf + KSYM_SYMBOL_LEN;
 
@@ -193,9 +187,7 @@ scan_start:
 
 	insert_to_kallsyms_array(symbol_buf, curr);
 
-step_up:
-	;
-
+step_up:;
 	unsigned long sym_size = 0;
 	unsigned long offset = 0;
 	kallsyms_lookup_size_offset(curr, &sym_size, &offset);
@@ -289,23 +281,21 @@ static int kallsyms_on_each_symbol_cb(void *data, const char *name, struct modul
 static noinline __nocfi uintptr_t try_kallsyms_on_each_symbol(const char *name)
 {
 #ifdef MODULE // lazy init
-	static typeof(kallsyms_on_each_symbol) *kallsyms_on_each_symbol_fn __read_mostly = NULL;
+	static typeof(kallsyms_on_each_symbol) *kallsyms_on_each_symbol_fn __read_mostly;
 	static void *state = &&bootstrap;
 	goto *state;
 
 bootstrap:
 	*(void **)&kallsyms_on_each_symbol_fn = (void *)kallsyms_lookup_name("kallsyms_on_each_symbol");
-	if (!!kallsyms_on_each_symbol_fn) {
+	if (!!kallsyms_on_each_symbol_fn)
 		state = &&fn_ok;
-		goto *state;
-	}
-
-	state = &&no_fn;
+	else
+		state = &&no_fn;
+	goto *state;
 no_fn:
 	return 0x0;
 
-fn_ok:
-	;
+fn_ok:;
 #else
 #define kallsyms_on_each_symbol_fn kallsyms_on_each_symbol
 #endif
@@ -321,18 +311,14 @@ fn_ok:
 }
 
 #ifdef CONFIG_KPROBES // kprobes based symbol resolver.
-static inline uintptr_t kp_kallsyms_lookup_name(const char *name)
+static uintptr_t kp_kallsyms_lookup_name(const char *name)
 {
-	struct kprobe *kp __zoffstack(sizeof(*kp));
-	if (!kp)
+	struct kprobe kp = { .symbol_name = name };
+	if (!!register_kprobe(&kp))
 		return 0x0;
 
-	kp->symbol_name = name;
-	if (!!register_kprobe(kp))
-		return 0x0;
-
-	uintptr_t addr = (uintptr_t)kp->addr;
-	unregister_kprobe(kp);
+	uintptr_t addr = (uintptr_t)kp.addr;
+	unregister_kprobe(&kp);
 
 	pr_info("%s: success! %s at 0x%lx\n", __func__, name, addr);
 	return addr;
@@ -375,19 +361,54 @@ static noinline uintptr_t kallsyms_lookup_retry(const char *name)
 
 	return kallsyms_lookup_hashed_name(name);
 	
-found:
-	;
+found:;
 	char namebuf[KSYM_NAME_LEN];
 	sprint_symbol_no_offset(namebuf, addr);
 	pr_info("%s: %s addr: 0x%lx \n", __func__, namebuf, addr);
 	return addr;
 }
 
-// ksu_get_ksym_size, return symbol size, return retfail if fail.
-static noinline size_t ksu_get_ksym_size(uintptr_t symbol_addr, ptrdiff_t retfail)
+// NOTE: absolute minimum compat, just to appease API.
+static int kallsyms_lookup_batched(const char *const *names, unsigned long *addrs, u32 count)
 {
-	size_t offset = 0;
-	size_t symbolsize = 0;
+	int resolved = 0;
+	u32 i = 0;
+
+	if (!names || !addrs)
+		return -EINVAL;
+
+loop_start:
+	if (!names[i])
+		goto next;
+
+	addrs[i] = (unsigned long)kallsyms_lookup_retry(names[i]);
+	if (!addrs[i])
+		goto next;
+
+	if (!is_module_address(addrs[i])) {
+		addrs[i] = 0; // null module address
+		goto next;
+	}
+
+	resolved++;
+next:
+	i++;
+	if (i < count)
+		goto loop_start;
+
+	return resolved;
+}
+
+// compat to official ksu
+#define find_kernel_symbol_exact 	kallsyms_lookup_retry
+#define ksu_lookup_kernel_symbols	kallsyms_lookup_batched
+
+// ksu_get_ksym_size, return symbol size, return retfail if fail.
+static noinline size_t ksu_get_ksym_size(uintptr_t symbol_addr, size_t retfail)
+{
+	// https://github.com/backslashxx/KernelSU/pull/35
+	unsigned long offset = 0;
+	unsigned long symbolsize = 0;
 
 	kallsyms_lookup_size_offset(symbol_addr, &symbolsize, &offset);
 
@@ -443,12 +464,12 @@ static noinline void dotted_kallsyms_destroy_hash_array(void)
 
 	kvfree(kallsyms_hash_array);
 
-	kallsyms_hash_array = NULL;
+	kallsyms_hash_array = nullptr;
 	kallsyms_hash_array_entry_count = 0;
 	kallsyms_hash_array_capacity = 0;
 
-	const char *hw = "Hello, world!";
-	pr_info("chibihash64: '%s' #: 0x%llx \n", hw, chibihash64_wrapper(hw));
+	constexpr char hw[] = "Hello, world!";
+	pr_info("chibihash64: '%s' #: 0x%llx \n", hw, chibihash64(hw, sizeof(hw) - 1, 0ULL));
 
 }
 

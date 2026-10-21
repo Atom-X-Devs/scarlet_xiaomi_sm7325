@@ -42,8 +42,8 @@ static long is_libadbroot_ok()
 // NOTE: envp is (void ***), void * const char __user * const char __user *
 static long setup_ld_preload(void ***envp_arg)
 {
-	static const char kLdPreload[] = "LD_PRELOAD=/data/adb/ksu/lib/libadbroot.so";
-	static const char kLdLibraryPath[] = "LD_LIBRARY_PATH=/data/adb/ksu/lib";
+	constexpr char kLdPreload[] = "LD_PRELOAD=/data/adb/ksu/lib/libadbroot.so";
+	constexpr char kLdLibraryPath[] = "LD_LIBRARY_PATH=/data/adb/ksu/lib";
 
 	if (!envp_arg || !*envp_arg)
 		return -EINVAL;
@@ -83,6 +83,10 @@ envp_count_loop:
 
 	env_count = env_count + 1;
 
+	// thats just too much.
+	if (env_count > 64)
+		return -E2BIG;
+
 	goto envp_count_loop;
 
 envp_count_done:
@@ -97,15 +101,16 @@ envp_count_done:
 	if (IS_ERR_VALUE(mmap_page))
 		return -ENOMEM;
 
+	pr_info("%s: vm_mmap: 0x%lx page to userspace \n", __func__, mmap_page);
+
 	/**
 	 *  PLAN:
 	 * 	on 0, we put kLdPreload
-	 *	we offset by kLdPreload at +64 bytes
-	 *	we offset by new envp at +128 bytes
+	 *	offset kLdLibraryPath at +64 bytes
+	 *	offset new envp at +128 bytes
 	 */
-
-	static_assert(sizeof(kLdPreload) < 64, "fix kLdLibraryPath offset");
-	static_assert((sizeof(kLdPreload) + sizeof(kLdLibraryPath)) < 128, "fix envp_array offset");
+	static_assert(sizeof(kLdPreload) < 64);
+	static_assert((sizeof(kLdPreload) + sizeof(kLdLibraryPath)) < 128);
 
 	void __user *kLdPreload_p = (void __user *)mmap_page;
 	void __user *kLdLibraryPath_p = (void __user *)(mmap_page + 64);
@@ -126,7 +131,7 @@ envp_count_done:
 	if (128 + array_bytes > PAGE_SIZE)
 		return -E2BIG;
 
-	void *buf __zoffstack(array_bytes);
+	void *buf __offstack_flags(array_bytes, GFP_KERNEL | __GFP_ZERO);
 	if (!buf)
 		return -ENOMEM;
 
@@ -153,7 +158,7 @@ envp_count_done:
 		return -EFAULT;
 
 	*(void ***)envp_arg = (void **)envp_array_p;
-	pr_info("new envp array blasted to userspace\n");
+	pr_info("%s: new envp array blasted to userspace\n", __func__);
 	return 0;	
 }
 

@@ -11,10 +11,13 @@ config KSU
 config KSU_KPROBES_KSUD
 	bool "Enable dynamic kprobes for early boot hooks"
 	depends on KSU
+	depends on !KSU_TAMPER_SYSCALL_TABLE
+	depends on !KSU_HACK_ARM64_BRANCH_LINK
 	depends on KPROBES && KRETPROBES
+	depends on DEPRECATED
 	default n
 	help
-	  Use dynamic hooks via kprobes for functions only
+	  [deprecated] Use dynamic hooks via kprobes for functions only
 	  on early boot. Hooks are unregistered at boot complete
 	  to reduce overhead.
 
@@ -46,6 +49,16 @@ config KSU_TAMPER_SYSCALL_TABLE
 	  As syscalls are called directly, it avoids indirect branch (blr) overhead and
 	  complies with Clang CFI.
 	  Verified on 3.0 ~ 7.1. Recommended for 3.0 ~ 4.14.
+
+config KSU_DISABLE_32BIT_HOOKS
+	bool "disable 32-bit symbol hooking"
+	depends on KSU
+	depends on 64BIT && COMPAT
+	depends on (KSU_TAMPER_SYSCALL_TABLE || KSU_HACK_ARM64_BRANCH_LINK)
+	default n
+	help
+	  Skips hooking 32-bit syscalls (compat_sys_call_table). Mostly useful for zygote64-only devices.
+	  Author assumes you know what you're doing, __builtin_assume(!!&user_brain).
 
 config KSU_LSM_SECURITY_HOOKS
 	bool "Use LSM security hooks"
@@ -126,5 +139,7 @@ config KSU_HEURISTIC_IN_TREE_BUILD
 	bool "heuristic. do NOT touch"
 	depends on KSU
 	default y
+	help
+	  Note: if youre building out-of-tree, configure by editing ksu.c #defines instead.
 
 endmenu

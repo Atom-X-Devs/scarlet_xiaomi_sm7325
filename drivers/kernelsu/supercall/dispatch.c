@@ -17,9 +17,6 @@ static int do_grant_root(void __user *arg)
 	return ret;
 }
 
-static uint32_t ksuver_override = 0;
-static uint32_t ksuflags_override = 0;
-
 static int do_get_info(void __user *arg)
 {
 	struct ksu_get_info_cmd cmd = { .version = KERNEL_SU_VERSION, .flags = 0 };
@@ -31,6 +28,9 @@ static int do_get_info(void __user *arg)
 	if (is_manager()) {
 		cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
 	}
+#ifndef KSU_NO_PREINIT
+	cmd.flags |= KSU_GET_INFO_FLAG_PREINIT;
+#endif
 	cmd.features = KSU_FEATURE_MAX;
 	cmd.uapi_version = KERNEL_SU_UAPI_VERSION;
 
@@ -67,6 +67,7 @@ static int do_get_info_legacy(void __user *arg)
 
 static int do_report_event(void __user *arg)
 {
+	static bool services_started = false;
 	struct ksu_report_event_cmd cmd;
 
 	if (copy_from_user(&cmd, arg, sizeof(cmd))) {
@@ -76,6 +77,9 @@ static int do_report_event(void __user *arg)
 	switch (cmd.event) {
 	case EVENT_POST_FS_DATA: {
 		static bool post_fs_data_lock = false;
+
+		// Reset for emulated soft reboot
+		services_started = false;
 		if (!post_fs_data_lock) {
 			post_fs_data_lock = true;
 			pr_info("post-fs-data triggered\n");
@@ -93,10 +97,18 @@ static int do_report_event(void __user *arg)
 		break;
 	}
 	case EVENT_MODULE_MOUNTED: {
-		ksu_module_mounted = true;
 		pr_info("module mounted!\n");
 		on_module_mounted();
 		break;
+	}
+	case EVENT_SERVICES: {
+		if (services_started) {
+			pr_info("services already started, skipping\n");
+			return 0;
+		}
+		services_started = true;
+		pr_info("services triggered\n");
+		return 1;
 	}
 	default:
 		break;
@@ -245,7 +257,7 @@ static int do_uid_granted_root(void __user *arg)
 		return -EFAULT;
 	}
 
-	cmd.granted = ksu_is_allow_uid_for_current(cmd.uid);
+	cmd.granted = ksu_is_uid_granted_root(cmd.uid);
 
 	if (copy_to_user(arg, &cmd, sizeof(cmd))) {
 		pr_err("uid_granted_root: copy_to_user failed\n");
@@ -334,7 +346,7 @@ static int do_set_app_profile(void __user *arg)
 static int do_get_feature(void __user *arg)
 {
 	struct ksu_get_feature_cmd cmd;
-	bool supported;
+	bool supported = false;
 	int ret;
 
 	if (copy_from_user(&cmd, arg, sizeof(cmd))) {
@@ -343,7 +355,13 @@ static int do_get_feature(void __user *arg)
 	}
 
 	ret = ksu_get_feature(cmd.feature_id, &cmd.value, &supported);
-	cmd.supported = supported ? 1 : 0;
+	cmd.supported = 0;
+	if (supported) {
+		cmd.supported |= KSU_FEATURE_FLAG_SUPPORTED;
+		if (ksu_feature_is_forced(cmd.feature_id)) {
+			cmd.supported |= KSU_FEATURE_FLAG_FORCED;
+		}
+	}
 
 	if (ret && supported) {
 		pr_err("get_feature: failed for feature %u: %d\n", cmd.feature_id, ret);
@@ -692,9 +710,88 @@ static int do_disable_escape_to_root(void __user *arg)
 	return 0;
 }
 
+/*
+ * Resolve symbols of the running kernel image, exported or not, matching
+ * them like ksuinit's /proc/kallsyms walk. Userspace uses this to bind a
+ * module's undefined symbols before init_module, so the kernel never parses
+ * the module ELF itself.
+ */
+static int do_lookup_symbols(void __user *arg)
+{
+	struct ksu_lookup_symbols_cmd cmd;
+	const u64 __user *unames;
+	u64 __user *uaddrs;
+	char **names;
+	unsigned long *addrs;
+	int ret = 0;
+	u32 i;
+
+	if (copy_from_user(&cmd, arg, sizeof(cmd)))
+		return -EFAULT;
+
+	if (cmd.flags) {
+		pr_err("lookup_symbols: unsupported flags 0x%x\n", cmd.flags);
+		return -EINVAL;
+	}
+	if (!cmd.count || cmd.count > KSU_LOOKUP_SYMBOLS_MAX)
+		return -EINVAL;
+
+	names = kvcalloc(cmd.count, sizeof(*names), GFP_KERNEL);
+	addrs = kvcalloc(cmd.count, sizeof(*addrs), GFP_KERNEL);
+	if (!names || !addrs) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	unames = (const u64 __user *)(uintptr_t)cmd.names;
+	uaddrs = (u64 __user *)(uintptr_t)cmd.addrs;
+	for (i = 0; i < cmd.count; i++) {
+		u64 uname;
+		char *name;
+
+		if (get_user(uname, unames + i)) {
+			ret = -EFAULT;
+			goto out;
+		}
+		name = strndup_user((const char __user *)(uintptr_t)uname, KSYM_NAME_LEN);
+		if (IS_ERR(name)) {
+			// An overlong name cannot be a kernel symbol: report it missing.
+			if (PTR_ERR(name) == -EINVAL)
+				continue;
+			ret = PTR_ERR(name);
+			goto out;
+		}
+		if (!*name) {
+			kfree(name);
+			continue;
+		}
+		names[i] = name;
+	}
+
+	ret = ksu_lookup_kernel_symbols((const char *const *)names, addrs, cmd.count);
+	if (ret < 0)
+		goto out;
+
+	for (i = 0; i < cmd.count; i++) {
+		if (put_user((u64)addrs[i], uaddrs + i)) {
+			ret = -EFAULT;
+			goto out;
+		}
+	}
+
+out:
+	if (names) {
+		for (i = 0; i < cmd.count; i++)
+			kfree(names[i]);
+	}
+	kvfree(names);
+	kvfree(addrs);
+	return ret;
+}
+
 // IOCTL handlers mapping table
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
-	{ .cmd = KSU_IOCTL_GRANT_ROOT, .name = "GRANT_ROOT", .handler = do_grant_root, .perm_check = allowed_for_su },
+	{ .cmd = KSU_IOCTL_GRANT_ROOT, .name = "GRANT_ROOT", .handler = do_grant_root, .perm_check = allowed_for_su  },
 	{ .cmd = KSU_IOCTL_GET_INFO, .name = "GET_INFO", .handler = do_get_info, .perm_check = always_allow },
 	{ .cmd = KSU_IOCTL_GET_INFO_LEGACY, .name = "GET_INFO_LEGACY", .handler = do_get_info_legacy, .perm_check = always_allow },
 	{ .cmd = KSU_IOCTL_REPORT_EVENT, .name = "REPORT_EVENT", .handler = do_report_event, .perm_check = only_root },
@@ -711,17 +808,18 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
 	{ .cmd = KSU_IOCTL_SET_APP_PROFILE, .name = "SET_APP_PROFILE", .handler = do_set_app_profile, .perm_check = only_manager },
 	{ .cmd = KSU_IOCTL_GET_FEATURE, .name = "GET_FEATURE", .handler = do_get_feature, .perm_check = manager_or_root },
 	{ .cmd = KSU_IOCTL_SET_FEATURE, .name = "SET_FEATURE", .handler = do_set_feature, .perm_check = manager_or_root },
-	{ .cmd = KSU_IOCTL_GET_WRAPPER_FD, .name = "GET_WRAPPER_FD", .handler = do_get_wrapper_fd, .perm_check = manager_or_root },
+	{ .cmd = KSU_IOCTL_GET_WRAPPER_FD, .name = "GET_WRAPPER_FD", .handler = do_get_wrapper_fd, .perm_check = manager_or_root, .allow_su_session = true },
 	{ .cmd = KSU_IOCTL_MANAGE_MARK, .name = "MANAGE_MARK", .handler = do_manage_mark, .perm_check = manager_or_root },
 	{ .cmd = KSU_IOCTL_NUKE_EXT4_SYSFS, .name = "NUKE_EXT4_SYSFS", .handler = do_nuke_ext4_sysfs, .perm_check = manager_or_root },
 	{ .cmd = KSU_IOCTL_ADD_TRY_UMOUNT, .name = "ADD_TRY_UMOUNT", .handler = add_try_umount, .perm_check = manager_or_root },
 	{ .cmd = KSU_IOCTL_SET_INIT_PGRP, .name = "SET_INIT_PGRP", .handler = do_set_init_pgrp, .perm_check = only_root },
 	{ .cmd = KSU_IOCTL_GET_SULOG_FD, .name = "GET_SULOG_FD", .handler = do_get_sulog_fd, .perm_check = only_root },
-	{ .cmd = KSU_IOCTL_DISABLE_ESCAPE_TO_ROOT, .name = "DISABLE_ESCAPE_TO_ROOT", .handler = do_disable_escape_to_root, .perm_check = only_root },
+	{ .cmd = KSU_IOCTL_DISABLE_ESCAPE_TO_ROOT, .name = "DISABLE_ESCAPE_TO_ROOT", .handler = do_disable_escape_to_root, .perm_check = only_root, .allow_su_session = true },
+	{ .cmd = KSU_IOCTL_LOOKUP_SYMBOLS, .name = "LOOKUP_SYMBOLS", .handler = do_lookup_symbols, .perm_check = only_root },
 	{ .cmd = 0, .name = NULL, .handler = NULL, .perm_check = NULL } // Sentinel
 };
 
-long ksu_supercall_handle_ioctl(unsigned int cmd, void __user *argp)
+long ksu_supercall_handle_ioctl(const struct file *filp, unsigned int cmd, void __user *argp)
 {
 	int i;
 
@@ -732,7 +830,8 @@ long ksu_supercall_handle_ioctl(unsigned int cmd, void __user *argp)
 	for (i = 0; ksu_ioctl_handlers[i].handler; i++) {
 		if (cmd == ksu_ioctl_handlers[i].cmd) {
 			// Check permission first
-			if (ksu_ioctl_handlers[i].perm_check && !ksu_ioctl_handlers[i].perm_check()) {
+			if (ksu_ioctl_handlers[i].perm_check && !ksu_ioctl_handlers[i].perm_check() &&
+				!(ksu_ioctl_handlers[i].allow_su_session && ksu_is_su_session_fd(filp))) {
 				pr_warn("ksu ioctl: permission denied for cmd=0x%x uid=%d\n", cmd, current_uid().val);
 				return -EPERM;
 			}
