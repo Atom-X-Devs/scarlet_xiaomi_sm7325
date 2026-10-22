@@ -673,11 +673,6 @@ static void goodix_ts_sysfs_exit(struct goodix_ts_core *cd)
 	sysfs_remove_group(&cd->pdev->dev.kobj, &sysfs_group);
 }
 
-static void goodix_ts_wq_exit(struct goodix_ts_core *core_data)
-{
-	destroy_workqueue(core_data->gesture_wq);
-	destroy_workqueue(core_data->event_wq);
-}
 
 #if 0
 static char *output_buf;
@@ -2715,12 +2710,8 @@ static int goodix_ts_remove(struct platform_device *pdev)
 #endif
 
 		goodix_fw_update_uninit(core_data);
-		goodix_ts_wq_exit(core_data);
 	}
 
-#ifdef GOODIX_XIAOMI_TOUCHFEATURE
-	destroy_workqueue(core_data->event_wq);
-#endif
 	goodix_tools_exit(core_data);
 	goodix_ts_power_off(core_data);
 
