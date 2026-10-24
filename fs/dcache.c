@@ -2542,7 +2542,7 @@ static void d_wait_lookup(struct dentry *dentry)
 		do {
 			set_current_state(TASK_UNINTERRUPTIBLE);
 			spin_unlock(&dentry->d_lock);
-			freezable_schedule();
+			freezable_schedule_unsafe();
 			spin_lock(&dentry->d_lock);
 		} while (d_in_lookup(dentry));
 	}
