@@ -1644,6 +1644,7 @@ static int zram_read_page(struct zram *zram, struct page *page, u32 index,
 	int ret;
 
 	zram_slot_lock(zram, index);
+	zram_accessed(zram, index);
 	if (!zram_test_flag(zram, index, ZRAM_WB)) {
 		/* Slot should be locked through out the function call */
 		ret = zram_read_from_zspool(zram, page, index);
@@ -1700,6 +1701,7 @@ static int write_same_filled_page(struct zram *zram, unsigned long fill,
 	zram_free_page(zram, index);
 	zram_set_flag(zram, index, ZRAM_SAME);
 	zram_set_handle(zram, index, fill);
+	zram_accessed(zram, index);
 	zram_slot_unlock(zram, index);
 
 	atomic64_inc(&zram->stats.same_pages);
@@ -1739,6 +1741,7 @@ static int write_incompressible_page(struct zram *zram, struct page *page,
 	zram_set_flag(zram, index, ZRAM_HUGE);
 	zram_set_handle(zram, index, handle);
 	zram_set_obj_size(zram, index, PAGE_SIZE);
+	zram_accessed(zram, index);
 	zram_slot_unlock(zram, index);
 
 	atomic64_add(PAGE_SIZE, &zram->stats.compr_data_size);
@@ -1804,6 +1807,7 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	zram_free_page(zram, index);
 	zram_set_handle(zram, index, handle);
 	zram_set_obj_size(zram, index, comp_len);
+	zram_accessed(zram, index);
 	zram_slot_unlock(zram, index);
 
 	/* Update stats */
@@ -2252,10 +2256,6 @@ static void zram_bio_read(struct zram *zram, struct bio *bio)
 		}
 		flush_dcache_page(bv.bv_page);
 
-		zram_slot_lock(zram, index);
-		zram_accessed(zram, index);
-		zram_slot_unlock(zram, index);
-
 		bio_advance_iter_single(bio, &iter, bv.bv_len);
 	} while (iter.bi_size);
 
@@ -2281,10 +2281,6 @@ static void zram_bio_write(struct zram *zram, struct bio *bio)
 			bio->bi_status = BLK_STS_IOERR;
 			break;
 		}
-
-		zram_slot_lock(zram, index);
-		zram_accessed(zram, index);
-		zram_slot_unlock(zram, index);
 
 		bio_advance_iter_single(bio, &iter, bv.bv_len);
 	} while (iter.bi_size);
