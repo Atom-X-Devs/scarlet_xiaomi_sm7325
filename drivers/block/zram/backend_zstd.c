@@ -13,8 +13,7 @@
 struct zstd_ctx {
 	zstd_cctx *cctx;
 	zstd_dctx *dctx;
-	void *cctx_mem;
-	void *dctx_mem;
+	void *mem;
 };
 
 struct zstd_params {
@@ -76,11 +75,11 @@ static int zstd_setup_params(struct zcomp_params *params)
 	zp->custom_mem.customAlloc = zstd_custom_alloc;
 	zp->custom_mem.customFree = zstd_custom_free;
 
-	prm = zstd_get_cparams(params->level, PAGE_SIZE,
-			       params->dict_sz);
-
 	if (!params->dict || !params->dict_sz)
 		return 0;
+
+	prm = zstd_get_cparams(params->level, PAGE_SIZE,
+			       params->dict_sz);
 
 	zp->cdict = zstd_create_cdict_byreference(params->dict,
 						  params->dict_sz,
@@ -102,70 +101,92 @@ error:
 	return -EINVAL;
 }
 
-static void zstd_destroy(struct zcomp_ctx *ctx)
+static void zstd_destroy_cctx(struct zcomp_ctx *ctx)
 {
 	struct zstd_ctx *zctx = ctx->context;
 
 	if (!zctx)
 		return;
 
-	/*
-	 * If ->cctx_mem and ->dctx_mem were allocated then we didn't use
-	 * C/D dictionary and ->cctx / ->dctx were "embedded" into these
-	 * buffers.
-	 *
-	 * If otherwise then we need to explicitly release ->cctx / ->dctx.
-	 */
-	if (zctx->cctx_mem)
-		vfree(zctx->cctx_mem);
+	/* Static contexts are embedded in the workspace. */
+	if (zctx->mem)
+		vfree(zctx->mem);
 	else
 		zstd_free_cctx(zctx->cctx);
-
-	if (zctx->dctx_mem)
-		vfree(zctx->dctx_mem);
-	else
-		zstd_free_dctx(zctx->dctx);
 
 	kfree(zctx);
 }
 
-static int zstd_create(struct zcomp_params *params, struct zcomp_ctx *ctx)
+static int zstd_create_cctx(struct zcomp_params *params, struct zcomp_ctx *ctx)
 {
+	struct zstd_params *zp = params->drv_data;
 	struct zstd_ctx *zctx;
-	zstd_parameters prm;
-	size_t sz;
+	size_t size;
 
 	zctx = kzalloc(sizeof(*zctx), GFP_KERNEL);
 	if (!zctx)
 		return -ENOMEM;
 
 	ctx->context = zctx;
-	if (params->dict_sz == 0) {
-		prm = zstd_get_params(params->level, PAGE_SIZE);
-		sz = zstd_cctx_workspace_bound(&prm.cParams);
-		zctx->cctx_mem = vzalloc(sz);
-		if (!zctx->cctx_mem)
+	if (!zp->cdict) {
+		size = zstd_cctx_workspace_bound(&zp->cprm.cParams);
+		zctx->mem = vzalloc(size);
+		if (!zctx->mem)
 			goto error;
 
-		zctx->cctx = zstd_init_cctx(zctx->cctx_mem, sz);
+		zctx->cctx = zstd_init_cctx(zctx->mem, size);
 		if (!zctx->cctx)
 			goto error;
-
-		sz = zstd_dctx_workspace_bound();
-		zctx->dctx_mem = vzalloc(sz);
-		if (!zctx->dctx_mem)
-			goto error;
-
-		zctx->dctx = zstd_init_dctx(zctx->dctx_mem, sz);
-		if (!zctx->dctx)
-			goto error;
 	} else {
-		struct zstd_params *zp = params->drv_data;
-
 		zctx->cctx = zstd_create_cctx_advanced(zp->custom_mem);
 		if (!zctx->cctx)
 			goto error;
+	}
 
+	return 0;
+
+error:
+	zstd_destroy_cctx(ctx);
+	return -ENOMEM;
+}
+
+static void zstd_destroy_dctx(struct zcomp_ctx *ctx)
+{
+	struct zstd_ctx *zctx = ctx->context;
+
+	if (!zctx)
+		return;
+
+	/* Static contexts are embedded in the workspace. */
+	if (zctx->mem)
+		vfree(zctx->mem);
+	else
+		zstd_free_dctx(zctx->dctx);
+
+	kfree(zctx);
+}
+
+static int zstd_create_dctx(struct zcomp_params *params, struct zcomp_ctx *ctx)
+{
+	struct zstd_params *zp = params->drv_data;
+	struct zstd_ctx *zctx;
+	size_t size;
+
+	zctx = kzalloc(sizeof(*zctx), GFP_KERNEL);
+	if (!zctx)
+		return -ENOMEM;
+
+	ctx->context = zctx;
+	if (!zp->ddict) {
+		size = zstd_dctx_workspace_bound();
+		zctx->mem = vzalloc(size);
+		if (!zctx->mem)
+			goto error;
+
+		zctx->dctx = zstd_init_dctx(zctx->mem, size);
+		if (!zctx->dctx)
+			goto error;
+	} else {
 		zctx->dctx = zstd_create_dctx_advanced(zp->custom_mem);
 		if (!zctx->dctx)
 			goto error;
@@ -174,9 +195,8 @@ static int zstd_create(struct zcomp_params *params, struct zcomp_ctx *ctx)
 	return 0;
 
 error:
-	zstd_release_params(params);
-	zstd_destroy(ctx);
-	return -EINVAL;
+	zstd_destroy_dctx(ctx);
+	return -ENOMEM;
 }
 
 static int zstd_compress(struct zcomp_params *params, struct zcomp_ctx *ctx,
@@ -186,7 +206,7 @@ static int zstd_compress(struct zcomp_params *params, struct zcomp_ctx *ctx,
 	struct zstd_ctx *zctx = ctx->context;
 	size_t ret;
 
-	if (params->dict_sz == 0)
+	if (!zp->cdict)
 		ret = zstd_compress_cctx(zctx->cctx, req->dst, req->dst_len,
 					 req->src, req->src_len, &zp->cprm);
 	else
@@ -207,14 +227,14 @@ static int zstd_decompress(struct zcomp_params *params, struct zcomp_ctx *ctx,
 	struct zstd_ctx *zctx = ctx->context;
 	size_t ret;
 
-	if (params->dict_sz == 0)
+	if (!zp->ddict)
 		ret = zstd_decompress_dctx(zctx->dctx, req->dst, req->dst_len,
 					   req->src, req->src_len);
 	else
 		ret = zstd_decompress_using_ddict(zctx->dctx, req->dst,
 						  req->dst_len, req->src,
 						  req->src_len, zp->ddict);
-	if (zstd_is_error(ret))
+	if (ret != req->dst_len)
 		return -EINVAL;
 	return 0;
 }
@@ -222,8 +242,10 @@ static int zstd_decompress(struct zcomp_params *params, struct zcomp_ctx *ctx,
 const struct zcomp_ops backend_zstd = {
 	.compress	= zstd_compress,
 	.decompress	= zstd_decompress,
-	.create_ctx	= zstd_create,
-	.destroy_ctx	= zstd_destroy,
+	.create_cctx	= zstd_create_cctx,
+	.destroy_cctx	= zstd_destroy_cctx,
+	.create_dctx	= zstd_create_dctx,
+	.destroy_dctx	= zstd_destroy_dctx,
 	.setup_params	= zstd_setup_params,
 	.release_params	= zstd_release_params,
 	.name		= "zstd",
