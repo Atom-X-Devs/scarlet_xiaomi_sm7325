@@ -225,8 +225,9 @@ bool __ksu_is_allow_uid(uid_t uid)
 		return true;
 	}
 
-	if (IS_ENABLED(CONFIG_KSU_DEBUG) && unlikely(uid == SHELL_UID))
+	if (allow_shell && uid == SHELL_UID) {
 		return true;
+	}
 
 	rcu_read_lock();
 	hash_for_each_possible_rcu (allow_list, p, list, uid) {
@@ -240,7 +241,7 @@ bool __ksu_is_allow_uid(uid_t uid)
 	return false;
 }
 
-bool __ksu_is_allow_uid_for_current(uid_t uid)
+bool ksu_is_uid_granted_root(uid_t uid)
 {
 	if (unlikely(uid == 0)) {
 		// already root, but only allow our domain.
@@ -249,16 +250,20 @@ bool __ksu_is_allow_uid_for_current(uid_t uid)
 	return __ksu_is_allow_uid(uid);
 }
 
+bool __ksu_is_allow_uid_for_current(uid_t uid)
+{
+	if (unlikely(uid == SHELL_UID) && !ksu_shell_su_allowed_for_current()) {
+		return false;
+	}
+	return ksu_is_uid_granted_root(uid);
+}
+
 bool ksu_uid_should_umount(uid_t uid)
 {
 	struct app_profile *profile;
 	bool res;
 	if (likely(ksu_is_manager_appid_valid()) && unlikely(ksu_get_manager_appid() == uid % PER_USER_RANGE)) {
 		// we should not umount on manager!
-		return false;
-	}
-	if (unlikely(uid == WEBVIEW_ZYGOTE_UID)) {
-		// we should not umount for webview zygote
 		return false;
 	}
 
@@ -301,8 +306,9 @@ struct root_profile *ksu_get_root_profile(uid_t uid)
 		goto use_default;
 	}
 
-	if (IS_ENABLED(CONFIG_KSU_DEBUG) && unlikely(uid == SHELL_UID))
+	if (allow_shell && uid == SHELL_UID) {
 		goto use_default;
+	}
 
 retry:
 	res = NULL;
@@ -369,6 +375,7 @@ static void do_persistent_allow_list()
 	loff_t off = 0;
 	int i;
 
+	const struct cred *saved = override_creds(ksu_cred);
 	struct file *fp = filp_open(KERNEL_SU_ALLOWLIST, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (IS_ERR(fp)) {
 		pr_err("save_allow_list create file failed: %ld\n", PTR_ERR(fp));
@@ -396,15 +403,11 @@ static void do_persistent_allow_list()
 close_file:
 	filp_close(fp, 0);
 out:
-	return;
+	revert_creds(saved);
 }
 
-// this is a bit heavier than task work / workqueue but this allows
-// us to have our own context. we give it a full escaped-to-root one.
 static int persistent_allow_list_pre(void *data)
 {
-	pr_info("do_persistent_allow_list: pid: %d started\n", current->pid);
-
 	/**
 	 * repurpose the mutex they were holding on ksu_persistent_allow_list_fn
 	 * since all this does eventually is to call kernel_write
@@ -413,13 +416,10 @@ static int persistent_allow_list_pre(void *data)
 	 * we just let other threads stall.
 	 * 'mutex-trylock-fail-then-return' is detrimental here
 	 */
-	mutex_lock(&allowlist_mutex);
-
+	guarded_mutex_lock(&allowlist_mutex);
+	pr_info("do_persistent_allow_list: pid: %d started\n", current->pid);
 	escape_to_root_forced(); // give permissions for everything
 	do_persistent_allow_list();
-
-	mutex_unlock(&allowlist_mutex);
-
 	pr_info("do_persistent_allow_list: pid: %d exit\n", current->pid);
 	return 0;
 }
@@ -464,7 +464,9 @@ void ksu_load_allow_list()
 	size_t app_profile_size;
 
 	// load allowlist now!
+	const struct cred *saved = override_creds(ksu_cred);
 	fp = filp_open(KERNEL_SU_ALLOWLIST, O_RDONLY, 0);
+	revert_creds(saved);
 	if (IS_ERR(fp)) {
 		pr_err("load_allow_list open file failed: %ld\n", PTR_ERR(fp));
 		return;
@@ -536,7 +538,7 @@ void ksu_prune_allowlist(bool (*is_uid_valid)(uid_t, char *, void *), void *data
 		uid_t uid = np->profile.curr_uid;
 		char *package = np->profile.key;
 		// we use this uid for special cases, don't prune it!
-		bool is_preserved_uid = uid == KSU_APP_PROFILE_PRESERVE_UID;
+		bool is_preserved_uid = uid == KSU_APP_PROFILE_PRESERVE_UID || uid == WEBVIEW_ZYGOTE_UID;
 		if (!is_preserved_uid && !is_uid_valid(uid, package, data)) {
 			modified = true;
 			pr_info("prune uid: %d, package: %s\n", uid, package);

@@ -123,13 +123,11 @@ static struct avtab_node *get_avtab_node(struct policydb *db,
 		if (!node)
 			return NULL;
 
+		// extra size: add_type() can grow policy without updating db->len
 		int grow_size = sizeof(struct avtab_key);
 		grow_size += sizeof(struct avtab_datum);
 		if (key->specified & AVTAB_XPERMS) {
-			grow_size += sizeof(u8);
-			grow_size += sizeof(u8);
-			grow_size += sizeof(u32) *
-				     ARRAY_SIZE(avdatum.u.xperms->perms.p);
+			grow_size += sizeof(avdatum.u.xperms->specified) + sizeof(avdatum.u.xperms->driver) + sizeof(avdatum.u.xperms->perms.p);
 		}
 		db->len += grow_size;
 	}
@@ -182,7 +180,8 @@ static bool remove_avtab_node(struct policydb *db, struct avtab_node *node)
 {
 	int i;
 	int ret;
-	int shrink_size = sizeof(struct avtab_key) + sizeof(struct avtab_datum);
+	// https://github.com/torvalds/linux/blob/v6.1/security/selinux/ss/avtab.c#L619
+	int shrink_size = sizeof(node->key.source_type) + sizeof(node->key.target_type) + sizeof(node->key.target_class) + sizeof(node->key.specified);
 	struct avtab removed = {};
 	struct avtab_node *n;
 	struct avtab_node *prev;
@@ -208,6 +207,12 @@ static bool remove_avtab_node(struct policydb *db, struct avtab_node *node)
 			if ((n->key.specified & AVTAB_XPERMS) && n->datum.u.xperms) {
 				shrink_size += sizeof(u8) + sizeof(u8) + sizeof(u32) * ARRAY_SIZE(n->datum.u.xperms->perms.p);
 			}
+			if (n->key.specified & AVTAB_XPERMS)
+				// specified and driver are u8, perms.p holds 8 u32s
+				shrink_size += sizeof(n->datum.u.xperms->specified) + sizeof(n->datum.u.xperms->driver) + sizeof(n->datum.u.xperms->perms.p);
+			else 
+				// data is u32
+				shrink_size += sizeof(n->datum.u.data);
 			n->next = NULL;
 			avtab_set_slot(&removed, 0, n);
 			removed.nel = 1;
@@ -429,14 +434,10 @@ static void add_xperm_rule_raw(struct policydb *db, struct type_datum *src, stru
 		}
 		datum = &node->datum;
 
-		if (datum->u.xperms == NULL) {
-			datum->u.xperms = (struct avtab_extended_perms *)(kzalloc(sizeof(xperms), GFP_ATOMIC));
-			if (!datum->u.xperms) {
-				pr_err("alloc xperms failed\n");
-				return;
-			}
-			memcpy(datum->u.xperms, &xperms, sizeof(xperms));
-		}
+		// Allow updating permission bits of existing xperms
+		for (i = 0; i < ARRAY_SIZE(xperms.perms.p); i++)
+			datum->u.xperms->perms.p[i] |= xperms.perms.p[i];
+
 	}
 }
 
@@ -570,12 +571,11 @@ static const struct hashtab_key_params filenametr_key_params = {
 };
 #endif
 
-static bool add_filename_trans(struct policydb *db, const char *s,
-			       const char *t, const char *c, const char *d,
-			       const char *o)
+static bool add_filename_trans(struct policydb *db, const char *s, const char *t, const char *c, const char *d, const char *o)
 {
 	struct type_datum *src, *tgt, *def;
 	struct class_datum *cls;
+	int rc;
 
 	src = symtab_search(&db->p_types, s);
 	if (src == NULL) {
@@ -599,6 +599,7 @@ static bool add_filename_trans(struct policydb *db, const char *s,
 	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+	struct filename_trans_key *new_key = NULL;
 	struct filename_trans_key key;
 	key.ttype = tgt->value;
 	key.tclass = cls->value;
@@ -625,46 +626,77 @@ static bool add_filename_trans(struct policydb *db, const char *s,
 
 	if (trans == NULL) {
 		trans = (struct filename_trans_datum *)kcalloc(1, sizeof(*trans), GFP_KERNEL);
-		struct filename_trans_key *new_key = (struct filename_trans_key *)kzalloc(sizeof(*new_key), GFP_KERNEL);
+		if (!trans) {
+			pr_err("add_filename_trans: alloc filename_trans_datum failed\n");
+			goto out;
+		}
+		new_key = (struct filename_trans_key *)kzalloc(sizeof(*new_key), GFP_KERNEL);
+		if (!new_key) {
+			pr_err("add_filename_trans: alloc filename_trans_key failed\n");
+			goto free_trans;
+		}
 		*new_key = key;
 		new_key->name = kstrdup(key.name, GFP_KERNEL);
+		if (!new_key->name) {
+			pr_err("add_filename_trans: kstrdup name failed\n");
+			goto free_key;
+		}
 		trans->next = last;
 		trans->otype = def->value;
-		hashtab_insert(&db->filename_trans, new_key, trans, filenametr_key_params);
+		rc = hashtab_insert(&db->filename_trans, new_key, trans, filenametr_key_params);
+		if (rc) {
+			pr_err("add_filename_trans: hashtab_insert failed: %d\n", rc);
+			goto free_name;
+		}
 	}
 
 	db->compat_filename_trans_count++;
 	return ebitmap_set_bit(&trans->stypes, src->value - 1, 1) == 0;
 #else // < 5.7.0, has no filename_trans_key, but struct filename_trans
 
+	struct filename_trans *new_key = NULL;
 	struct filename_trans key;
 	key.ttype = tgt->value;
 	key.tclass = cls->value;
 	key.name = (char *)o;
 
-	struct filename_trans_datum *trans =
-		hashtab_search(db->filename_trans, &key);
-
+	struct filename_trans_datum *trans = hashtab_search(db->filename_trans, &key);
 	if (trans == NULL) {
 		trans = (struct filename_trans_datum *)kcalloc(sizeof(*trans), 1, GFP_KERNEL);
 		if (!trans) {
 			pr_err("add_filename_trans: Failed to alloc datum\n");
-			return false;
+			goto out;
 		}
-		struct filename_trans *new_key =
-			(struct filename_trans *)kmalloc(sizeof(*new_key), GFP_KERNEL);
+		new_key = (struct filename_trans *)kzalloc(sizeof(*new_key), GFP_KERNEL);
 		if (!new_key) {
 			pr_err("add_filename_trans: Failed to alloc new_key\n");
-			return false;
+			goto free_trans;
 		}
 		*new_key = key;
 		new_key->name = kstrdup(key.name, GFP_KERNEL);
+		if (!new_key->name) {
+			pr_err("add_filename_trans: kstrdup name failed\n");
+			goto free_key;
+		}
 		trans->otype = def->value;
-		hashtab_insert(db->filename_trans, new_key, trans);
+		rc = hashtab_insert(db->filename_trans, new_key, trans);
+		if (rc) {
+			pr_err("add_filename_trans: hashtab_insert failed: %d\n", rc);
+			goto free_name;
+		}
 	}
 
 	return ebitmap_set_bit(&db->filename_trans_ttypes, src->value - 1, 1) == 0;
 #endif
+
+free_name:
+	kfree(new_key->name);
+free_key:
+	kfree(new_key);
+free_trans:
+	kfree(trans);
+out:
+	return false;
 }
 
 static bool add_genfscon(struct policydb *db, const char *fs_name, const char *path, const char *context)
@@ -687,7 +719,7 @@ static void *ksu_kvrealloc_compat(const void *p, size_t oldsize, size_t newsize,
 	newp = kvmalloc(newsize, flags);
 	if (!newp)
 		return NULL;
-	__builtin_memcpy(newp, p, oldsize); // bypass fortify_source, kasan
+	memcpy(newp, p, oldsize);
 	kvfree(p);
 	return newp;
 }
@@ -1210,10 +1242,14 @@ struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol)
 	void *data;
 	struct policy_file fp;
 
-	len = old_pol->policydb.len;
+	// Some device policy db seems not marking type itself in type_attr_map_array
+	// policydb_read() adds each type to its own attribute map, so old_pol->policydb.len may be smaller
+	// preserve one ebitmap entry for this condition to avoid trigger -EINVAL
+	len = old_pol->policydb.len + (size_t)old_pol->policydb.p_types.nprim * (sizeof(u32) + sizeof(u64));
+
 	data = vmalloc(len);
 	if (!data) {
-		pr_err("alloc policy len %ld\n", len);
+		pr_err("alloc policy buffer len %zu\n", len);
 		ret = -ENOMEM;
 		goto out_free_data;
 	}
@@ -1226,7 +1262,9 @@ struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol)
 		pr_err("sepolicy: policydb_write: %d\n", ret);
 		goto out_free_data;
 	}
-
+	len -= fp.len;
+	// https://android.googlesource.com/kernel/common/+/35a7845718734ae638b85b420534cb859498dab6%5E%21
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
 	// https://android-review.googlesource.com/c/kernel/common/+/3009995/11/security/selinux/ss/policydb.c
 	// fixup config
 	// 4*2+8+4
@@ -1234,17 +1272,21 @@ struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol)
 	if (len >= kConfigOff + sizeof(u32)) {
 		u32 *config_ptr = (u32 *)((unsigned long)data + kConfigOff);
 		pr_info("old config: %u\n", *config_ptr);
+	#ifdef POLICYDB_CONFIG_ANDROID_NETLINK_ROUTE
 		if (old_pol->policydb.android_netlink_route) {
 			pr_info("adding POLICYDB_CONFIG_ANDROID_NETLINK_ROUTE\n");
 			*config_ptr |= POLICYDB_CONFIG_ANDROID_NETLINK_ROUTE;
 		}
+	#endif
+	#ifdef POLICYDB_CONFIG_ANDROID_NETLINK_GETNEIGH
 		if (old_pol->policydb.android_netlink_getneigh) {
 			pr_info("adding POLICYDB_CONFIG_ANDROID_NETLINK_GETNEIGH\n");
 			*config_ptr |= POLICYDB_CONFIG_ANDROID_NETLINK_GETNEIGH;
 		}
+	#endif
 		pr_info("new config: %u\n", *config_ptr);
 	}
-
+#endif
 	new_pol = kmemdup(old_pol, sizeof(*old_pol), GFP_KERNEL);
 	if (!new_pol) {
 		ret = -ENOMEM;
@@ -1262,7 +1304,7 @@ struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol)
 		pr_err("sepolicy: policydb_read: %d\n", ret);
 		goto out_free_policydb;
 	}
-	new_pol->policydb.len = old_pol->policydb.len;
+	new_pol->policydb.len = len;
 	kvfree(data);
 
 	return new_pol;
