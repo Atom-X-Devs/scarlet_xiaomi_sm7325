@@ -7,6 +7,7 @@
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/cpuhotplug.h>
+#include <linux/jiffies.h>
 #include <linux/highmem.h>
 #include <linux/scatterlist.h>
 #include <linux/vmalloc.h>
@@ -56,26 +57,30 @@ static void zcomp_cstrm_free(struct zcomp *comp, struct zcomp_cstrm *zstrm)
 
 static int zcomp_cstrm_init(struct zcomp *comp, struct zcomp_cstrm *zstrm)
 {
+	struct zcomp_ctx ctx = {};
+	void *buffer;
 	int ret;
 
+	/*
+	 * Allocate two pages so the output can exceed the input size.
+	 * Allocate before taking the stream lock since reclaim can use zram.
+	 */
+	buffer = vzalloc(2 * PAGE_SIZE);
+	if (!buffer)
+		return -ENOMEM;
+
 	if (comp->ops->create_cctx) {
-		ret = comp->ops->create_cctx(comp->params, &zstrm->ctx);
+		ret = comp->ops->create_cctx(comp->params, &ctx);
 		if (ret) {
-			/* backend has released partially created context */
-			zstrm->ctx.context = NULL;
+			vfree(buffer);
 			return ret;
 		}
 	}
 
-	/*
-	 * allocate 2 pages. 1 for compressed data, plus 1 extra for the
-	 * case when compressed size is larger than the original one
-	 */
-	zstrm->buffer = vzalloc(2 * PAGE_SIZE);
-	if (!zstrm->buffer) {
-		zcomp_cstrm_free(comp, zstrm);
-		return -ENOMEM;
-	}
+	mutex_lock(&zstrm->lock);
+	zstrm->ctx = ctx;
+	zstrm->buffer = buffer;
+	mutex_unlock(&zstrm->lock);
 	return 0;
 }
 
@@ -90,22 +95,26 @@ static void zcomp_dstrm_free(struct zcomp *comp, struct zcomp_dstrm *zstrm)
 
 static int zcomp_dstrm_init(struct zcomp *comp, struct zcomp_dstrm *zstrm)
 {
+	struct zcomp_ctx ctx = {};
+	void *local_copy;
 	int ret;
 
+	local_copy = vzalloc(PAGE_SIZE);
+	if (!local_copy)
+		return -ENOMEM;
+
 	if (comp->ops->create_dctx) {
-		ret = comp->ops->create_dctx(comp->params, &zstrm->ctx);
+		ret = comp->ops->create_dctx(comp->params, &ctx);
 		if (ret) {
-			/* backend has released partially created context */
-			zstrm->ctx.context = NULL;
+			vfree(local_copy);
 			return ret;
 		}
 	}
 
-	zstrm->local_copy = vzalloc(PAGE_SIZE);
-	if (!zstrm->local_copy) {
-		zcomp_dstrm_free(comp, zstrm);
-		return -ENOMEM;
-	}
+	down_write(&zstrm->lock);
+	zstrm->ctx = ctx;
+	zstrm->local_copy = local_copy;
+	up_write(&zstrm->lock);
 	return 0;
 }
 
@@ -185,38 +194,74 @@ bool zcomp_shared_decomp(struct zcomp *comp)
 	return !comp->ops->create_dctx;
 }
 
+static bool zcomp_dstrm_excl_trylock(struct zcomp_dstrm *zstrm)
+{
+	/* Cheap pre-check: don't touch a busy stream's cachelines */
+	if (mutex_is_locked(&zstrm->excl_lock))
+		return false;
+	/*
+	 * Pin the stream.  Hotplug initializes and tears down the stream
+	 * under the write side, clearing ->local_copy at teardown.
+	 */
+	if (!down_read_trylock(&zstrm->lock))
+		return false;
+	if (zstrm->local_copy && mutex_trylock(&zstrm->excl_lock))
+		return true;
+	up_read(&zstrm->lock);
+	return false;
+}
+
+static struct zcomp_dstrm *zcomp_dstrm_excl_tryget(struct zcomp *comp)
+{
+	unsigned int cpu, start = raw_smp_processor_id();
+	struct zcomp_dstrm *zstrm;
+
+	/* Best-effort start CPU hint; migration during the scan is fine */
+	for_each_cpu_wrap(cpu, cpu_online_mask, start) {
+		zstrm = per_cpu_ptr(comp->dstream, cpu);
+		if (zcomp_dstrm_excl_trylock(zstrm))
+			return zstrm;
+	}
+	return NULL;
+}
+
 struct zcomp_dstrm *zcomp_dstrm_get(struct zcomp *comp,
 				    enum zcomp_dstrm_mode mode)
 {
-	for (;;) {
-		struct zcomp_dstrm *zstrm = raw_cpu_ptr(comp->dstream);
+	struct zcomp_dstrm *zstrm;
 
-		/*
-		 * Pin the stream.  The write side of ->lock is only taken
-		 * by zcomp_cpu_dead(), so this never contends with other
-		 * decompression requests, regardless of their mode.
-		 */
-		down_read(&zstrm->lock);
-		if (!zstrm->local_copy) {
-			/* The stream has been destroyed, re-try */
+	if (mode == ZCOMP_DSTRM_SHARED) {
+		for (;;) {
+			zstrm = raw_cpu_ptr(comp->dstream);
+			down_read(&zstrm->lock);
+			if (zstrm->local_copy)
+				return zstrm;
 			up_read(&zstrm->lock);
-			continue;
 		}
-
-		/*
-		 * Exclusive requests additionally own ->local_copy and
-		 * ->ctx and hence can only wait for each other.
-		 */
-		if (mode == ZCOMP_DSTRM_EXCLUSIVE)
-			mutex_lock(&zstrm->excl_lock);
-		return zstrm;
 	}
+
+	/*
+	 * A CPU can become available without a stream put if it comes online
+	 * while the mask is being scanned. Retry even without a wakeup.
+	 */
+	do {
+		wait_event_timeout(comp->dstrm_waitq,
+				   (zstrm = zcomp_dstrm_excl_tryget(comp)),
+				   msecs_to_jiffies(20));
+	} while (!zstrm);
+	return zstrm;
 }
 
-void zcomp_dstrm_put(struct zcomp_dstrm *zstrm, enum zcomp_dstrm_mode mode)
+void zcomp_dstrm_put(struct zcomp *comp, struct zcomp_dstrm *zstrm,
+		     enum zcomp_dstrm_mode mode)
 {
-	if (mode == ZCOMP_DSTRM_EXCLUSIVE)
+	if (mode == ZCOMP_DSTRM_EXCLUSIVE) {
 		mutex_unlock(&zstrm->excl_lock);
+		up_read(&zstrm->lock);
+		if (wq_has_sleeper(&comp->dstrm_waitq))
+			wake_up(&comp->dstrm_waitq);
+		return;
+	}
 	up_read(&zstrm->lock);
 }
 
@@ -289,6 +334,8 @@ int zcomp_decompress(struct zcomp *comp, struct zcomp_dstrm *zstrm,
 	mutex_lock(&zstrm->excl_lock);
 	ret = zcomp_decompress_buf(comp, zstrm, sg, zstrm->local_copy, &req);
 	mutex_unlock(&zstrm->excl_lock);
+	if (wq_has_sleeper(&comp->dstrm_waitq))
+		wake_up(&comp->dstrm_waitq);
 	return ret;
 }
 
@@ -310,7 +357,9 @@ int zcomp_cpu_up_prepare(unsigned int cpu, struct hlist_node *node)
 	ret = zcomp_dstrm_init(comp, dstrm);
 	if (ret) {
 		pr_err("Can't allocate a decompression stream\n");
+		mutex_lock(&cstrm->lock);
 		zcomp_cstrm_free(comp, cstrm);
+		mutex_unlock(&cstrm->lock);
 		return ret;
 	}
 
@@ -356,6 +405,8 @@ static int zcomp_init(struct zcomp *comp, struct zcomp_params *params)
 		ret = -ENOMEM;
 		goto cleanup;
 	}
+
+	init_waitqueue_head(&comp->dstrm_waitq);
 
 	for_each_possible_cpu(cpu) {
 		struct zcomp_dstrm *zstrm = per_cpu_ptr(comp->dstream, cpu);
