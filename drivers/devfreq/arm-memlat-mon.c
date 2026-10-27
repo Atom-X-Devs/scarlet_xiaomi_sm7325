@@ -30,6 +30,7 @@
 #include <linux/spinlock.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
+#include <linux/sched/stat.h>
 
 enum common_ev_idx {
 	INST_IDX,
@@ -128,6 +129,7 @@ struct memlat_cpu_grp {
 	wait_queue_head_t	waitq;
 	atomic_t		kick;
 	struct hrtimer		timer;
+	atomic_t		idle_paused;
 	unsigned int		update_ms;
 
 	unsigned int		num_mons;
@@ -165,7 +167,7 @@ static inline void read_event(struct event_data *event)
 	if (!event->pevent)
 		return;
 
-	if (!per_cpu(cpu_is_idle, event->pevent->cpu) &&
+	if (!smp_load_acquire(per_cpu_ptr(&cpu_is_idle, event->pevent->cpu)) &&
 			!per_cpu(cpu_is_hp, event->pevent->cpu)) {
 		total = perf_event_read_value(event->pevent, &enabled,
 								&running);
@@ -343,6 +345,71 @@ static enum hrtimer_restart memlat_hrtimer_handler(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+/*
+ * When the last window had no cycles on any CPU and all CPUs are idle, we
+ * mark that as quiet. Exclude the sampler's CPU making sure there's nothing
+ * else queued.
+ */
+static bool memlat_grp_quiet(struct memlat_cpu_grp *cpu_grp)
+{
+	unsigned int cpu, this_cpu = get_cpu();
+
+	for_each_cpu(cpu, &cpu_grp->cpus) {
+		if (per_cpu(cpu_is_hp, cpu))
+			continue;
+
+		if (cpu == this_cpu) {
+			if (!single_task_running()) {
+				put_cpu();
+				return false;
+			}
+		} else if (!per_cpu(cpu_is_idle, cpu) ||
+			   to_common_evs(cpu_grp, cpu)[CYC_IDX].last_delta) {
+			put_cpu();
+			return false;
+		}
+	}
+
+	put_cpu();
+	return true;
+}
+
+/* Returns true if the caller must not re-arm the timer */
+static bool memlat_try_pause(struct memlat_cpu_grp *cpu_grp)
+{
+	if (!memlat_grp_quiet(cpu_grp))
+		return false;
+
+	/* Publish pause before re-reading idle_paused */
+	atomic_xchg(&cpu_grp->idle_paused, 1);
+	if (memlat_grp_quiet(cpu_grp))
+		return true;
+
+	/*
+	 * A CPU woke up in-between. If its resume path already took the
+	 * pause, it also re-armed the timer. Otherwise, undo and let the
+	 * caller re-arm.
+	 */
+	return atomic_cmpxchg(&cpu_grp->idle_paused, 1, 0) != 1;
+}
+
+/* Resume sampling */
+static void memlat_resume(struct memlat_cpu_grp *cpu_grp)
+{
+	if (!atomic_read(&cpu_grp->idle_paused) ||
+	    atomic_cmpxchg(&cpu_grp->idle_paused, 1, 0) != 1)
+		return;
+
+	/* 
+	 * Since the counters were frozen while idle, measure them from
+	 * the point of wakeup.
+	 */
+	cpu_grp->last_update_ts = ktime_get();
+	if (cpu_grp->update_ms != UINT_MAX)
+		hrtimer_start(&cpu_grp->timer, ms_to_ktime(cpu_grp->update_ms),
+			      HRTIMER_MODE_REL_PINNED);
+}
+
 static int memlat_thread(void *data)
 {
 	int err;
@@ -382,7 +449,8 @@ static int memlat_thread(void *data)
 				mutex_unlock(&df->lock);
 			}
 
-			if (cpu_grp->update_ms != UINT_MAX)
+			if (cpu_grp->update_ms != UINT_MAX &&
+			    !memlat_try_pause(cpu_grp))
 				hrtimer_start(&cpu_grp->timer,
 					      ms_to_ktime(cpu_grp->update_ms),
 					      HRTIMER_MODE_REL);
@@ -501,6 +569,9 @@ static int memlat_event_hotplug_coming_up(unsigned int cpu)
 	if (cpu_grp->num_active_mons) {
 		ret = memlat_hp_restart_events(cpu, true);
 		per_cpu(cpu_is_hp, cpu) = false;
+		per_cpu(cpu_is_idle, cpu) = false;
+		smp_mb();
+		memlat_resume(cpu_grp);
 	}
 	mutex_unlock(&cpu_grp->mons_lock);
 
@@ -552,20 +623,23 @@ static int memlat_idle_notif(struct notifier_block *nb, unsigned long action,
 {
 	int ret = NOTIFY_OK;
 	int cpu = smp_processor_id();
+	struct memlat_cpu_grp *cpu_grp;
 
 	switch (action) {
 	case IDLE_START:
-		__this_cpu_write(cpu_is_idle, true);
-		if (per_cpu(cpu_is_hp, cpu))
-			goto idle_exit;
-		else
+		if (!per_cpu(cpu_is_hp, cpu))
 			ret = memlat_idle_read_events(cpu);
+		smp_store_release(this_cpu_ptr(&cpu_is_idle), true);
 		break;
 	case IDLE_END:
 		__this_cpu_write(cpu_is_idle, false);
+		/* Barrier here to pair with atomic_xchg() in memlat_try_pause() */
+		smp_mb();
+		cpu_grp = this_cpu_read(per_cpu_grp);
+		if (unlikely(cpu_grp && atomic_read(&cpu_grp->idle_paused)))
+			memlat_resume(cpu_grp);
 		break;
 	}
-idle_exit:
 	return ret;
 }
 static struct notifier_block memlat_event_idle_nb = {
@@ -639,7 +713,7 @@ static int start_hwmon(struct memlat_hwmon *hw)
 	spin_unlock_irqrestore(&cpu_grp->mon_active_lock, flags);
 
 
-	if (should_init_cpu_grp)
+	if (should_init_cpu_grp && cpu_grp->update_ms != UINT_MAX)
 		hrtimer_start(&cpu_grp->timer,
 			      ms_to_ktime(cpu_grp->update_ms),
 			      HRTIMER_MODE_REL);
@@ -701,6 +775,7 @@ static void stop_hwmon(struct memlat_hwmon *hw)
 	if (!cpu_grp->num_active_mons) {
 		struct task_struct *thread;
 
+		atomic_set(&cpu_grp->idle_paused, 0);
 		hrtimer_cancel(&cpu_grp->timer);
 		thread = cpu_grp->thread;
 		cpu_grp->thread = NULL;
@@ -749,12 +824,14 @@ static void set_update_ms(struct memlat_cpu_grp *cpu_grp)
 
 	if (new_update_ms != cpu_grp->update_ms) {
 		cpu_grp->update_ms = new_update_ms;
-		if (new_update_ms == UINT_MAX)
+		if (new_update_ms == UINT_MAX) {
+			atomic_set(&cpu_grp->idle_paused, 0);
 			hrtimer_cancel(&cpu_grp->timer);
-		else
+		} else if (!atomic_read(&cpu_grp->idle_paused)) {
 			hrtimer_start(&cpu_grp->timer,
 				      ms_to_ktime(new_update_ms),
 				      HRTIMER_MODE_REL);
+		}
 	}
 }
 
