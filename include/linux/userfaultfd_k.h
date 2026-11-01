@@ -127,6 +127,7 @@ extern int userfaultfd_unmap_prep(struct mm_struct *mm, unsigned long start,
 				  unsigned long end, struct list_head *uf);
 extern void userfaultfd_unmap_complete(struct mm_struct *mm,
 				       struct list_head *uf);
+void userfaultfd_unmap_abort(struct list_head *uf);
 
 #else /* CONFIG_USERFAULTFD */
 
@@ -201,6 +202,10 @@ static inline int userfaultfd_unmap_prep(struct mm_struct *mm,
 
 static inline void userfaultfd_unmap_complete(struct mm_struct *mm,
 					      struct list_head *uf)
+{
+}
+
+static inline void userfaultfd_unmap_abort(struct list_head *uf)
 {
 }
 

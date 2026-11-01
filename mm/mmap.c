@@ -2504,6 +2504,7 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 {
 	struct vm_area_struct *prev, *next = NULL;
 	struct maple_tree mt_detach;
+	LIST_HEAD(uf_new_unmaps);
 	int count = 0;
 	int error = -ENOMEM;
 	unsigned long locked_vm = 0;
@@ -2608,7 +2609,7 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 		 * split, despite we could. This is unlikely enough
 		 * failure that it's not worth optimizing it for.
 		 */
-		error = userfaultfd_unmap_prep(mm, start, end, uf);
+		error = userfaultfd_unmap_prep(mm, start, end, &uf_new_unmaps);
 
 		if (error)
 			goto userfaultfd_error;
@@ -2653,6 +2654,10 @@ do_mas_align_munmap(struct ma_state *mas, struct vm_area_struct *vma,
 	/* Point of no return */
 	mas_store_prealloc(mas, NULL);
 
+	/* Keep events from earlier successful unmaps on the caller's list. */
+	if (uf)
+		list_splice_tail(&uf_new_unmaps, uf);
+
 	mm->locked_vm -= locked_vm;
 	mm->map_count -= count;
 	/*
@@ -2687,6 +2692,7 @@ end_split_failed:
 		vma_mark_detached(next, false);
 
 	__mt_destroy(&mt_detach);
+	userfaultfd_unmap_abort(&uf_new_unmaps);
 start_split_failed:
 map_count_exceeded:
 	mas_destroy(mas);
