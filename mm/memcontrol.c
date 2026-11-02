@@ -510,6 +510,7 @@ unsigned long lruvec_page_state(struct lruvec *lruvec, enum node_stat_item idx)
 #endif
 	return x;
 }
+EXPORT_SYMBOL_GPL(lruvec_page_state);
 
 /**
  * lruvec_page_state_monotonic - non-clamping lruvec stat read for delta sampling
