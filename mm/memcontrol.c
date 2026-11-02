@@ -4062,6 +4062,7 @@ struct mem_cgroup *mem_cgroup_from_private_id(unsigned short id)
 	WARN_ON_ONCE(!rcu_read_lock_held());
 	return xa_load(&mem_cgroup_private_ids, id);
 }
+EXPORT_SYMBOL_GPL(mem_cgroup_from_private_id);
 
 struct mem_cgroup *mem_cgroup_get_from_id(u64 id)
 {
