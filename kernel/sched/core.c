@@ -132,6 +132,14 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(sched_dl_update_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_dl_server_start_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_dl_server_stop_tp);
 
+/*
+ * The CONFIG_PROFILING task-exit notifier chain was removed, so vendor modules
+ * that need to observe an exiting task have nothing left to attach to.
+ * sched_process_exit fires from the same point in do_exit() and carries the
+ * same task_struct, so export it as the replacement.
+ */
+EXPORT_TRACEPOINT_SYMBOL_GPL(sched_process_exit);
+
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 EXPORT_SYMBOL_GPL(runqueues);
 DEFINE_PER_CPU(struct rnd_state, sched_rnd_state);
