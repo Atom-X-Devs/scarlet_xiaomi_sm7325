@@ -6786,6 +6786,27 @@ restart:
 	BUG(); /* The idle class should always have a runnable task. */
 }
 
+/*
+ * Careful; this can return RETRY_TASK, it does not include the retry-loop
+ * itself due to the whole SMT pick retry thing below.
+ */
+struct task_struct *pick_task(struct rq *rq, struct rq_flags *rf)
+{
+	const struct sched_class *class;
+	struct task_struct *p;
+
+	rq->dl_server = NULL;
+
+	for_each_active_class(class) {
+		p = class->pick_task(rq, rf);
+		if (p)
+			return p;
+	}
+
+	BUG(); /* The idle class should always have a runnable task. */
+}
+EXPORT_SYMBOL_GPL(pick_task);
+
 #ifdef CONFIG_SCHED_CORE
 static inline bool is_task_rq_idle(struct task_struct *t)
 {
@@ -6803,26 +6824,6 @@ static inline bool cookie_match(struct task_struct *a, struct task_struct *b)
 		return true;
 
 	return a->core_cookie == b->core_cookie;
-}
-
-/*
- * Careful; this can return RETRY_TASK, it does not include the retry-loop
- * itself due to the whole SMT pick retry thing below.
- */
-static inline struct task_struct *pick_task(struct rq *rq, struct rq_flags *rf)
-{
-	const struct sched_class *class;
-	struct task_struct *p;
-
-	rq->dl_server = NULL;
-
-	for_each_active_class(class) {
-		p = class->pick_task(rq, rf);
-		if (p)
-			return p;
-	}
-
-	BUG(); /* The idle class should always have a runnable task. */
 }
 
 extern void task_vruntime_update(struct rq *rq, struct task_struct *p, bool in_fi);
