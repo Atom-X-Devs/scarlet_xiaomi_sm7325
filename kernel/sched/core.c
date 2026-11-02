@@ -5796,6 +5796,7 @@ void __balance_callbacks(struct rq *rq, struct rq_flags *rf)
 	if (rf)
 		rq_repin_lock(rq, rf);
 }
+EXPORT_SYMBOL_GPL(__balance_callbacks);
 
 void balance_callbacks(struct rq *rq, struct balance_callback *head)
 {
