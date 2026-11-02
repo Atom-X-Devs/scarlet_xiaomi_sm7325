@@ -2,6 +2,7 @@
 #ifndef __MM_CMA_H__
 #define __MM_CMA_H__
 
+#include <linux/android_vendor.h>
 #include <linux/cma.h>
 #include <linux/debugfs.h>
 #include <linux/kobject.h>
@@ -63,6 +64,7 @@ struct cma {
 	unsigned long flags;
 	/* NUMA node (NUMA_NO_NODE if unspecified) */
 	int nid;
+	ANDROID_VENDOR_DATA(1);
 };
 
 enum cma_flags {

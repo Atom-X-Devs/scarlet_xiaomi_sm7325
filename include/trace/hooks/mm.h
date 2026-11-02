@@ -9,6 +9,18 @@
 
 #include <trace/hooks/vendor_hooks.h>
 
+DECLARE_RESTRICTED_HOOK(android_rvh_bitmap_find_best_next_area,
+		TP_PROTO(unsigned long *bitmap,
+			unsigned long bitmap_maxno,
+			unsigned long start,
+			unsigned int bitmap_count,
+			unsigned long mask,
+			unsigned long offset,
+			unsigned long *bitmap_no,
+			bool status),
+		TP_ARGS(bitmap, bitmap_maxno, start, bitmap_count, mask,
+			offset, bitmap_no, status), 1);
+
 DECLARE_HOOK(android_vh_cma_alloc_retry,
 	TP_PROTO(char *name, int *retry),
 	TP_ARGS(name, retry));

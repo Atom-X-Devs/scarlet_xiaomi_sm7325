@@ -32,6 +32,7 @@
 #include <linux/kmemleak.h>
 #include <linux/sched.h>
 #include <linux/jiffies.h>
+#define CREATE_TRACE_POINTS
 #include <trace/events/cma.h>
 
 #include "internal.h"
@@ -187,6 +188,8 @@ static void __init cma_activate_area(struct cma *cma)
 	spin_lock_init(&cma->mem_head_lock);
 #endif
 	set_bit(CMA_ACTIVATED, &cma->flags);
+
+	android_init_vendor_data(cma, 1);
 
 	return;
 
@@ -823,6 +826,11 @@ retry:
 		bitmap_no = bitmap_find_next_zero_area_off(cmr->bitmap,
 				bitmap_maxno, start, bitmap_count, mask,
 				offset);
+#ifdef CONFIG_ANDROID_VENDOR_OEM_DATA
+		trace_android_rvh_bitmap_find_best_next_area(cmr->bitmap,
+				bitmap_maxno, start, bitmap_count, mask,
+				offset, &bitmap_no, cma->android_vendor_data1);
+#endif
 		if (bitmap_no >= bitmap_maxno) {
 			if ((num_attempts < max_retries) && (ret == -EBUSY)) {
 				spin_unlock_irq(&cma->lock);
