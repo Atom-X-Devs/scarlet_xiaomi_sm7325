@@ -830,6 +830,7 @@ struct page *vm_normal_page(struct vm_area_struct *vma, unsigned long addr,
 	return __vm_normal_page(vma, addr, pte_pfn(pte), pte_special(pte),
 				&entry, sizeof(entry), PGTABLE_LEVEL_PTE);
 }
+EXPORT_SYMBOL_GPL(vm_normal_page);
 
 /**
  * vm_normal_folio() - Get the "struct folio" associated with a PTE
