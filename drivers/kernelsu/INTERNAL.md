@@ -1,7 +1,4 @@
 # Quirks / Adaptations
-## NOT IMPLEMENTED
-- late-load, #3258
-
 ## differences
 
 ### C-style

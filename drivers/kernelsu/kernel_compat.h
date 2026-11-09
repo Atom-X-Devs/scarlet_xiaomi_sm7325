@@ -35,7 +35,7 @@
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0)
-static noinline void ksu_do_nothing(void *unused) { };
+static void ksu_do_nothing(void *unused) { };
 __weak void kick_all_cpus_sync(void)
 {
 	smp_mb();
@@ -114,7 +114,7 @@ __weak long copy_to_kernel_nofault(void *dst, const void *src, size_t size)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0) // probe_user_read
-static long ksu_copy_from_user_nofault(void *dst, const void __user *src, size_t size)
+static __always_inline long ksu_copy_from_user_nofault(void *dst, const void __user *src, size_t size)
 {
 	// https://elixir.bootlin.com/linux/v5.8/source/mm/maccess.c#L205
 	mm_segment_t old_fs = get_fs();
@@ -175,7 +175,7 @@ static __always_inline long memmove_user(void __user *dst, const void __user *sr
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
-static noinline ssize_t ksu_kernel_read_compat(struct file *file, void *buf, size_t count, loff_t *pos)
+static ssize_t ksu_kernel_read_compat(struct file *file, void *buf, size_t count, loff_t *pos)
 {
 	mm_segment_t old_fs = get_fs();
 	set_fs(get_ds());
@@ -185,7 +185,7 @@ static noinline ssize_t ksu_kernel_read_compat(struct file *file, void *buf, siz
 }
 #define kernel_read ksu_kernel_read_compat
 
-static noinline ssize_t ksu_kernel_write_compat(struct file *file, const void *buf, size_t count, loff_t *pos)
+static ssize_t ksu_kernel_write_compat(struct file *file, const void *buf, size_t count, loff_t *pos)
 {
 	mm_segment_t old_fs = get_fs();
 	set_fs(get_ds());
