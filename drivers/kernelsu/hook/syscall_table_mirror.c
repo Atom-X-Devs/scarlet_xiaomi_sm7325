@@ -72,7 +72,7 @@ scan:
 	if (!patched  && (offset < (-0x80000000LL + __builtin_labs(scan_depth)) || offset > (0x7fffffffLL - __builtin_labs(scan_depth))))
 		return -ERANGE;
 
-	pr_info("tgt 0x%lx to new_page: 0x%lx in range! delta: %ld bytes\n", tgt, (uintptr_t)new_page, offset);
+	pr_info("tgt 0x%lx to new_page: 0x%lx in range! (delta: %ld bytes)\n", tgt, (uintptr_t)new_page, offset);
 
 	uint32_t new_insn = aarch64_insn_adrp_set_offset(raw_insn, (int32_t)offset);
 

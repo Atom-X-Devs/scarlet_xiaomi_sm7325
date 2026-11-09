@@ -171,36 +171,20 @@ static noinline void dotted_kallsyms_build_hash_array(void)
 	uintptr_t start = (uintptr_t)_stext;
 	uintptr_t end = (uintptr_t)_etext;
 	uintptr_t iter_count = 0;
-	uintptr_t curr;
 
+	char symbol_buf[KSYM_SYMBOL_LEN];
 	cond_resched();
-
-	char *membuf __offstack(KSYM_SYMBOL_LEN * 2);
-	char *symbol_buf = membuf;
-	char *symbol_cache = membuf + KSYM_SYMBOL_LEN;
-
 	pr_info("%s: hash array init! \n", __func__);
 
-	curr = start;
+	uintptr_t curr = start;
 
 scan_start:
 	iter_count++;
 
-	// not needed actually, sprint_symbol terminates.
-	// we keep it here as a reminder.
-	// memset(symbol_buf, 0, sizeof(symbol_buf));
-
-	sprint_symbol_no_offset(symbol_buf, curr);
-	if (!symbol_buf[0])
+	if (sprint_symbol(symbol_buf, curr) <= 0)
 		goto step_up;
 
-	// if current symbol is same as last entry, skip
-	if (!strcmp(symbol_buf, symbol_cache))
-		goto step_up;
-
-	// symbol is not the same as the last one!
-	// cache this symbol and insert it to our hash array!
-	strscpy(symbol_cache, symbol_buf, KSYM_SYMBOL_LEN);
+	char *slash = strchr(symbol_buf, '/');
 
 	// however we should not use cfi_jt for this
 	// what we want is the target of that cfi_jt
@@ -225,17 +209,15 @@ scan_start:
 	if (!dot_ptr && !dollar_ptr)
 		goto step_up;
 
+//	pr_info("insert: %s \n", symbol_buf);
 	insert_to_kallsyms_array(symbol_buf, curr);
 
 step_up:;
-	unsigned long sym_size = 0;
-	unsigned long offset = 0;
-	kallsyms_lookup_size_offset(curr, &sym_size, &offset);
-	if ((!!sym_size || !!offset) && sym_size > offset)
-		curr =  curr + (sym_size - offset); // we can do larger jumps
-	else
-		curr = curr + 4;
+	size_t sym_sz = sizeof(uint32_t);
+	if (slash && !!kstrtoul(slash + 1, 0, &sym_sz))
+		sym_sz = sizeof(uint32_t);
 
+	curr = curr + sym_sz;
 	if (curr < end)
 		goto scan_start;
 
@@ -308,11 +290,11 @@ static int kallsyms_on_each_symbol_cb(void *data, const char *name, struct modul
 	strscpy(namebuf, name, KSYM_SYMBOL_LEN);
 	char *dot_ptr = strchr(namebuf, '.');
 	if (dot_ptr)
-		dot_ptr[0] = '\0';
+		dot_ptr[0] = 0;
 
 	char *dollar_ptr = strchr(namebuf, '$');
 	if (dollar_ptr)
-		dollar_ptr[0] = '\0';
+		dollar_ptr[0] = 0;
 
 	if (!!strcmp(namebuf, args->target_name))
 		return 0;

@@ -324,25 +324,26 @@ static int __init kernelsu_lkm_init(void)
 	// list_del(&THIS_MODULE->list);
 	kobject_del(&THIS_MODULE->mkobj.kobj); // tiann/KernelSU fefb02e
 
-#if 0
 	if (current->pid == 1)
 		return 0;
 
+	ksu_late_loaded = true;
 	escape_to_root_forced();
 
-	stop_vfs_read_hook();
+	stop_init_rc_hook();
 	apply_kernelsu_rules();
 	cache_sid();
 	setup_ksu_cred();
 	on_post_fs_data();
 	on_boot_completed();
 	ksu_feature_apply_forced();
+	kthread_run(ksu_disable_preinit_branch, nullptr, "kthread");
 
 	if (!!getenforce())
 		return 0;
 	pr_info("Permissive SELinux, enforcing\n");
 	setenforce(true);
-#endif
+
 	return 0;
 }
 
