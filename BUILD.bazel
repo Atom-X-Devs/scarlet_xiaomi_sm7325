@@ -203,6 +203,7 @@ filegroup(
     srcs = [
         # keep sorted
         "gki/aarch64/symbols/db845c",
+        "gki/aarch64/symbols/kunit",
     ],
     visibility = ["//visibility:public"],
 )
