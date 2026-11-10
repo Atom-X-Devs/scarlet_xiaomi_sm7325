@@ -45,19 +45,12 @@ impl<T: AshmemToggle> MiscDevice for AshmemToggleMisc<T> {
         Ok(())
     }
     fn read_iter(mut kiocb: Kiocb<'_, Self::Ptr>, iov: &mut IovIterDest<'_>) -> Result<usize> {
-        if kiocb.ki_pos() != 0 {
-            return Ok(0);
-        }
-
         let data = match T::get() {
             false => b"0\n",
             true => b"1\n",
         };
 
-        // You better give me a buffer with space for at least two bytes.
-        iov.copy_to_iter(data);
-        *kiocb.ki_pos_mut() = 2;
-        Ok(2)
+        iov.simple_read_from_buffer(kiocb.ki_pos_mut(), data)
     }
     fn write_iter(_kiocb: Kiocb<'_, Self::Ptr>, iov: &mut IovIterSource<'_>) -> Result<usize> {
         let mut data = [0; 16];
