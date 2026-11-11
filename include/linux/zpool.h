@@ -13,9 +13,30 @@
 #define _ZPOOL_H_
 
 struct zpool;
+struct scatterlist;
+struct zs_handle;
 
 struct zpool_ops {
 	int (*evict)(struct zpool *pool, unsigned long handle);
+};
+
+/*
+ * Control how a handle is mapped.  It will be ignored if the
+ * implementation does not support it.  Its use is optional.
+ * Note that this does not refer to memory protection, it
+ * refers to how the memory will be copied in/out if copying
+ * is necessary during mapping; read-write is the safest as
+ * it copies the existing memory in on map, and copies the
+ * changed memory back out on unmap.  Write-only does not copy
+ * in the memory and should only be used for initialization.
+ * If in doubt, use ZPOOL_MM_DEFAULT which is read-write.
+ */
+enum zpool_mapmode {
+	ZPOOL_MM_RW, /* normal read-write mapping */
+	ZPOOL_MM_RO, /* read-only (no copy-out at unmap time) */
+	ZPOOL_MM_WO, /* write-only (no copy-in at map time) */
+
+	ZPOOL_MM_DEFAULT = ZPOOL_MM_RW
 };
 
 bool zpool_has_pool(char *type);
@@ -35,14 +56,19 @@ void zpool_free(struct zpool *pool, unsigned long handle);
 int zpool_shrink(struct zpool *pool, unsigned int pages,
 			unsigned int *reclaimed);
 
-void *zpool_obj_read_begin(struct zpool *zpool, unsigned long handle,
-			   void *local_copy);
+void *zpool_map_handle(struct zpool *pool, unsigned long handle,
+		       enum zpool_mapmode mapmode);
+void zpool_unmap_handle(struct zpool *pool, unsigned long handle);
 
-void zpool_obj_read_end(struct zpool *zpool, unsigned long handle,
-			void *handle_mem);
-
-void zpool_obj_write(struct zpool *zpool, unsigned long handle,
-		     void *handle_mem, size_t mem_len);
+bool zpool_uses_zs_handles(struct zpool *pool);
+int zpool_zs_malloc(struct zpool *pool, struct zs_handle *handle,
+		    size_t size, gfp_t gfp);
+void zpool_zs_write(struct zpool *pool, const struct zs_handle *handle,
+		    void *src, size_t size);
+void zpool_zs_free(struct zpool *pool, struct zs_handle *handle);
+void zpool_zs_read_sg_begin(struct zpool *pool, const struct zs_handle *handle,
+			    struct scatterlist *sg, size_t size);
+void zpool_zs_read_sg_end(struct zpool *pool, const struct zs_handle *handle);
 
 u64 zpool_get_total_size(struct zpool *pool);
 
@@ -58,10 +84,16 @@ u64 zpool_get_total_size(struct zpool *pool);
  * @shrink:	shrink the pool.
  * @map:	map a handle.
  * @unmap:	unmap a handle.
+ * @zs_malloc:	allocate an object owned by a caller-provided zs_handle.
+ * @zs_write:	fill the allocated object.
+ * @zs_free:	free an object owned by a zs_handle.
+ * @zs_read_sg_begin: pin an object owned by a zs_handle and fill a scatterlist.
+ * @zs_read_sg_end: unpin an object after reading its scatterlist.
  * @total_size:	get total size of a pool.
  *
  * This is created by a zpool implementation and registered
- * with zpool.
+ * with zpool. A driver using zs_handle provides the zs_* callbacks
+ * instead of the malloc, free, map and unmap callbacks.
  */
 struct zpool_driver {
 	char *type;
@@ -82,12 +114,17 @@ struct zpool_driver {
 	int (*shrink)(void *pool, unsigned int pages,
 				unsigned int *reclaimed);
 
-	void *(*obj_read_begin)(void *pool, unsigned long handle,
-				void *local_copy);
-	void (*obj_read_end)(void *pool, unsigned long handle,
-			     void *handle_mem);
-	void (*obj_write)(void *pool, unsigned long handle,
-			  void *handle_mem, size_t mem_len);
+	void *(*map)(void *pool, unsigned long handle, enum zpool_mapmode mm);
+	void (*unmap)(void *pool, unsigned long handle);
+
+	int (*zs_malloc)(void *pool, struct zs_handle *handle, size_t size,
+			 gfp_t gfp);
+	void (*zs_write)(void *pool, const struct zs_handle *handle,
+			 void *src, size_t size);
+	void (*zs_free)(void *pool, struct zs_handle *handle);
+	void (*zs_read_sg_begin)(void *pool, const struct zs_handle *handle,
+				 struct scatterlist *sg, size_t size);
+	void (*zs_read_sg_end)(void *pool, const struct zs_handle *handle);
 
 	u64 (*total_size)(void *pool);
 };

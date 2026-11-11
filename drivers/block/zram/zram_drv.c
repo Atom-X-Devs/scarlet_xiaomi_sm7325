@@ -929,7 +929,7 @@ release_init_lock:
 	if (page)
 		__free_page(page);
 	release_pp_ctl(zram, ctl);
-	atomic_set(&zram->pp_in_progress, 0);
+	atomic_set_release(&zram->pp_in_progress, 0);
 	up_read(&zram->init_lock);
 
 	return ret;
@@ -1522,7 +1522,7 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 
 static void zram_free_page(struct zram *zram, size_t index)
 {
-	struct zs_handle *handle;
+	struct zram_table_entry *entry = &zram->table[index];
 
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	zram->table[index].ac_time = 0;
@@ -1554,17 +1554,16 @@ static void zram_free_page(struct zram *zram, size_t index)
 		goto out;
 	}
 
-	handle = zram->table[index].handle;
-	if (!handle)
+	if (!zs_handle_is_allocated(&entry->handle))
 		return;
 
-	zs_free(zram->mem_pool, handle);
+	zs_free(zram->mem_pool, &entry->handle);
 
 	atomic64_sub(zram_get_obj_size(zram, index),
 		     &zram->stats.compr_data_size);
 out:
 	atomic64_dec(&zram->stats.pages_stored);
-	zram->table[index].element = 0;
+	zs_handle_init(&entry->handle);
 	zram_set_obj_size(zram, index, 0);
 }
 
@@ -1583,10 +1582,9 @@ static int read_incompressible_page(struct zram *zram, struct page *page,
 				    u32 index)
 {
 	struct scatterlist sg[2];
-	struct zs_handle *handle;
+	const struct zs_handle *handle = &zram->table[index].handle;
 	void *src, *dst;
 
-	handle = zram->table[index].handle;
 	zs_obj_read_sg_begin(zram->mem_pool, handle, sg, PAGE_SIZE);
 	/* An incompressible object never spans two pages. */
 	src = kmap_local_page(sg_page(sg));
@@ -1604,12 +1602,11 @@ static int read_compressed_page(struct zram *zram, struct page *page, u32 index)
 	enum zcomp_dstrm_mode mode = ZCOMP_DSTRM_EXCLUSIVE;
 	struct zcomp_dstrm *zstrm;
 	struct scatterlist sg[2];
-	struct zs_handle *handle;
+	const struct zs_handle *handle = &zram->table[index].handle;
 	unsigned int size;
 	void *dst;
 	int ret, prio;
 
-	handle = zram->table[index].handle;
 	size = zram_get_obj_size(zram, index);
 	prio = zram_get_priority(zram, index);
 
@@ -1635,7 +1632,7 @@ static int zram_read_from_zspool(struct zram *zram, struct page *page,
 				 u32 index)
 {
 	if (zram_test_flag(zram, index, ZRAM_SAME) ||
-	    !zram->table[index].handle)
+	    !zs_handle_is_allocated(&zram->table[index].handle))
 		return read_same_filled_page(zram, page, index);
 
 	if (!zram_test_flag(zram, index, ZRAM_HUGE))
@@ -1705,10 +1702,9 @@ static int write_same_filled_page(struct zram *zram, unsigned long fill,
 	zram_set_flag(zram, index, ZRAM_SAME);
 	zram->table[index].element = fill;
 	zram_accessed(zram, index);
-	zram_slot_unlock(zram, index);
-
 	atomic64_inc(&zram->stats.same_pages);
 	atomic64_inc(&zram->stats.pages_stored);
+	zram_slot_unlock(zram, index);
 
 	return 0;
 }
@@ -1716,17 +1712,17 @@ static int write_same_filled_page(struct zram *zram, unsigned long fill,
 static int write_incompressible_page(struct zram *zram, struct page *page,
 				     u32 index)
 {
-	struct zs_handle *handle;
+	struct zs_handle *handle = &zram->table[index].handle;
 	void *src;
+	int ret;
 
 	zram_slot_lock(zram, index);
 	zram_free_page(zram, index);
-	handle = zs_malloc(zram->mem_pool, PAGE_SIZE,
-			   GFP_NOIO | __GFP_NOWARN |
-			   __GFP_HIGHMEM | __GFP_MOVABLE);
-	if (IS_ERR(handle)) {
+	ret = zs_malloc(zram->mem_pool, handle, PAGE_SIZE,
+			GFP_NOIO | __GFP_NOWARN | __GFP_HIGHMEM | __GFP_MOVABLE);
+	if (ret) {
 		zram_slot_unlock(zram, index);
-		return PTR_ERR(handle);
+		return ret;
 	}
 
 	update_used_max(zram);
@@ -1736,23 +1732,21 @@ static int write_incompressible_page(struct zram *zram, struct page *page,
 	kunmap_local(src);
 
 	zram_set_flag(zram, index, ZRAM_HUGE);
-	zram->table[index].handle = handle;
 	zram_set_obj_size(zram, index, PAGE_SIZE);
 	zram_accessed(zram, index);
-	zram_slot_unlock(zram, index);
-
 	atomic64_add(PAGE_SIZE, &zram->stats.compr_data_size);
 	atomic64_inc(&zram->stats.huge_pages);
 	atomic64_inc(&zram->stats.huge_pages_since);
 	atomic64_inc(&zram->stats.pages_stored);
+	zram_slot_unlock(zram, index);
 
 	return 0;
 }
 
 static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 {
-	int ret = 0;
-	struct zs_handle *handle;
+	struct zs_handle *handle = &zram->table[index].handle;
+	int ret;
 	unsigned int comp_len;
 	void *mem;
 	struct zcomp_cstrm *zstrm;
@@ -1787,29 +1781,24 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 
 	zram_slot_lock(zram, index);
 	zram_free_page(zram, index);
-	handle = zs_malloc(zram->mem_pool, comp_len,
-			   GFP_NOIO | __GFP_NOWARN |
-			   __GFP_HIGHMEM | __GFP_MOVABLE | __GFP_CMA |
-			   __GFP_OFFLINABLE);
-	if (IS_ERR(handle)) {
+	ret = zs_malloc(zram->mem_pool, handle, comp_len,
+			GFP_NOIO | __GFP_NOWARN | __GFP_HIGHMEM |
+			__GFP_MOVABLE | __GFP_CMA | __GFP_OFFLINABLE);
+	if (ret) {
 		zcomp_cstrm_put(zstrm);
 		zram_slot_unlock(zram, index);
-		return PTR_ERR(handle);
+		return ret;
 	}
 
 	update_used_max(zram);
-
 	zs_obj_write(zram->mem_pool, handle, zstrm->buffer, comp_len);
 	zcomp_cstrm_put(zstrm);
 
-	zram->table[index].handle = handle;
 	zram_set_obj_size(zram, index, comp_len);
 	zram_accessed(zram, index);
-	zram_slot_unlock(zram, index);
-
-	/* Update stats */
 	atomic64_inc(&zram->stats.pages_stored);
 	atomic64_add(comp_len, &zram->stats.compr_data_size);
+	zram_slot_unlock(zram, index);
 
 	return ret;
 }
@@ -1899,8 +1888,7 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 			   u32 prio_max)
 {
 	struct zcomp_cstrm *zstrm = NULL;
-	struct zs_handle *handle_old;
-	struct zs_handle *handle_new;
+	struct zs_handle *handle = &zram->table[index].handle;
 	unsigned int comp_len_old;
 	unsigned int comp_len_new;
 	unsigned int class_index_old;
@@ -1908,8 +1896,9 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 	void *src;
 	int ret = 0;
 
-	handle_old = zram->table[index].handle;
-	if (!handle_old)
+	/* pp_in_progress gives this pass exclusive use of recomp_handle. */
+	lockdep_assert_held(&zram->init_lock);
+	if (!zs_handle_is_allocated(handle))
 		return -EINVAL;
 
 	comp_len_old = zram_get_obj_size(zram, index);
@@ -2004,23 +1993,22 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 	}
 
 	/*
-	 * We are holding the compression stream mutex and entry lock so better
-	 * avoid direct reclaim.  Allocation error is not fatal since
-	 * we still have the old object in the mem_pool.
+	 * GFP_NOIO prevents reclaim from re-entering zram while we hold
+	 * the slot lock. Keep the old object until its replacement is ready.
 	 */
-	handle_new = zs_malloc(zram->mem_pool, comp_len_new,
-			       GFP_NOIO | __GFP_NOWARN |
-			       __GFP_HIGHMEM | __GFP_MOVABLE);
-	if (IS_ERR(handle_new)) {
+	ret = zs_malloc(zram->mem_pool, &zram->recomp_handle, comp_len_new,
+			GFP_NOIO | __GFP_NOWARN | __GFP_HIGHMEM | __GFP_MOVABLE);
+	if (ret) {
 		zcomp_cstrm_put(zstrm);
-		return PTR_ERR(handle_new);
+		return ret;
 	}
 
-	zs_obj_write(zram->mem_pool, handle_new, zstrm->buffer, comp_len_new);
+	zs_obj_write(zram->mem_pool, &zram->recomp_handle, zstrm->buffer,
+		     comp_len_new);
 	zcomp_cstrm_put(zstrm);
 
 	zram_free_page(zram, index);
-	zram->table[index].handle = handle_new;
+	zs_rebind_handle(zram->mem_pool, handle, &zram->recomp_handle);
 	zram_set_obj_size(zram, index, comp_len_new);
 	zram_set_priority(zram, index, prio);
 
@@ -2189,7 +2177,7 @@ release_init_lock:
 	if (page)
 		__free_page(page);
 	release_pp_ctl(zram, ctl);
-	atomic_set(&zram->pp_in_progress, 0);
+	atomic_set_release(&zram->pp_in_progress, 0);
 	up_read(&zram->init_lock);
 	return ret;
 }

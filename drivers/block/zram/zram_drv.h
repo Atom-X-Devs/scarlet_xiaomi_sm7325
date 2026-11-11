@@ -65,7 +65,7 @@ enum zram_pageflags {
  */
 struct zram_table_entry {
 	union {
-		struct zs_handle *handle;
+		struct zs_handle handle;
 		unsigned long element;
 		unsigned long blk_idx;
 	};
@@ -141,6 +141,10 @@ struct zram {
 #endif
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	struct dentry *debugfs_dir;
+#endif
+#ifdef CONFIG_ZRAM_MULTI_COMP
+	/* Used only by recompression while holding pp_in_progress. */
+	struct zs_handle recomp_handle;
 #endif
 	atomic_t pp_in_progress;
 };

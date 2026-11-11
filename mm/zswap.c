@@ -26,6 +26,7 @@
 #include <linux/crypto.h>
 #include <linux/mempool.h>
 #include <linux/zpool.h>
+#include <linux/zsmalloc.h>
 
 #include <linux/mm_types.h>
 #include <linux/page-flags.h>
@@ -145,7 +146,8 @@ struct zswap_pool {
  * length - the length in bytes of the compressed page data.  Needed during
  *          decompression. For a same value filled page length is 0.
  * pool - the zswap_pool the entry's data is in
- * handle - zpool allocation handle that stores the compressed page data
+ * handle - legacy zpool allocation handle
+ * zs_handle - embedded handle for a zsmalloc allocation
  * value - value of the same-value filled pages which have same content
  */
 struct zswap_entry {
@@ -156,6 +158,7 @@ struct zswap_entry {
 	struct zswap_pool *pool;
 	union {
 		unsigned long handle;
+		struct zs_handle zs_handle;
 		unsigned long value;
 	};
 };
@@ -252,6 +255,7 @@ static struct zswap_entry *zswap_entry_cache_alloc(gfp_t gfp)
 	if (!entry)
 		return NULL;
 	entry->refcount = 1;
+	zs_handle_init(&entry->zs_handle);
 	RB_CLEAR_NODE(&entry->rbnode);
 	return entry;
 }
@@ -329,7 +333,10 @@ static void zswap_free_entry(struct zswap_entry *entry)
 		if (WARN_ON_ONCE(!entry->pool))
 			return;
 
-		zpool_free(entry->pool->zpool, entry->handle);
+		if (zpool_uses_zs_handles(entry->pool->zpool))
+			zpool_zs_free(entry->pool->zpool, &entry->zs_handle);
+		else
+			zpool_free(entry->pool->zpool, entry->handle);
 		zswap_pool_put(entry->pool);
 	}
 	zswap_entry_cache_free(entry);
@@ -866,8 +873,11 @@ static int zswap_writeback_entry(struct zpool *pool, unsigned long handle)
 	/* find and ref zswap entry */
 	spin_lock(&tree->lock);
 	entry = zswap_entry_find_get(&tree->rbroot, offset);
-	if (!entry) {
-		/* entry was invalidated */
+	if (!entry || !entry->length || !entry->pool ||
+	    entry->pool->zpool != pool || entry->handle != handle) {
+		/* The offset was invalidated or now belongs to another object. */
+		if (entry)
+			zswap_entry_put(tree, entry);
 		spin_unlock(&tree->lock);
 		zpool_unmap_handle(pool, handle);
 		return 0;
@@ -904,6 +914,9 @@ static int zswap_writeback_entry(struct zpool *pool, unsigned long handle)
 		SetPageUptodate(page);
 	}
 
+	if (zpool_can_sleep_mapped(pool))
+		zpool_unmap_handle(pool, handle);
+
 	/* move it to the tail of the inactive list after end_writeback */
 	SetPageReclaim(page);
 
@@ -927,7 +940,7 @@ static int zswap_writeback_entry(struct zpool *pool, unsigned long handle)
 		zswap_entry_put(tree, entry);
 	spin_unlock(&tree->lock);
 
-	goto end;
+	goto out;
 
 	/*
 	* if we get here due to ZSWAP_SWAPCACHE_EXIST
@@ -937,12 +950,13 @@ static int zswap_writeback_entry(struct zpool *pool, unsigned long handle)
 	* it it either okay to return !0
 	*/
 fail:
+	if (zpool_can_sleep_mapped(pool))
+		zpool_unmap_handle(pool, handle);
 	spin_lock(&tree->lock);
 	zswap_entry_put(tree, entry);
 	spin_unlock(&tree->lock);
 
-end:
-	zpool_unmap_handle(pool, handle);
+out:
 	return ret;
 }
 
@@ -995,9 +1009,9 @@ static int zswap_frontswap_store(unsigned type, pgoff_t offset,
 	struct zswap_entry *entry, *dupentry;
 	struct crypto_comp *tfm;
 	int ret;
-	unsigned int hlen, dlen = PAGE_SIZE;
-	unsigned long handle, value;
-	char *buf;
+	unsigned int dlen = PAGE_SIZE;
+	unsigned long value;
+	struct zpool *zpool;
 	u8 *src, *dst;
 	struct zswap_header zhdr = { .swpentry = swp_entry(type, offset) };
 	gfp_t gfp;
@@ -1072,10 +1086,25 @@ static int zswap_frontswap_store(unsigned type, pgoff_t offset,
 		goto put_dstmem;
 	}
 
-	/* store */
-	hlen = zpool_evictable(entry->pool->zpool) ? sizeof(zhdr) : 0;
+	/* Store while the compression buffer is locked. */
+	zpool = entry->pool->zpool;
 	gfp = GFP_NOWAIT | __GFP_NORETRY | __GFP_HIGHMEM | __GFP_MOVABLE;
-	ret = zpool_malloc(entry->pool->zpool, hlen + dlen, gfp, &handle);
+	if (zpool_uses_zs_handles(zpool)) {
+		ret = zpool_zs_malloc(zpool, &entry->zs_handle, dlen, gfp);
+		if (!ret)
+			zpool_zs_write(zpool, &entry->zs_handle, dst, dlen);
+	} else {
+		unsigned int hlen = zpool_evictable(zpool) ? sizeof(zhdr) : 0;
+		char *buf;
+
+		ret = zpool_malloc(zpool, hlen + dlen, gfp, &entry->handle);
+		if (!ret) {
+			buf = zpool_map_handle(entry->pool->zpool, handle, ZPOOL_MM_RW);
+			memcpy(buf, &zhdr, hlen);
+			memcpy(buf + hlen, dst, dlen);
+			zpool_unmap_handle(entry->pool->zpool, handle);
+		}
+	}
 	if (ret == -ENOSPC) {
 		zswap_reject_compress_poor++;
 		goto put_dstmem;
@@ -1084,15 +1113,11 @@ static int zswap_frontswap_store(unsigned type, pgoff_t offset,
 		zswap_reject_alloc_fail++;
 		goto put_dstmem;
 	}
-	buf = zpool_map_handle(entry->pool->zpool, handle, ZPOOL_MM_RW);
-	memcpy(buf, &zhdr, hlen);
-	memcpy(buf + hlen, dst, dlen);
-	zpool_unmap_handle(entry->pool->zpool, handle);
 	put_cpu_var(zswap_dstmem);
+	mutex_unlock(acomp_ctx->mutex);
 
 	/* populate entry */
 	entry->offset = offset;
-	entry->handle = handle;
 	entry->length = dlen;
 
 insert_entry:
@@ -1124,6 +1149,18 @@ reject:
 	return ret;
 }
 
+static int zswap_decompress(struct crypto_acomp_ctx *acomp_ctx,
+			    struct scatterlist *input, struct page *page,
+			    unsigned int len)
+{
+	struct scatterlist output;
+
+	sg_init_table(&output, 1);
+	sg_set_page(&output, page, PAGE_SIZE, 0);
+	acomp_request_set_params(acomp_ctx->req, input, &output, len, PAGE_SIZE);
+	return crypto_wait_req(crypto_acomp_decompress(acomp_ctx->req), &acomp_ctx->wait);
+}
+
 /*
  * returns 0 if the page was successfully decompressed
  * return -1 on entry not found or error
@@ -1134,8 +1171,8 @@ static int zswap_frontswap_load(unsigned type, pgoff_t offset,
 	struct zswap_tree *tree = zswap_trees[type];
 	struct zswap_entry *entry;
 	struct crypto_comp *tfm;
-	u8 *src, *dst;
-	unsigned int dlen;
+	u8 *src, *dst = NULL;
+	struct zpool *pool;
 	int ret;
 
 	/* find */
@@ -1155,17 +1192,18 @@ static int zswap_frontswap_load(unsigned type, pgoff_t offset,
 		goto freeentry;
 	}
 
-	/* decompress */
-	dlen = PAGE_SIZE;
-	src = zpool_map_handle(entry->pool->zpool, entry->handle, ZPOOL_MM_RO);
-	if (zpool_evictable(entry->pool->zpool))
+	/* Read the legacy allocator's mapped object. */
+	src = zpool_map_handle(pool, entry->handle, ZPOOL_MM_RO);
+	if (zpool_evictable(pool))
 		src += sizeof(struct zswap_header);
 	dst = kmap_atomic(page);
 	tfm = *get_cpu_ptr(entry->pool->tfm);
 	ret = crypto_comp_decompress(tfm, src, entry->length, dst, &dlen);
 	put_cpu_ptr(entry->pool->tfm);
 	kunmap_atomic(dst);
-	zpool_unmap_handle(entry->pool->zpool, entry->handle);
+	zpool_unmap_handle(pool, entry->handle);
+
+check_result:
 	BUG_ON(ret);
 
 freeentry:

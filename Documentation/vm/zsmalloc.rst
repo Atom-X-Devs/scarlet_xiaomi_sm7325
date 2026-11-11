@@ -22,16 +22,19 @@ For simplicity, zsmalloc can only allocate objects of size up to PAGE_SIZE
 since this satisfies the requirements of all its current users (in the
 worst case, page is incompressible and is thus stored "as-is" i.e. in
 uncompressed form). For allocation requests larger than this size, failure
-is returned (see zs_malloc).
+is returned by zs_malloc().
 
-Additionally, zs_malloc() does not return a dereferenceable pointer.
-Instead, it returns an opaque handle (unsigned long) which encodes actual
-location of the allocated object. The reason for this indirection is that
-zsmalloc does not keep zspages permanently mapped since that would cause
-issues on 32-bit systems where the VA region for kernel space mappings
-is very small. So, before using the allocating memory, the object has to
-be mapped using zs_map_object() to get a usable pointer and subsequently
-unmapped using zs_unmap_object().
+zs_malloc() records the object's location in a caller-provided
+``struct zs_handle``. It returns zero on success or a negative error
+code. Use zs_obj_write() to initialize the allocated object's data and
+zs_obj_read_sg_begin() and zs_obj_read_sg_end() to access it through a
+scatterlist. zsmalloc updates its handle when compaction or page
+migration moves the object.
+
+Keep the handle in naturally aligned, stable storage outside the stack.
+A live handle cannot be copied or reinitialized. zs_free() releases
+the object and clears its handle. zs_rebind_handle() can transfer the
+object to an initialized, unallocated handle.
 
 stat
 ====
