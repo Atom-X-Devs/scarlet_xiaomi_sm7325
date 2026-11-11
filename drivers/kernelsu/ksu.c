@@ -172,7 +172,7 @@
 #undef syscall_table_sucompat_enable
 #undef syscall_table_sucompat_disable
 #include "hook/syscall_table_hook_arm64.c"
-#include "hook/syscall_table_mirror.c"		// attempt to mirror sct
+#include "hook/syscall_table_mirror_arm64.c" // attempt to mirror sct
 #include "hook/branch_link_hook_arm64.c"
 #endif
 
@@ -275,8 +275,6 @@ static int __init kernelsu_init(void)
 #endif
 	ksu_selinux_hide_init();
 	ksu_shell_su_adb_only_init();
-
-	ksu_core_init();
 	ksu_supercalls_init();
 
 #if defined(CONFIG_KSU_KPROBES_KSUD) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
@@ -300,6 +298,8 @@ static int __init kernelsu_init(void)
 #ifdef KSU_CAN_USE_MODULE_BLACKLIST
 	ksu_module_blacklist_init(); // Block modules early, before vendor modules are loaded in second stage.
 #endif
+
+	ksu_lsm_hook_init();
 	return 0;
 }
 
@@ -334,8 +334,11 @@ static int __init kernelsu_lkm_init(void)
 	apply_kernelsu_rules();
 	cache_sid();
 	setup_ksu_cred();
+
+	track_throne(false);
 	on_post_fs_data();
 	on_boot_completed();
+
 	ksu_feature_apply_forced();
 	kthread_run(ksu_disable_preinit_branch, nullptr, "kthread");
 

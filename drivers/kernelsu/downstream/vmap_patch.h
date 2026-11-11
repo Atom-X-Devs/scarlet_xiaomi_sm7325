@@ -28,7 +28,7 @@ static inline void patch_ptr_slot_kick_cpu(void **target_slot, void *new_ptr)
 {
 // __atomic_store_n((uintptr_t *)target_slot, (uintptr_t)new_ptr, __ATOMIC_RELAXED);
 	assume_dereferenceable((void *)target_slot, sizeof(uintptr_t));
-	WRITE_ONCE(*target_slot, new_ptr);
+	*(volatile void **)target_slot = new_ptr;
 	kick_all_cpus_sync();
 }
 
@@ -93,7 +93,7 @@ nodiscard static noinline int patch_ro_slot(uintptr_t slot_ptr, uintptr_t new_pt
 // for 4.19+ storage_ptr is actually syscall_fn_t *, which is just long * so we can consider this void **
 // for 4.19- storage_ptr is actually void **
 // target_table is void *target_table[];
-static noinline void read_and_replace_syscall(void *storage_ptr, unsigned long syscall_nr, void *hook_fnptr, void *target_table)
+static noinline void replace_syscall(void *storage_ptr, unsigned long syscall_nr, void *hook_fnptr, void *target_table)
 {
 	uintptr_t *table = (uintptr_t *)target_table;
 	uintptr_t *slot = &table[syscall_nr];
@@ -152,7 +152,7 @@ static noinline void restore_syscall(void *storage_ptr, unsigned long syscall_nr
 		return;
 	}
 
-	pr_info("%s: syscall is ours! sc_addr: 0x%lx hook_fnptr: 0x%lx\n", __func__, (uintptr_t)sc_addr, (uintptr_t)hook_fnptr);
+	pr_info("%s: syscall is ours! sc_addr: 0x%lx hook: 0x%lx\n", __func__, (uintptr_t)sc_addr, (uintptr_t)hook_fnptr);
 
 	int ret = patch_ro_slot((uintptr_t)slot, (uintptr_t)*(void **)storage_ptr);
 	if (ret)
@@ -164,16 +164,16 @@ static noinline void restore_syscall(void *storage_ptr, unsigned long syscall_nr
 }
 
 // just so we can print out syscall_nr
-#define do_read_and_replace_syscall read_and_replace_syscall
-#define read_and_replace_syscall(old_p, syscall_nr, new_p, table) ({		\
-	pr_info("read_and_replace_syscall: hooking %s\n", #syscall_nr);		\
-	do_read_and_replace_syscall(old_p, syscall_nr, new_p, table);		\
+#define do_replace_syscall replace_syscall
+#define replace_syscall(old_p, syscall_nr, new_p, table) ({		\
+	pr_info("replace_syscall: hooking %s\n", #syscall_nr);		\
+	do_replace_syscall(old_p, syscall_nr, new_p, table);		\
 })
 
 #define do_restore_syscall restore_syscall
-#define restore_syscall(old_p, syscall_nr, new_p, table) ({			\
-	pr_info("restore_syscall: unhooking %s\n", #syscall_nr);		\
-	do_restore_syscall(old_p, syscall_nr, new_p, table);			\
+#define restore_syscall(old_p, syscall_nr, new_p, table) ({		\
+	pr_info("restore_syscall: unhooking %s\n", #syscall_nr);	\
+	do_restore_syscall(old_p, syscall_nr, new_p, table);		\
 })
 
 #endif // __KSU_H_VMAP_PATCH

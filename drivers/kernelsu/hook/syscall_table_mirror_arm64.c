@@ -14,6 +14,31 @@
 /**
  *  syscall_table_mirror.c - lets own the full table ourselves.
  *
+ *  Due to some kernel protection bullshit, vmapping as writable is no go.
+ *  either by straight up blocking EL2 MMU access or due to integrity checks. (e.g. checksums against the table)
+ *
+ *  This method explores replacing the page adrp loads around ~el0_svc.
+ *
+ *  * 4.14 and older (pre syscall wrapper, aligned to 4096, natural adrp alignment)
+ *  ffffff8010083f80 <el0_svc>:
+ *  ffffff8010083f80: b000f11b     	adrp	x27, 0xffffff8011ea4000 <sys_call_table> << we replace this
+ *  ffffff8010083f84: 2a0803fa     	mov	w26, w8
+ *  ffffff8010083f88: 52803759     	mov	w25, #0x1ba     // =442
+ *
+ *  * 4.19+ (with syscall wrapper, access is not page aligned, offset by add insn after adrp)
+ *  ffffff80100b0c6c <el0_svc_handler>:
+ *  ffffff80100b0c6c: a9bf7bfd     	stp	x29, x30, [sp, #-0x10]!
+ *  ffffff80100b0c70: 910003fd     	mov	x29, sp
+ *  ffffff80100b0c74: 14000008     	b	0xffffff80100b0c94
+ *  ffffff80100b0c78: d503201f     	nop
+ *  ffffff80100b0c7c: b9404001     	ldr	w1, [x0, #0x40]
+ *  ffffff80100b0c80: f000b7c2     	adrp	x2, 0xffffff80117ab000	<< page where sys_call_table lies, we replace this
+ *  ffffff80100b0c84: 913a0042     	add	x2, x2, #0xe80		<< offset
+ *  ffffff80100b0c88: 9400001a     	bl	0xffffff80100b0cf0 <el0_svc_common>
+ *  ffffff80100b0c8c: ...
+ *
+ *  due to that offset on 4.19+ we have to prepare and copy 2x 4096, basically as allowance for the offset.
+ *  
  *  tested to work on:
  *	- 4.14 ~ 6.12
  *
@@ -21,7 +46,7 @@
  *	- init, 261031
  *	- fixup offsets (adrp + add reg) on 4.19+ (261101)
  *	- hunt multiple loadsites (enskye/KyeSU/commit/1828e7190), (261102)
- *
+ *	- edge-case protection, ERANGE + scan_depth thingy, (26110?)
  *
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0) && defined(CONFIG_KALLSYMS) && defined(CONFIG_ARM64)
@@ -69,7 +94,7 @@ scan:
 	 * another 'loading the same table and one is going -ERANGE'
 	 */
 	int64_t offset = (int64_t)new_page - (int64_t)pc_pg;
-	if (!patched  && (offset < (-0x80000000LL + __builtin_labs(scan_depth)) || offset > (0x7fffffffLL - __builtin_labs(scan_depth))))
+	if (!patched && (offset < (-0x80000000LL + __builtin_labs(scan_depth)) || offset > (0x7fffffffLL - __builtin_labs(scan_depth))))
 		return -ERANGE;
 
 	pr_info("tgt 0x%lx to new_page: 0x%lx in range! (delta: %ld bytes)\n", tgt, (uintptr_t)new_page, offset);
@@ -108,12 +133,12 @@ static int do_mirror_syscall_table(const char *native_sym, const char *compat_sy
 	uintptr_t offset = addr & 0xFFFUL;
 	void *new_table = (void *)sys_call_table_mpage + offset;
 
-	if (!!copy_from_kernel_nofault((void *)sys_call_table_mpage, (void *)base, 4096 * 2))
-		return -EFAULT;
-
 	uintptr_t target = kallsyms_lookup_name(native_sym);
 	if (!target)
 		return -ENOENT;
+
+	if (!!copy_from_kernel_nofault((void *)sys_call_table_mpage, (void *)base, 4096 * 2))
+		return -EFAULT;
 
 	pr_info("addr: 0x%lx base: 0x%lx offset: %lu \n", addr, base, offset);
 
@@ -132,12 +157,12 @@ static int do_mirror_syscall_table(const char *native_sym, const char *compat_sy
 	offset = addr & 0xFFFUL;
 	new_table = (void *)compat_sys_call_table_mpage + offset;
 
-	if (!!copy_from_kernel_nofault((void *)compat_sys_call_table_mpage, (void *)base, 4096 * 2))
-		return -EFAULT;
-
 	target = kallsyms_lookup_name(compat_sym);
 	if (!target)
 		return -ENOENT;
+
+	if (!!copy_from_kernel_nofault((void *)compat_sys_call_table_mpage, (void *)base, 4096 * 2))
+		return -EFAULT;
 
 	pr_info("addr: 0x%lx base: 0x%lx offset: %lu \n", addr, base, offset);
 
@@ -150,7 +175,6 @@ static int do_mirror_syscall_table(const char *native_sym, const char *compat_sy
 
 	pr_info("%s: compat_sys_call_table mirrored! adrp insn patched!\n", __func__);
 #endif
-	syscall_table_is_mirrored = true;
 	return 0;
 }
 

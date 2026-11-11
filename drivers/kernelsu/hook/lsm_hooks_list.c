@@ -325,8 +325,3 @@ static __init void ksu_lsm_hook_init(void)
 #endif
 
 }
-
-static void __init ksu_core_init(void)
-{
-	ksu_lsm_hook_init();
-}
