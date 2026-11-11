@@ -1353,7 +1353,13 @@ int zs_store(struct zs_pool *pool, struct zs_handle *handle, const void *src,
 		obj = obj_malloc(pool, zspage, handle);
 		fix_fullness_group(class, zspage);
 		class_stat_add(class, ZS_OBJS_INUSE, 1);
-		goto copy;
+		/* Pin the location before dropping the class lock. */
+		zspage_read_lock(zspage);
+		spin_unlock(&class->lock);
+
+		obj_write(class, zspage, obj, src, size);
+		zspage_read_unlock(zspage);
+		return 0;
 	}
 	spin_unlock(&class->lock);
 
@@ -1361,21 +1367,21 @@ int zs_store(struct zs_pool *pool, struct zs_handle *handle, const void *src,
 	if (unlikely(!zspage))
 		return -ENOMEM;
 
-	spin_lock(&class->lock);
+	/*
+	 * The new zspage is private until it joins the fullness list or
+	 * becomes movable. Populate it before either publication point.
+	 */
 	obj = obj_malloc(pool, zspage, handle);
+	obj_write(class, zspage, obj, src, size);
+
+	spin_lock(&class->lock);
 	insert_zspage(class, zspage, get_fullness_group(class, zspage));
 	atomic_long_add(class->pages_per_zspage, &pool->pages_allocated);
 	class_stat_add(class, ZS_OBJS_ALLOCATED, class->objs_per_zspage);
 	class_stat_add(class, ZS_OBJS_INUSE, 1);
 	SetZsPageMovable(pool, zspage);
-
-copy:
-	/* Pin the location before dropping the class lock. */
-	zspage_read_lock(zspage);
 	spin_unlock(&class->lock);
 
-	obj_write(class, zspage, obj, src, size);
-	zspage_read_unlock(zspage);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(zs_store);
