@@ -1718,18 +1718,16 @@ static int write_incompressible_page(struct zram *zram, struct page *page,
 
 	zram_slot_lock(zram, index);
 	zram_free_page(zram, index);
-	ret = zs_malloc(zram->mem_pool, handle, PAGE_SIZE,
-			GFP_NOIO | __GFP_NOWARN | __GFP_HIGHMEM | __GFP_MOVABLE);
+	src = kmap_local_page(page);
+	ret = zs_store(zram->mem_pool, handle, src, PAGE_SIZE,
+		       GFP_NOIO | __GFP_NOWARN | __GFP_HIGHMEM | __GFP_MOVABLE);
+	kunmap_local(src);
 	if (ret) {
 		zram_slot_unlock(zram, index);
 		return ret;
 	}
 
 	update_used_max(zram);
-
-	src = kmap_local_page(page);
-	zs_obj_write(zram->mem_pool, handle, src, PAGE_SIZE);
-	kunmap_local(src);
 
 	zram_set_flag(zram, index, ZRAM_HUGE);
 	zram_set_obj_size(zram, index, PAGE_SIZE);
@@ -1781,18 +1779,16 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 
 	zram_slot_lock(zram, index);
 	zram_free_page(zram, index);
-	ret = zs_malloc(zram->mem_pool, handle, comp_len,
+	ret = zs_store(zram->mem_pool, handle, zstrm->buffer, comp_len,
 			GFP_NOIO | __GFP_NOWARN | __GFP_HIGHMEM |
 			__GFP_MOVABLE | __GFP_CMA | __GFP_OFFLINABLE);
+	zcomp_cstrm_put(zstrm);
 	if (ret) {
-		zcomp_cstrm_put(zstrm);
 		zram_slot_unlock(zram, index);
 		return ret;
 	}
 
 	update_used_max(zram);
-	zs_obj_write(zram->mem_pool, handle, zstrm->buffer, comp_len);
-	zcomp_cstrm_put(zstrm);
 
 	zram_set_obj_size(zram, index, comp_len);
 	zram_accessed(zram, index);
@@ -1994,18 +1990,14 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 
 	/*
 	 * GFP_NOIO prevents reclaim from re-entering zram while we hold
-	 * the slot lock. Keep the old object until its replacement is ready.
+	 * the slot lock. Keep the old object until the new store succeeds.
 	 */
-	ret = zs_malloc(zram->mem_pool, &zram->recomp_handle, comp_len_new,
-			GFP_NOIO | __GFP_NOWARN | __GFP_HIGHMEM | __GFP_MOVABLE);
-	if (ret) {
-		zcomp_cstrm_put(zstrm);
-		return ret;
-	}
-
-	zs_obj_write(zram->mem_pool, &zram->recomp_handle, zstrm->buffer,
-		     comp_len_new);
+	ret = zs_store(zram->mem_pool, &zram->recomp_handle, zstrm->buffer,
+		       comp_len_new, GFP_NOIO | __GFP_NOWARN |
+		       __GFP_HIGHMEM | __GFP_MOVABLE);
 	zcomp_cstrm_put(zstrm);
+	if (ret)
+		return ret;
 
 	zram_free_page(zram, index);
 	zs_rebind_handle(zram->mem_pool, handle, &zram->recomp_handle);

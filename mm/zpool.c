@@ -348,19 +348,13 @@ void zpool_unmap_handle(struct zpool *zpool, unsigned long handle)
 
 bool zpool_uses_zs_handles(struct zpool *zpool)
 {
-	return zpool->driver->zs_malloc != NULL;
+	return zpool->driver->zs_store != NULL;
 }
 
-int zpool_zs_malloc(struct zpool *zpool, struct zs_handle *handle,
-		    size_t size, gfp_t gfp)
+int zpool_zs_store(struct zpool *zpool, struct zs_handle *handle,
+		   const void *src, size_t size, gfp_t gfp)
 {
-	return zpool->driver->zs_malloc(zpool->pool, handle, size, gfp);
-}
-
-void zpool_zs_write(struct zpool *zpool, const struct zs_handle *handle,
-		    void *src, size_t size)
-{
-	zpool->driver->zs_write(zpool->pool, handle, src, size);
+	return zpool->driver->zs_store(zpool->pool, handle, src, size, gfp);
 }
 
 void zpool_zs_free(struct zpool *zpool, struct zs_handle *handle)

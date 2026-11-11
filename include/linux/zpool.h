@@ -61,10 +61,8 @@ void *zpool_map_handle(struct zpool *pool, unsigned long handle,
 void zpool_unmap_handle(struct zpool *pool, unsigned long handle);
 
 bool zpool_uses_zs_handles(struct zpool *pool);
-int zpool_zs_malloc(struct zpool *pool, struct zs_handle *handle,
-		    size_t size, gfp_t gfp);
-void zpool_zs_write(struct zpool *pool, const struct zs_handle *handle,
-		    void *src, size_t size);
+int zpool_zs_store(struct zpool *pool, struct zs_handle *handle,
+		   const void *src, size_t size, gfp_t gfp);
 void zpool_zs_free(struct zpool *pool, struct zs_handle *handle);
 void zpool_zs_read_sg_begin(struct zpool *pool, const struct zs_handle *handle,
 			    struct scatterlist *sg, size_t size);
@@ -84,15 +82,14 @@ u64 zpool_get_total_size(struct zpool *pool);
  * @shrink:	shrink the pool.
  * @map:	map a handle.
  * @unmap:	unmap a handle.
- * @zs_malloc:	allocate an object owned by a caller-provided zs_handle.
- * @zs_write:	fill the allocated object.
+ * @zs_store:	allocate and fill an object owned by a caller-provided zs_handle.
  * @zs_free:	free an object owned by a zs_handle.
  * @zs_read_sg_begin: pin an object owned by a zs_handle and fill a scatterlist.
  * @zs_read_sg_end: unpin an object after reading its scatterlist.
  * @total_size:	get total size of a pool.
  *
  * This is created by a zpool implementation and registered
- * with zpool. A driver using zs_handle provides the zs_* callbacks
+ * with zpool. A driver using zs_handle provides all four zs_* callbacks
  * instead of the malloc, free, map and unmap callbacks.
  */
 struct zpool_driver {
@@ -117,10 +114,8 @@ struct zpool_driver {
 	void *(*map)(void *pool, unsigned long handle, enum zpool_mapmode mm);
 	void (*unmap)(void *pool, unsigned long handle);
 
-	int (*zs_malloc)(void *pool, struct zs_handle *handle, size_t size,
-			 gfp_t gfp);
-	void (*zs_write)(void *pool, const struct zs_handle *handle,
-			 void *src, size_t size);
+	int (*zs_store)(void *pool, struct zs_handle *handle, const void *src,
+			size_t size, gfp_t gfp);
 	void (*zs_free)(void *pool, struct zs_handle *handle);
 	void (*zs_read_sg_begin)(void *pool, const struct zs_handle *handle,
 				 struct scatterlist *sg, size_t size);

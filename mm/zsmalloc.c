@@ -438,7 +438,7 @@ static bool valid_unallocated_handle(const struct zs_handle *handle)
 static void *zs_zpool_create(const char *name, gfp_t gfp,
 			     const struct zpool_ops *ops, struct zpool *zpool)
 {
-	/* The caller of zs_malloc() supplies the allocation flags. */
+	/* The caller of zs_store() supplies the allocation flags. */
 	return zs_create_pool(name);
 }
 
@@ -447,16 +447,10 @@ static void zs_zpool_destroy(void *pool)
 	zs_destroy_pool(pool);
 }
 
-static int zs_zpool_malloc(void *pool, struct zs_handle *handle,
-			   size_t size, gfp_t gfp)
+static int zs_zpool_store(void *pool, struct zs_handle *handle, const void *src,
+			  size_t size, gfp_t gfp)
 {
-	return zs_malloc(pool, handle, size, gfp);
-}
-
-static void zs_zpool_write(void *pool, const struct zs_handle *handle,
-			   void *src, size_t size)
-{
-	zs_obj_write(pool, handle, src, size);
+	return zs_store(pool, handle, src, size, gfp);
 }
 
 static void zs_zpool_free(void *pool, struct zs_handle *handle)
@@ -485,8 +479,7 @@ static struct zpool_driver zs_zpool_driver = {
 	.owner =		  THIS_MODULE,
 	.create =		  zs_zpool_create,
 	.destroy =		  zs_zpool_destroy,
-	.zs_malloc =		  zs_zpool_malloc,
-	.zs_write =		  zs_zpool_write,
+	.zs_store =		  zs_zpool_store,
 	.zs_free =		  zs_zpool_free,
 	.zs_read_sg_begin =	  zs_zpool_read_sg_begin,
 	.zs_read_sg_end =	  zs_zpool_read_sg_end,
@@ -1237,53 +1230,31 @@ void zs_obj_read_sg_end(struct zs_pool *pool, const struct zs_handle *handle)
 }
 EXPORT_SYMBOL_GPL(zs_obj_read_sg_end);
 
-void zs_obj_write(struct zs_pool *pool, const struct zs_handle *handle,
-		  void *handle_mem, size_t mem_len)
+static void obj_write(struct size_class *class, struct zspage *zspage,
+		      unsigned long obj, const void *src, size_t size)
 {
-	struct zspage *zspage;
 	struct page *page;
-	unsigned long obj, off;
+	unsigned long off;
 	unsigned int obj_idx;
-	struct size_class *class;
 
-	/* Guarantee we can get zspage from handle safely */
-	read_lock(&pool->lock);
-	obj = handle_to_obj(handle);
 	obj_to_location(obj, &page, &obj_idx);
-	zspage = get_zspage(page);
-
-	/* Make sure migration doesn't move any pages in this zspage */
-	zspage_read_lock(zspage);
-	read_unlock(&pool->lock);
-
-	class = zspage_class(pool, zspage);
 	off = offset_in_page(class->size * obj_idx);
 
 	if (!ZsHugePage(zspage))
 		off += ZS_HANDLE_SIZE;
 
-	if (off + mem_len <= PAGE_SIZE) {
-		/* this object is contained entirely within a page */
+	if (off + size <= PAGE_SIZE) {
 		void *dst = kmap_local_page(page);
 
-		memcpy(dst + off, handle_mem, mem_len);
+		memcpy(dst + off, src, size);
 		kunmap_local(dst);
 	} else {
-		/* this object spans two pages */
-		size_t sizes[2];
+		size_t first = PAGE_SIZE - off;
 
-		sizes[0] = PAGE_SIZE - off;
-		sizes[1] = mem_len - sizes[0];
-
-		memcpy_to_page(page, off,
-			       handle_mem, sizes[0]);
-		memcpy_to_page(get_next_page(page), 0,
-			       handle_mem + sizes[0], sizes[1]);
+		memcpy_to_page(page, off, src, first);
+		memcpy_to_page(get_next_page(page), 0, src + first, size - first);
 	}
-
-	zspage_read_unlock(zspage);
 }
-EXPORT_SYMBOL_GPL(zs_obj_write);
 
 /**
  * zs_huge_class_size() - Returns the size (in bytes) of the first huge
@@ -1348,21 +1319,23 @@ static unsigned long obj_malloc(struct zs_pool *pool,
 
 
 /**
- * zs_malloc() - Allocate an object for a caller-owned handle.
+ * zs_store() - Allocate an object and copy data into it.
  * @pool: pool to allocate from
  * @handle: stable, initialized and unallocated handle to bind to the object
- * @size: object size, at most PAGE_SIZE
+ * @src: source data
+ * @size: number of bytes to store, at most PAGE_SIZE
  * @gfp: allocation flags
  *
- * The caller initializes the data with zs_obj_write() before publication.
+ * The caller may publish @handle once the function returns successfully.
  *
  * Return: 0 on success, negative error code otherwise.
  */
-int zs_malloc(struct zs_pool *pool, struct zs_handle *handle,
-	      size_t size, gfp_t gfp)
+int zs_store(struct zs_pool *pool, struct zs_handle *handle, const void *src,
+	     size_t size, gfp_t gfp)
 {
 	struct size_class *class;
 	struct zspage *zspage;
+	unsigned long obj;
 
 	if (WARN_ON_ONCE(!valid_unallocated_handle(handle)))
 		return -EINVAL;
@@ -1377,10 +1350,10 @@ int zs_malloc(struct zs_pool *pool, struct zs_handle *handle,
 	spin_lock(&class->lock);
 	zspage = find_get_zspage(class);
 	if (likely(zspage)) {
-		obj_malloc(pool, zspage, handle);
+		obj = obj_malloc(pool, zspage, handle);
 		fix_fullness_group(class, zspage);
 		class_stat_add(class, ZS_OBJS_INUSE, 1);
-		goto out;
+		goto copy;
 	}
 	spin_unlock(&class->lock);
 
@@ -1389,19 +1362,23 @@ int zs_malloc(struct zs_pool *pool, struct zs_handle *handle,
 		return -ENOMEM;
 
 	spin_lock(&class->lock);
-	obj_malloc(pool, zspage, handle);
+	obj = obj_malloc(pool, zspage, handle);
 	insert_zspage(class, zspage, get_fullness_group(class, zspage));
 	atomic_long_add(class->pages_per_zspage, &pool->pages_allocated);
 	class_stat_add(class, ZS_OBJS_ALLOCATED, class->objs_per_zspage);
 	class_stat_add(class, ZS_OBJS_INUSE, 1);
 	SetZsPageMovable(pool, zspage);
 
-out:
+copy:
+	/* Pin the location before dropping the class lock. */
+	zspage_read_lock(zspage);
 	spin_unlock(&class->lock);
 
+	obj_write(class, zspage, obj, src, size);
+	zspage_read_unlock(zspage);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(zs_malloc);
+EXPORT_SYMBOL_GPL(zs_store);
 
 static void obj_free(int class_size, unsigned long obj)
 {
@@ -1843,7 +1820,7 @@ static int zs_page_migrate(struct address_space *mapping, struct page *newpage,
 	 * the class lock protects zpage alloc/free in the zspage.
 	 */
 	spin_lock(&class->lock);
-	/* The zspage write lock serializes migration with object reads and writes. */
+	/* The zspage write lock serializes migration with reads and stores. */
 	if (!zspage_write_trylock(zspage)) {
 		spin_unlock(&class->lock);
 		write_unlock(&pool->lock);
@@ -2244,7 +2221,7 @@ struct zs_pool *zs_create_pool(const char *name)
 			huge_class_size = size;
 			/*
 			 * The object uses ZS_HANDLE_SIZE bytes to store the
-			 * handle. We need to subtract it, because zs_malloc()
+			 * handle. We need to subtract it, because zs_store()
 			 * unconditionally adds handle size before it performs
 			 * size class search - so object may be smaller than
 			 * huge class size, yet it still can end up in the huge

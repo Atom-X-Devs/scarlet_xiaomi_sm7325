@@ -1090,9 +1090,7 @@ static int zswap_frontswap_store(unsigned type, pgoff_t offset,
 	zpool = entry->pool->zpool;
 	gfp = GFP_NOWAIT | __GFP_NORETRY | __GFP_HIGHMEM | __GFP_MOVABLE;
 	if (zpool_uses_zs_handles(zpool)) {
-		ret = zpool_zs_malloc(zpool, &entry->zs_handle, dlen, gfp);
-		if (!ret)
-			zpool_zs_write(zpool, &entry->zs_handle, dst, dlen);
+		ret = zpool_zs_store(zpool, &entry->zs_handle, dst, dlen, gfp);
 	} else {
 		unsigned int hlen = zpool_evictable(zpool) ? sizeof(zhdr) : 0;
 		char *buf;
