@@ -132,7 +132,9 @@ size of the disk when not in use so a huge zram is wasteful.
 
 Set memory limit by writing the value to sysfs node 'mem_limit'.
 The value can be either in bytes or you can use mem suffixes.
-In addition, you could change the value in runtime.
+The limit can be changed at runtime.  Each writer checks it before
+allocating from zsmalloc.  A write that passes the check can exceed the
+limit by one zspage.
 Examples::
 
 	# limit /dev/zram0 with 50MB memory
