@@ -22,14 +22,13 @@ For simplicity, zsmalloc can only allocate objects of size up to PAGE_SIZE
 since this satisfies the requirements of all its current users (in the
 worst case, page is incompressible and is thus stored "as-is" i.e. in
 uncompressed form). For allocation requests larger than this size, failure
-is returned by zs_malloc().
+is returned by zs_store().
 
-zs_malloc() records the object's location in a caller-provided
-``struct zs_handle``. It returns zero on success or a negative error
-code. Use zs_obj_write() to initialize the allocated object's data and
-zs_obj_read_sg_begin() and zs_obj_read_sg_end() to access it through a
-scatterlist. zsmalloc updates its handle when compaction or page
-migration moves the object.
+zs_store() copies data into an object and records its location in a
+caller-provided ``struct zs_handle``. It returns zero on success or a
+negative error code. Use zs_obj_read_sg_begin() and zs_obj_read_sg_end()
+to access an object through a scatterlist. zsmalloc updates its handle
+when compaction or page migration moves the object.
 
 Keep the handle in naturally aligned, stable storage outside the stack.
 A live handle cannot be copied or reinitialized. zs_free() releases
