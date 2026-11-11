@@ -325,6 +325,10 @@ static void zswap_free_entry(struct zswap_entry *entry)
 	if (!entry->length)
 		atomic_dec(&zswap_same_filled_pages);
 	else {
+		/* A compressed object may still refer to the entry's handle. */
+		if (WARN_ON_ONCE(!entry->pool))
+			return;
+
 		zpool_free(entry->pool->zpool, entry->handle);
 		zswap_pool_put(entry->pool);
 	}
