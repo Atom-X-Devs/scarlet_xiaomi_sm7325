@@ -85,7 +85,8 @@
  * Object location (<PFN>, <obj_idx>) is encoded as
  * a single (unsigned long) handle value.
  *
- * Note that object index <obj_idx> starts from 0.
+ * The zero-based object index is stored as <obj_idx> + 1 so that even
+ * object 0 on PFN 0 has a nonzero encoded location.
  *
  * This is made more complicated by various memory models and PAE.
  */
@@ -128,9 +129,6 @@
 
 #define ZS_MAX_PAGES_PER_ZSPAGE	(_AC(CONFIG_ZSMALLOC_CHAIN_SIZE, UL))
 
-/* ZS_MIN_ALLOC_SIZE must be multiple of ZS_ALIGN */
-#define ZS_MIN_ALLOC_SIZE \
-	MAX(32, (ZS_MAX_PAGES_PER_ZSPAGE << PAGE_SHIFT >> OBJ_INDEX_BITS))
 /* each chunk includes extra space to keep handle */
 #define ZS_MAX_ALLOC_SIZE	PAGE_SIZE
 
@@ -148,6 +146,11 @@
  *  (reason above)
  */
 #define ZS_SIZE_CLASS_DELTA	(PAGE_SIZE >> CLASS_BITS)
+#define ZS_MIN_ALLOC_RAW \
+	DIV_ROUND_UP(ZS_MAX_PAGES_PER_ZSPAGE * PAGE_SIZE, OBJ_INDEX_MASK)
+#define ZS_MIN_ALLOC_SIZE MAX(32UL, ALIGN(ZS_MIN_ALLOC_RAW, ZS_ALIGN))
+
+static_assert(ZS_MIN_ALLOC_SIZE <= ZS_MAX_ALLOC_SIZE);
 #define ZS_SIZE_CLASSES	(DIV_ROUND_UP(ZS_MAX_ALLOC_SIZE - ZS_MIN_ALLOC_SIZE, \
 				      ZS_SIZE_CLASS_DELTA) + 1)
 
@@ -831,8 +834,10 @@ static struct page *get_next_page(struct page *page)
 static void obj_to_location(unsigned long obj, struct page **page,
 				unsigned int *obj_idx)
 {
+	VM_WARN_ON_ONCE(!(obj & OBJ_INDEX_MASK));
+
 	*page = pfn_to_page(obj >> OBJ_INDEX_BITS);
-	*obj_idx = (obj & OBJ_INDEX_MASK);
+	*obj_idx = (obj & OBJ_INDEX_MASK) - 1;
 }
 
 static void obj_to_page(unsigned long obj, struct page **page)
@@ -849,8 +854,10 @@ static unsigned long location_to_obj(struct page *page, unsigned int obj_idx)
 {
 	unsigned long obj;
 
+	VM_WARN_ON_ONCE((unsigned long)obj_idx + 1 > OBJ_INDEX_MASK);
+
 	obj = page_to_pfn(page) << OBJ_INDEX_BITS;
-	obj |= obj_idx & OBJ_INDEX_MASK;
+	obj |= ((unsigned long)obj_idx + 1) & OBJ_INDEX_MASK;
 
 	return obj;
 }
