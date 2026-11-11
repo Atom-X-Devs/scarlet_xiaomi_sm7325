@@ -79,7 +79,7 @@
  */
 #define ZS_ALIGN		8
 
-#define ZS_HANDLE_SIZE (sizeof(unsigned long))
+#define ZS_HANDLE_SIZE sizeof(struct zs_handle *)
 
 /*
  * Object location (<PFN>, <obj_idx>) is encoded as
@@ -225,6 +225,10 @@ struct link_free {
 		 */
 		unsigned long handle;
 	};
+};
+
+struct zs_handle {
+	unsigned long __private obj;
 };
 
 struct zs_pool {
@@ -388,7 +392,7 @@ static int create_cache(struct zs_pool *pool)
 	name = kasprintf(GFP_KERNEL, "zs_handle-%s", pool->name);
 	if (!name)
 		return -ENOMEM;
-	pool->handle_cachep = kmem_cache_create(name, ZS_HANDLE_SIZE,
+	pool->handle_cachep = kmem_cache_create(name, sizeof(struct zs_handle),
 						0, 0, NULL);
 	kfree(name);
 	if (!pool->handle_cachep)
@@ -415,15 +419,15 @@ static void destroy_cache(struct zs_pool *pool)
 	kmem_cache_destroy(pool->zspage_cachep);
 }
 
-static unsigned long cache_alloc_handle(struct zs_pool *pool, gfp_t gfp)
+static struct zs_handle *cache_alloc_handle(struct zs_pool *pool, gfp_t gfp)
 {
-	return (unsigned long)kmem_cache_alloc(pool->handle_cachep, gfp &
+	return kmem_cache_alloc(pool->handle_cachep, gfp &
 		~(__GFP_HIGHMEM|__GFP_MOVABLE|__GFP_CMA|__GFP_OFFLINABLE));
 }
 
-static void cache_free_handle(struct zs_pool *pool, unsigned long handle)
+static void cache_free_handle(struct zs_pool *pool, struct zs_handle *handle)
 {
-	kmem_cache_free(pool->handle_cachep, (void *)handle);
+	kmem_cache_free(pool->handle_cachep, handle);
 }
 
 static struct zspage *cache_alloc_zspage(struct zs_pool *pool, gfp_t flags)
@@ -437,10 +441,10 @@ static void cache_free_zspage(struct zs_pool *pool, struct zspage *zspage)
 	kmem_cache_free(pool->zspage_cachep, zspage);
 }
 
-/* class->lock(which owns the handle) synchronizes races */
-static void record_obj(unsigned long handle, unsigned long obj)
+/* Serialize location updates with class->lock once the zspage is shared. */
+static void record_obj(struct zs_handle *handle, unsigned long obj)
 {
-	*(unsigned long *)handle = obj;
+	WRITE_ONCE(ACCESS_PRIVATE(handle, obj), obj);
 }
 
 /* zpool driver */
@@ -465,7 +469,7 @@ static void zs_zpool_destroy(void *pool)
 static int zs_zpool_malloc(void *pool, size_t size, gfp_t gfp,
 			unsigned long *handle)
 {
-	*handle = zs_malloc(pool, size, gfp);
+	*handle = (unsigned long)zs_malloc(pool, size, gfp);
 
 	if (IS_ERR_VALUE(*handle))
 		return PTR_ERR((void *)*handle);
@@ -473,25 +477,25 @@ static int zs_zpool_malloc(void *pool, size_t size, gfp_t gfp,
 }
 static void zs_zpool_free(void *pool, unsigned long handle)
 {
-	zs_free(pool, handle);
+	zs_free(pool, (struct zs_handle *)handle);
 }
 
 static void *zs_zpool_obj_read_begin(void *pool, unsigned long handle,
 				     void *local_copy)
 {
-	return zs_obj_read_begin(pool, handle, local_copy);
+	return zs_obj_read_begin(pool, (struct zs_handle *)handle, local_copy);
 }
 
 static void zs_zpool_obj_read_end(void *pool, unsigned long handle,
 				  void *handle_mem)
 {
-	zs_obj_read_end(pool, handle, handle_mem);
+	zs_obj_read_end(pool, (struct zs_handle *)handle, handle_mem);
 }
 
 static void zs_zpool_obj_write(void *pool, unsigned long handle,
 			       void *handle_mem, size_t mem_len)
 {
-	zs_obj_write(pool, handle, handle_mem, mem_len);
+	zs_obj_write(pool, (struct zs_handle *)handle, handle_mem, mem_len);
 }
 
 static u64 zs_zpool_total_size(void *pool)
@@ -851,12 +855,12 @@ static unsigned long location_to_obj(struct page *page, unsigned int obj_idx)
 	return obj;
 }
 
-static unsigned long handle_to_obj(unsigned long handle)
+static unsigned long handle_to_obj(const struct zs_handle *handle)
 {
-	return *(unsigned long *)handle;
+	return READ_ONCE(ACCESS_PRIVATE(handle, obj));
 }
 
-static inline unsigned long obj_allocated(struct page *page, void *obj)
+static inline struct zs_handle *obj_allocated(struct page *page, void *obj)
 {
 	unsigned long handle;
 	struct zspage *zspage = get_zspage(page);
@@ -868,10 +872,10 @@ static inline unsigned long obj_allocated(struct page *page, void *obj)
 		handle = *(unsigned long *)obj;
 
 	if (!(handle & OBJ_ALLOCATED_TAG))
-		return 0;
+		return NULL;
 
 	/* Clear all tags before returning the handle */
-	return handle & ~OBJ_TAG_MASK;
+	return (struct zs_handle *)(handle & ~OBJ_TAG_MASK);
 }
 
 static void reset_page(struct page *page)
@@ -1114,7 +1118,7 @@ unsigned long zs_get_total_pages(struct zs_pool *pool)
 }
 EXPORT_SYMBOL_GPL(zs_get_total_pages);
 
-void *zs_obj_read_begin(struct zs_pool *pool, unsigned long handle,
+void *zs_obj_read_begin(struct zs_pool *pool, const struct zs_handle *handle,
 			size_t mem_len, void *local_copy)
 {
 	struct zspage *zspage;
@@ -1126,7 +1130,6 @@ void *zs_obj_read_begin(struct zs_pool *pool, unsigned long handle,
 
 	/* Guarantee we can get zspage from handle safely */
 	read_lock(&pool->lock);
-	obj = handle_to_obj(handle);
 	obj = handle_to_obj(handle);
 	obj_to_location(obj, &page, &obj_idx);
 	zspage = get_zspage(page);
@@ -1164,7 +1167,7 @@ void *zs_obj_read_begin(struct zs_pool *pool, unsigned long handle,
 }
 EXPORT_SYMBOL_GPL(zs_obj_read_begin);
 
-void zs_obj_read_end(struct zs_pool *pool, unsigned long handle,
+void zs_obj_read_end(struct zs_pool *pool, const struct zs_handle *handle,
 		     size_t mem_len, void *handle_mem)
 {
 	struct zspage *zspage;
@@ -1191,7 +1194,7 @@ void zs_obj_read_end(struct zs_pool *pool, unsigned long handle,
 }
 EXPORT_SYMBOL_GPL(zs_obj_read_end);
 
-void zs_obj_read_sg_begin(struct zs_pool *pool, unsigned long handle,
+void zs_obj_read_sg_begin(struct zs_pool *pool, const struct zs_handle *handle,
 			  struct scatterlist *sg, size_t mem_len)
 {
 	struct zspage *zspage;
@@ -1238,7 +1241,7 @@ void zs_obj_read_sg_begin(struct zs_pool *pool, unsigned long handle,
 }
 EXPORT_SYMBOL_GPL(zs_obj_read_sg_begin);
 
-void zs_obj_read_sg_end(struct zs_pool *pool, unsigned long handle)
+void zs_obj_read_sg_end(struct zs_pool *pool, const struct zs_handle *handle)
 {
 	struct zspage *zspage;
 	struct page *page;
@@ -1253,7 +1256,7 @@ void zs_obj_read_sg_end(struct zs_pool *pool, unsigned long handle)
 }
 EXPORT_SYMBOL_GPL(zs_obj_read_sg_end);
 
-void zs_obj_write(struct zs_pool *pool, unsigned long handle,
+void zs_obj_write(struct zs_pool *pool, const struct zs_handle *handle,
 		  void *handle_mem, size_t mem_len)
 {
 	struct zspage *zspage;
@@ -1321,7 +1324,7 @@ size_t zs_huge_class_size(struct zs_pool *pool)
 EXPORT_SYMBOL_GPL(zs_huge_class_size);
 
 static unsigned long obj_malloc(struct zs_pool *pool,
-				struct zspage *zspage, unsigned long handle)
+				struct zspage *zspage, struct zs_handle *handle)
 {
 	int i, nr_page, offset;
 	unsigned long obj;
@@ -1348,10 +1351,10 @@ static unsigned long obj_malloc(struct zs_pool *pool,
 	set_freeobj(zspage, link->next >> OBJ_TAG_BITS);
 	if (likely(!ZsHugePage(zspage)))
 		/* record handle in the header of allocated chunk */
-		link->handle = handle | OBJ_ALLOCATED_TAG;
+		link->handle = (unsigned long)handle | OBJ_ALLOCATED_TAG;
 	else
 		/* record handle to page->index */
-		zspage->first_page->index = handle | OBJ_ALLOCATED_TAG;
+		zspage->first_page->index = (unsigned long)handle | OBJ_ALLOCATED_TAG;
 
 	kunmap_local(vaddr);
 	mod_zspage_inuse(zspage, 1);
@@ -1373,22 +1376,22 @@ static unsigned long obj_malloc(struct zs_pool *pool,
  * otherwise an ERR_PTR().
  * Allocation requests with size > ZS_MAX_ALLOC_SIZE will fail.
  */
-unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t gfp)
+struct zs_handle *zs_malloc(struct zs_pool *pool, size_t size, gfp_t gfp)
 {
-	unsigned long handle;
+	struct zs_handle *handle;
 	struct size_class *class;
 	int newfg;
 	struct zspage *zspage;
 
 	if (unlikely(!size))
-		return (unsigned long)ERR_PTR(-EINVAL);
+		return ERR_PTR(-EINVAL);
 
 	if (unlikely(size > ZS_MAX_ALLOC_SIZE))
-		return (unsigned long)ERR_PTR(-ENOSPC);
+		return ERR_PTR(-ENOSPC);
 
 	handle = cache_alloc_handle(pool, gfp);
 	if (unlikely(!handle))
-		return (unsigned long)ERR_PTR(-ENOMEM);
+		return ERR_PTR(-ENOMEM);
 
 	/* extra space in chunk to keep the handle */
 	size += ZS_HANDLE_SIZE;
@@ -1411,7 +1414,7 @@ unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t gfp)
 	zspage = alloc_zspage(pool, class, gfp);
 	if (unlikely(!zspage)) {
 		cache_free_handle(pool, handle);
-		return (unsigned long)ERR_PTR(-ENOMEM);
+		return ERR_PTR(-ENOMEM);
 	}
 
 	spin_lock(&class->lock);
@@ -1458,7 +1461,7 @@ static void obj_free(int class_size, unsigned long obj)
 	mod_zspage_inuse(zspage, -1);
 }
 
-void zs_free(struct zs_pool *pool, unsigned long handle)
+void zs_free(struct zs_pool *pool, struct zs_handle *handle)
 {
 	struct zspage *zspage;
 	struct page *f_page;
@@ -1466,7 +1469,7 @@ void zs_free(struct zs_pool *pool, unsigned long handle)
 	struct size_class *class;
 	int fullness;
 
-	if (IS_ERR_OR_NULL((void *)handle))
+	if (IS_ERR_OR_NULL(handle))
 		return;
 
 	/*
@@ -1567,12 +1570,12 @@ static void zs_object_copy(struct size_class *class, unsigned long dst,
  * Find alloced object in zspage from index object and
  * return handle.
  */
-static unsigned long find_alloced_obj(struct size_class *class,
-				      struct page *page, int *obj_idx)
+static struct zs_handle *find_alloced_obj(struct size_class *class,
+					  struct page *page, int *obj_idx)
 {
 	unsigned int offset;
 	int index = *obj_idx;
-	unsigned long handle = 0;
+	struct zs_handle *handle = NULL;
 	void *addr = kmap_local_page(page);
 
 	offset = get_first_obj_offset(page);
@@ -1598,7 +1601,7 @@ static void migrate_zspage(struct zs_pool *pool, struct zspage *src_zspage,
 			   struct zspage *dst_zspage)
 {
 	unsigned long used_obj, free_obj;
-	unsigned long handle;
+	struct zs_handle *handle;
 	int obj_idx = 0;
 	struct page *s_page = get_first_page(src_zspage);
 	struct size_class *class = pool->size_class[src_zspage->class];
@@ -1795,7 +1798,7 @@ static int zs_page_migrate(struct address_space *mapping, struct page *newpage,
 	struct page *dummy;
 	void *s_addr, *d_addr, *addr;
 	unsigned int offset;
-	unsigned long handle;
+	struct zs_handle *handle;
 	unsigned long old_obj, new_obj;
 	unsigned int obj_idx;
 
