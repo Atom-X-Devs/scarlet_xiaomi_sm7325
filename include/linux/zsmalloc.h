@@ -14,6 +14,7 @@
 #ifndef _ZS_MALLOC_H_
 #define _ZS_MALLOC_H_
 
+#include <linux/compiler.h>
 #include <linux/types.h>
 
 struct zs_pool_stats {
@@ -21,15 +22,38 @@ struct zs_pool_stats {
 	atomic_long_t pages_compacted;
 };
 
+/*
+ * zsmalloc retains a back-pointer to this handle and updates it when
+ * compaction or page migration moves the object. A live handle must stay
+ * naturally aligned at the same address until zs_free() or zs_rebind_handle().
+ * Keep handles off the stack and initialize them only before first use.
+ * Owners must serialize access with freeing and rebinding.
+ */
+struct zs_handle {
+	unsigned long __private obj;
+};
+
+static inline void zs_handle_init(struct zs_handle *handle)
+{
+	ACCESS_PRIVATE(handle, obj) = 0;
+}
+
+static inline bool zs_handle_is_allocated(const struct zs_handle *handle)
+{
+	return READ_ONCE(ACCESS_PRIVATE(handle, obj)) != 0;
+}
+
 struct zs_pool;
-struct zs_handle;
 struct scatterlist;
 
 struct zs_pool *zs_create_pool(const char *name);
 void zs_destroy_pool(struct zs_pool *pool);
 
-struct zs_handle *zs_malloc(struct zs_pool *pool, size_t size, gfp_t flags);
+int zs_malloc(struct zs_pool *pool, struct zs_handle *handle,
+	      size_t size, gfp_t gfp);
 void zs_free(struct zs_pool *pool, struct zs_handle *handle);
+void zs_rebind_handle(struct zs_pool *pool, struct zs_handle *dst,
+		      struct zs_handle *src);
 
 size_t zs_huge_class_size(struct zs_pool *pool);
 
