@@ -198,8 +198,8 @@ static int msm_ext_disp_audio_type_get(struct snd_kcontrol *kcontrol,
 	struct snd_soc_component *component =
 			snd_soc_kcontrol_component(kcontrol);
 	struct msm_ext_disp_audio_codec_rx_data *codec_data;
-	enum msm_ext_disp_cable_state cable_state;
-	enum msm_ext_disp_type disp_type;
+	int cable_state;
+	int disp_type;
 	struct msm_ext_disp_codec_id codec_info;
 	int rc = 0;
 	int dai_id = ((struct soc_enum *) kcontrol->private_value)->shift_l;
