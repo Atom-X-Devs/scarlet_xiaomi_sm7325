@@ -578,43 +578,45 @@ void hdd_copy_ht_caps(struct ieee80211_ht_cap *hdd_ht_cap,
 
 {
 	uint32_t i, temp_ht_cap;
+	uint16_t cap_info = 0, extended_ht_cap_info = 0;
+	uint32_t tx_bf_cap_info = 0;
 
 	qdf_mem_zero(hdd_ht_cap, sizeof(struct ieee80211_ht_cap));
 
 	if (roam_ht_cap->advCodingCap)
-		hdd_ht_cap->cap_info |= IEEE80211_HT_CAP_LDPC_CODING;
+		cap_info |= IEEE80211_HT_CAP_LDPC_CODING;
 	if (roam_ht_cap->supportedChannelWidthSet)
-		hdd_ht_cap->cap_info |= IEEE80211_HT_CAP_SUP_WIDTH_20_40;
+		cap_info |= IEEE80211_HT_CAP_SUP_WIDTH_20_40;
 	temp_ht_cap = roam_ht_cap->mimoPowerSave &
 	    (IEEE80211_HT_CAP_SM_PS >> IEEE80211_HT_CAP_SM_PS_SHIFT);
 	if (temp_ht_cap)
-		hdd_ht_cap->cap_info |=
+		cap_info |=
 			temp_ht_cap << IEEE80211_HT_CAP_SM_PS_SHIFT;
 	if (roam_ht_cap->greenField)
-		hdd_ht_cap->cap_info |= IEEE80211_HT_CAP_GRN_FLD;
+		cap_info |= IEEE80211_HT_CAP_GRN_FLD;
 	if (roam_ht_cap->shortGI20MHz)
-		hdd_ht_cap->cap_info |= IEEE80211_HT_CAP_SGI_20;
+		cap_info |= IEEE80211_HT_CAP_SGI_20;
 	if (roam_ht_cap->shortGI40MHz)
-		hdd_ht_cap->cap_info |= IEEE80211_HT_CAP_SGI_40;
+		cap_info |= IEEE80211_HT_CAP_SGI_40;
 	if (roam_ht_cap->txSTBC)
-		hdd_ht_cap->cap_info |= IEEE80211_HT_CAP_TX_STBC;
+		cap_info |= IEEE80211_HT_CAP_TX_STBC;
 	temp_ht_cap = roam_ht_cap->rxSTBC & (IEEE80211_HT_CAP_RX_STBC >>
 	    IEEE80211_HT_CAP_RX_STBC_SHIFT);
 	if (temp_ht_cap)
-		hdd_ht_cap->cap_info |=
+		cap_info |=
 			temp_ht_cap << IEEE80211_HT_CAP_RX_STBC_SHIFT;
 	if (roam_ht_cap->delayedBA)
-		hdd_ht_cap->cap_info |= IEEE80211_HT_CAP_DELAY_BA;
+		cap_info |= IEEE80211_HT_CAP_DELAY_BA;
 	if (roam_ht_cap->maximalAMSDUsize)
-		hdd_ht_cap->cap_info |= IEEE80211_HT_CAP_MAX_AMSDU;
+		cap_info |= IEEE80211_HT_CAP_MAX_AMSDU;
 	if (roam_ht_cap->dsssCckMode40MHz)
-		hdd_ht_cap->cap_info |= IEEE80211_HT_CAP_DSSSCCK40;
+		cap_info |= IEEE80211_HT_CAP_DSSSCCK40;
 	if (roam_ht_cap->psmp)
-		hdd_ht_cap->cap_info |= IEEE80211_HT_CAP_RESERVED;
+		cap_info |= IEEE80211_HT_CAP_RESERVED;
 	if (roam_ht_cap->stbcControlFrame)
-		hdd_ht_cap->cap_info |= IEEE80211_HT_CAP_40MHZ_INTOLERANT;
+		cap_info |= IEEE80211_HT_CAP_40MHZ_INTOLERANT;
 	if (roam_ht_cap->lsigTXOPProtection)
-		hdd_ht_cap->cap_info |= IEEE80211_HT_CAP_LSIG_TXOP_PROT;
+		cap_info |= IEEE80211_HT_CAP_LSIG_TXOP_PROT;
 
 	/* 802.11n HT capability AMPDU settings (for ampdu_params_info) */
 	if (roam_ht_cap->maxRxAMPDUFactor)
@@ -629,57 +631,57 @@ void hdd_copy_ht_caps(struct ieee80211_ht_cap *hdd_ht_cap,
 
 	/* 802.11n HT extended capabilities masks */
 	if (roam_ht_cap->pco)
-		hdd_ht_cap->extended_ht_cap_info |=
+		extended_ht_cap_info |=
 			IEEE80211_HT_EXT_CAP_PCO;
 	temp_ht_cap = roam_ht_cap->transitionTime &
 	    (IEEE80211_HT_EXT_CAP_PCO_TIME >>
 	    IEEE80211_HT_EXT_CAP_PCO_TIME_SHIFT);
 	if (temp_ht_cap)
-		hdd_ht_cap->extended_ht_cap_info |=
+		extended_ht_cap_info |=
 			temp_ht_cap << IEEE80211_HT_EXT_CAP_PCO_TIME_SHIFT;
 	temp_ht_cap = roam_ht_cap->mcsFeedback &
 	    (IEEE80211_HT_EXT_CAP_MCS_FB >> IEEE80211_HT_EXT_CAP_MCS_FB_SHIFT);
 	if (temp_ht_cap)
-		hdd_ht_cap->extended_ht_cap_info |=
+		extended_ht_cap_info |=
 			temp_ht_cap << IEEE80211_HT_EXT_CAP_MCS_FB_SHIFT;
 
 	/* tx_bf_cap_info capabilities */
 	if (roam_ht_cap->txBF)
-		hdd_ht_cap->tx_BF_cap_info |= TX_BF_CAP_INFO_TX_BF;
+		tx_bf_cap_info |= TX_BF_CAP_INFO_TX_BF;
 	if (roam_ht_cap->rxStaggeredSounding)
-		hdd_ht_cap->tx_BF_cap_info |=
+		tx_bf_cap_info |=
 			TX_BF_CAP_INFO_RX_STAG_RED_SOUNDING;
 	if (roam_ht_cap->txStaggeredSounding)
-		hdd_ht_cap->tx_BF_cap_info |=
+		tx_bf_cap_info |=
 			TX_BF_CAP_INFO_TX_STAG_RED_SOUNDING;
 	if (roam_ht_cap->rxZLF)
-		hdd_ht_cap->tx_BF_cap_info |= TX_BF_CAP_INFO_RX_ZFL;
+		tx_bf_cap_info |= TX_BF_CAP_INFO_RX_ZFL;
 	if (roam_ht_cap->txZLF)
-		hdd_ht_cap->tx_BF_cap_info |= TX_BF_CAP_INFO_TX_ZFL;
+		tx_bf_cap_info |= TX_BF_CAP_INFO_TX_ZFL;
 	if (roam_ht_cap->implicitTxBF)
-		hdd_ht_cap->tx_BF_cap_info |= TX_BF_CAP_INFO_IMP_TX_BF;
+		tx_bf_cap_info |= TX_BF_CAP_INFO_IMP_TX_BF;
 	temp_ht_cap = roam_ht_cap->calibration &
 	    (TX_BF_CAP_INFO_CALIBRATION >> TX_BF_CAP_INFO_CALIBRATION_SHIFT);
 	if (temp_ht_cap)
-		hdd_ht_cap->tx_BF_cap_info |=
+		tx_bf_cap_info |=
 			temp_ht_cap << TX_BF_CAP_INFO_CALIBRATION_SHIFT;
 	if (roam_ht_cap->explicitCSITxBF)
-		hdd_ht_cap->tx_BF_cap_info |= TX_BF_CAP_INFO_EXP_CSIT_BF;
+		tx_bf_cap_info |= TX_BF_CAP_INFO_EXP_CSIT_BF;
 	if (roam_ht_cap->explicitUncompressedSteeringMatrix)
-		hdd_ht_cap->tx_BF_cap_info |=
+		tx_bf_cap_info |=
 			TX_BF_CAP_INFO_EXP_UNCOMP_STEER_MAT;
 	temp_ht_cap = roam_ht_cap->explicitBFCSIFeedback &
 	    (TX_BF_CAP_INFO_EXP_BF_CSI_FB >>
 	     TX_BF_CAP_INFO_EXP_BF_CSI_FB_SHIFT);
 	if (temp_ht_cap)
-		hdd_ht_cap->tx_BF_cap_info |=
+		tx_bf_cap_info |=
 			temp_ht_cap << TX_BF_CAP_INFO_EXP_BF_CSI_FB_SHIFT;
 	temp_ht_cap =
 	    roam_ht_cap->explicitUncompressedSteeringMatrixFeedback &
 	    (TX_BF_CAP_INFO_EXP_UNCMP_STEER_MAT >>
 	     TX_BF_CAP_INFO_EXP_UNCMP_STEER_MAT_SHIFT);
 	if (temp_ht_cap)
-		hdd_ht_cap->tx_BF_cap_info |=
+		tx_bf_cap_info |=
 			temp_ht_cap <<
 			TX_BF_CAP_INFO_EXP_UNCMP_STEER_MAT_SHIFT;
 	temp_ht_cap =
@@ -687,27 +689,27 @@ void hdd_copy_ht_caps(struct ieee80211_ht_cap *hdd_ht_cap,
 	    (TX_BF_CAP_INFO_EXP_CMP_STEER_MAT_FB >>
 	     TX_BF_CAP_INFO_EXP_CMP_STEER_MAT_FB_SHIFT);
 	if (temp_ht_cap)
-		hdd_ht_cap->tx_BF_cap_info |=
+		tx_bf_cap_info |=
 			temp_ht_cap <<
 				TX_BF_CAP_INFO_EXP_CMP_STEER_MAT_FB_SHIFT;
 	temp_ht_cap = roam_ht_cap->csiNumBFAntennae &
 	    (TX_BF_CAP_INFO_CSI_NUM_BF_ANT >>
 	     TX_BF_CAP_INFO_CSI_NUM_BF_ANT_SHIFT);
 	if (temp_ht_cap)
-		hdd_ht_cap->tx_BF_cap_info |=
+		tx_bf_cap_info |=
 			temp_ht_cap << TX_BF_CAP_INFO_CSI_NUM_BF_ANT_SHIFT;
 	temp_ht_cap = roam_ht_cap->uncompressedSteeringMatrixBFAntennae &
 	    (TX_BF_CAP_INFO_UNCOMP_STEER_MAT_BF_ANT >>
 	     TX_BF_CAP_INFO_UNCOMP_STEER_MAT_BF_ANT_SHIFT);
 	if (temp_ht_cap)
-		hdd_ht_cap->tx_BF_cap_info |=
+		tx_bf_cap_info |=
 			temp_ht_cap <<
 				TX_BF_CAP_INFO_UNCOMP_STEER_MAT_BF_ANT_SHIFT;
 	temp_ht_cap = roam_ht_cap->compressedSteeringMatrixBFAntennae &
 	    (TX_BF_CAP_INFO_COMP_STEER_MAT_BF_ANT >>
 	     TX_BF_CAP_INFO_COMP_STEER_MAT_BF_ANT_SHIFT);
 	if (temp_ht_cap)
-		hdd_ht_cap->tx_BF_cap_info |=
+		tx_bf_cap_info |=
 			temp_ht_cap <<
 				TX_BF_CAP_INFO_COMP_STEER_MAT_BF_ANT_SHIFT;
 
@@ -732,6 +734,11 @@ void hdd_copy_ht_caps(struct ieee80211_ht_cap *hdd_ht_cap,
 	if (roam_ht_cap->txSoundingPPDUs)
 		hdd_ht_cap->antenna_selection_info |=
 			ANTENNA_SEL_INFO_TX_SOUNDING_PPDU;
+
+	hdd_ht_cap->cap_info = cpu_to_le16(cap_info);
+	hdd_ht_cap->extended_ht_cap_info =
+		cpu_to_le16(extended_ht_cap_info);
+	hdd_ht_cap->tx_BF_cap_info = cpu_to_le32(tx_bf_cap_info);
 
 	/* mcs data rate */
 	for (i = 0; i < IEEE80211_HT_MCS_MASK_LEN; ++i)
@@ -762,11 +769,12 @@ void hdd_copy_vht_caps(struct ieee80211_vht_cap *hdd_vht_cap,
 		       tDot11fIEVHTCaps *roam_vht_cap)
 {
 	uint32_t temp_vht_cap;
+	uint32_t vht_cap_info = 0;
 
 	qdf_mem_zero(hdd_vht_cap, sizeof(struct ieee80211_vht_cap));
 
 	temp_vht_cap = roam_vht_cap->maxMPDULen & VHT_CAP_MAX_MPDU_LENGTH_MASK;
-	hdd_vht_cap->vht_cap_info |= temp_vht_cap;
+	vht_cap_info |= temp_vht_cap;
 	temp_vht_cap = roam_vht_cap->supportedChannelWidthSet &
 		(IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_MASK >>
 			VHT_CAP_SUPP_CHAN_WIDTH_MASK_SHIFT);
@@ -774,75 +782,76 @@ void hdd_copy_vht_caps(struct ieee80211_vht_cap *hdd_vht_cap,
 		if (roam_vht_cap->supportedChannelWidthSet &
 		    (IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160MHZ >>
 			VHT_CAP_SUPP_CHAN_WIDTH_MASK_SHIFT))
-			hdd_vht_cap->vht_cap_info |=
+			vht_cap_info |=
 				temp_vht_cap <<
 				IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160MHZ;
 		if (roam_vht_cap->supportedChannelWidthSet &
 		    (IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160_80PLUS80MHZ >>
 			VHT_CAP_SUPP_CHAN_WIDTH_MASK_SHIFT))
-			hdd_vht_cap->vht_cap_info |=
+			vht_cap_info |=
 			temp_vht_cap <<
 			IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160_80PLUS80MHZ;
 	}
 	if (roam_vht_cap->ldpcCodingCap)
-		hdd_vht_cap->vht_cap_info |= IEEE80211_VHT_CAP_RXLDPC;
+		vht_cap_info |= IEEE80211_VHT_CAP_RXLDPC;
 	if (roam_vht_cap->shortGI80MHz)
-		hdd_vht_cap->vht_cap_info |= IEEE80211_VHT_CAP_SHORT_GI_80;
+		vht_cap_info |= IEEE80211_VHT_CAP_SHORT_GI_80;
 	if (roam_vht_cap->shortGI160and80plus80MHz)
-		hdd_vht_cap->vht_cap_info |= IEEE80211_VHT_CAP_SHORT_GI_160;
+		vht_cap_info |= IEEE80211_VHT_CAP_SHORT_GI_160;
 	if (roam_vht_cap->txSTBC)
-		hdd_vht_cap->vht_cap_info |= IEEE80211_VHT_CAP_TXSTBC;
+		vht_cap_info |= IEEE80211_VHT_CAP_TXSTBC;
 	temp_vht_cap = roam_vht_cap->rxSTBC & (IEEE80211_VHT_CAP_RXSTBC_MASK >>
 		VHT_CAP_RXSTBC_MASK_SHIFT);
 	if (temp_vht_cap)
-		hdd_vht_cap->vht_cap_info |=
+		vht_cap_info |=
 			temp_vht_cap << VHT_CAP_RXSTBC_MASK_SHIFT;
 	if (roam_vht_cap->suBeamFormerCap)
-		hdd_vht_cap->vht_cap_info |=
+		vht_cap_info |=
 			IEEE80211_VHT_CAP_SU_BEAMFORMER_CAPABLE;
 	if (roam_vht_cap->suBeamformeeCap)
-		hdd_vht_cap->vht_cap_info |=
+		vht_cap_info |=
 			IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE;
 	temp_vht_cap = roam_vht_cap->csnofBeamformerAntSup &
 			(VHT_CAP_BEAMFORMEE_STS_MASK);
 	if (temp_vht_cap)
-		hdd_vht_cap->vht_cap_info |=
+		vht_cap_info |=
 			temp_vht_cap << VHT_CAP_BEAMFORMEE_STS_SHIFT;
 	temp_vht_cap = roam_vht_cap->numSoundingDim &
 			(VHT_CAP_SOUNDING_DIMENSIONS_MASK);
 	if (temp_vht_cap)
-		hdd_vht_cap->vht_cap_info |=
+		vht_cap_info |=
 			temp_vht_cap << VHT_CAP_SOUNDING_DIMENSIONS_SHIFT;
 	if (roam_vht_cap->muBeamformerCap)
-		hdd_vht_cap->vht_cap_info |=
+		vht_cap_info |=
 			IEEE80211_VHT_CAP_MU_BEAMFORMER_CAPABLE;
 	if (roam_vht_cap->muBeamformeeCap)
-		hdd_vht_cap->vht_cap_info |=
+		vht_cap_info |=
 			IEEE80211_VHT_CAP_MU_BEAMFORMEE_CAPABLE;
 	if (roam_vht_cap->vhtTXOPPS)
-		hdd_vht_cap->vht_cap_info |=
+		vht_cap_info |=
 			IEEE80211_VHT_CAP_VHT_TXOP_PS;
 	if (roam_vht_cap->htcVHTCap)
-		hdd_vht_cap->vht_cap_info |=
+		vht_cap_info |=
 			IEEE80211_VHT_CAP_HTC_VHT;
 	temp_vht_cap = roam_vht_cap->maxAMPDULenExp &
 			(VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_MASK);
 	if (temp_vht_cap)
-		hdd_vht_cap->vht_cap_info |=
+		vht_cap_info |=
 			temp_vht_cap <<
 			VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_MASK_SHIFT;
 	temp_vht_cap = roam_vht_cap->vhtLinkAdaptCap &
 		(IEEE80211_VHT_CAP_VHT_LINK_ADAPTATION_VHT_MRQ_MFB >>
 		 VHT_CAP_VHT_LINK_ADAPTATION_VHT_MRQ_MFB_SHIFT);
 	if (temp_vht_cap)
-		hdd_vht_cap->vht_cap_info |= temp_vht_cap <<
+		vht_cap_info |= temp_vht_cap <<
 			VHT_CAP_VHT_LINK_ADAPTATION_VHT_MRQ_MFB_SHIFT;
 	if (roam_vht_cap->rxAntPattern)
-		hdd_vht_cap->vht_cap_info |=
+		vht_cap_info |=
 			IEEE80211_VHT_CAP_RX_ANTENNA_PATTERN;
 	if (roam_vht_cap->txAntPattern)
-		hdd_vht_cap->vht_cap_info |=
+		vht_cap_info |=
 			IEEE80211_VHT_CAP_TX_ANTENNA_PATTERN;
+	hdd_vht_cap->vht_cap_info = cpu_to_le32(vht_cap_info);
 	hdd_vht_cap->supp_mcs.rx_mcs_map = roam_vht_cap->rxMCSMap;
 	hdd_vht_cap->supp_mcs.rx_highest =
 		((uint16_t)roam_vht_cap->rxHighSupDataRate);
@@ -877,6 +886,7 @@ static void hdd_copy_ht_operation(struct hdd_station_ctx *hdd_sta_ctx,
 	struct ieee80211_ht_operation *hdd_ht_ops =
 		&hdd_sta_ctx->conn_info.ht_operation;
 	uint32_t i, temp_ht_ops;
+	uint16_t operation_mode = 0, stbc_param = 0;
 
 	qdf_mem_zero(hdd_ht_ops, sizeof(struct ieee80211_ht_operation));
 
@@ -906,55 +916,58 @@ static void hdd_copy_ht_operation(struct hdd_station_ctx *hdd_sta_ctx,
 			IEEE80211_HT_OP_MODE_PROTECTION;
 	switch (temp_ht_ops) {
 	case IEEE80211_HT_OP_MODE_PROTECTION_NONMEMBER:
-		hdd_ht_ops->operation_mode |=
+		operation_mode |=
 			IEEE80211_HT_OP_MODE_PROTECTION_NONMEMBER;
 		break;
 	case IEEE80211_HT_OP_MODE_PROTECTION_20MHZ:
-		hdd_ht_ops->operation_mode |=
+		operation_mode |=
 			IEEE80211_HT_OP_MODE_PROTECTION_20MHZ;
 		break;
 	case IEEE80211_HT_OP_MODE_PROTECTION_NONHT_MIXED:
-		hdd_ht_ops->operation_mode |=
+		operation_mode |=
 			IEEE80211_HT_OP_MODE_PROTECTION_NONHT_MIXED;
 		break;
 	case IEEE80211_HT_OP_MODE_PROTECTION_NONE:
 	default:
-		hdd_ht_ops->operation_mode |=
+		operation_mode |=
 			IEEE80211_HT_OP_MODE_PROTECTION_NONE;
 	}
 	if (roam_ht_ops->nonGFDevicesPresent)
-		hdd_ht_ops->operation_mode |=
+		operation_mode |=
 			IEEE80211_HT_OP_MODE_NON_GF_STA_PRSNT;
 	if (roam_ht_ops->transmitBurstLimit)
-		hdd_ht_ops->operation_mode |=
+		operation_mode |=
 			HT_OP_MODE_TX_BURST_LIMIT;
 	if (roam_ht_ops->obssNonHTStaPresent)
-		hdd_ht_ops->operation_mode |=
+		operation_mode |=
 			IEEE80211_HT_OP_MODE_NON_HT_STA_PRSNT;
 
 	if (roam_ht_ops->chan_center_freq_seg2)
-		hdd_ht_ops->operation_mode |=
+		operation_mode |=
 			(roam_ht_ops->chan_center_freq_seg2 << IEEE80211_HT_OP_MODE_CCFS2_SHIFT);
 	/* stbc_param */
 	temp_ht_ops = roam_ht_ops->basicSTBCMCS &
 			HT_STBC_PARAM_MCS;
 	if (temp_ht_ops)
-		hdd_ht_ops->stbc_param |= temp_ht_ops;
+		stbc_param |= temp_ht_ops;
 	if (roam_ht_ops->dualCTSProtection)
-		hdd_ht_ops->stbc_param |=
+		stbc_param |=
 			IEEE80211_HT_STBC_PARAM_DUAL_CTS_PROT;
 	if (roam_ht_ops->secondaryBeacon)
-		hdd_ht_ops->stbc_param |=
+		stbc_param |=
 			IEEE80211_HT_STBC_PARAM_STBC_BEACON;
 	if (roam_ht_ops->lsigTXOPProtectionFullSupport)
-		hdd_ht_ops->stbc_param |=
+		stbc_param |=
 			IEEE80211_HT_STBC_PARAM_LSIG_TXOP_FULLPROT;
 	if (roam_ht_ops->pcoActive)
-		hdd_ht_ops->stbc_param |=
+		stbc_param |=
 			IEEE80211_HT_STBC_PARAM_PCO_ACTIVE;
 	if (roam_ht_ops->pcoPhase)
-		hdd_ht_ops->stbc_param |=
+		stbc_param |=
 			IEEE80211_HT_STBC_PARAM_PCO_PHASE;
+
+	hdd_ht_ops->operation_mode = cpu_to_le16(operation_mode);
+	hdd_ht_ops->stbc_param = cpu_to_le16(stbc_param);
 
 	/* basic MCs set */
 	for (i = 0; i < 16; ++i)
