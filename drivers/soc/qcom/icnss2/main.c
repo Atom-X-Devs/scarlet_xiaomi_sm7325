@@ -1577,6 +1577,7 @@ static void icnss_driver_event_work(struct work_struct *work)
 		default:
 			icnss_pr_err("Invalid Event type: %d", event->type);
 			kfree(event);
+			spin_lock_irqsave(&priv->event_lock, flags);
 			continue;
 		}
 
@@ -1639,6 +1640,7 @@ static void icnss_soc_wake_msg_work(struct work_struct *work)
 		default:
 			icnss_pr_err("Invalid Event type: %d", event->type);
 			kfree(event);
+			spin_lock_irqsave(&priv->soc_wake_msg_lock, flags);
 			continue;
 		}
 
