@@ -207,6 +207,12 @@ struct vidc_iface_q_info {
 	(((d) && (d)->vpu_ops && (d)->vpu_ops->op) ? \
 	((d)->vpu_ops->op(__VA_ARGS__)):0)
 
+#define call_venus_op_void(d, op, ...)			\
+	do {						\
+		if ((d) && (d)->vpu_ops && (d)->vpu_ops->op) \
+			(d)->vpu_ops->op(__VA_ARGS__);	\
+	} while (0)
+
 /* Internal data used in vidc_hal not exposed to msm_vidc*/
 struct hal_data {
 	u32 irq;
