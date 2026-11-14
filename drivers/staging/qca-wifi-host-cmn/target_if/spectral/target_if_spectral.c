@@ -2895,7 +2895,7 @@ target_if_is_agile_span_overlap_with_operating_span
 	uint32_t op_end_freq;
 	uint32_t agile_start_freq;
 	uint32_t agile_end_freq;
-	uint32_t cfreq2;
+	int16_t cfreq2;
 
 	if (!spectral) {
 		spectral_err("Spectral object is NULL");
