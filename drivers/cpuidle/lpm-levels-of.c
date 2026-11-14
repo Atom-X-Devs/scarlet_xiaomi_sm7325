@@ -696,7 +696,7 @@ static void add_rimps_tmr_register(struct device_node *dn,
 {
 	struct lpm_cpu *lpm_cpu;
 	uint32_t rimps_threshold = 0;
-	uint32_t index;
+	int index;
 
 	if (list_empty(&cl->cpu)) {
 		struct lpm_cluster *n;
