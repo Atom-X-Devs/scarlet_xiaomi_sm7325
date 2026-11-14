@@ -3256,12 +3256,12 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 		}
 	}
 
-	uport->irq = platform_get_irq(pdev, 0);
-	if (uport->irq < 0) {
-		ret = uport->irq;
+	ret = platform_get_irq(pdev, 0);
+	if (ret < 0) {
 		dev_err(&pdev->dev, "Failed to get IRQ %d\n", ret);
 		return ret;
 	}
+	uport->irq = ret;
 
 	dev_port->name = devm_kasprintf(uport->dev, GFP_KERNEL,
 					"msm_serial_geni%d", uport->line);
