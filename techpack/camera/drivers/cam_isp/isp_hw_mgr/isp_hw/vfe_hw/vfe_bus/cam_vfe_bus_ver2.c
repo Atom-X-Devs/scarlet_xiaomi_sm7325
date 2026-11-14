@@ -1145,7 +1145,7 @@ static int cam_vfe_bus_acquire_wm(
 	uint32_t                              *client_done_mask,
 	uint32_t                               is_dual)
 {
-	uint32_t wm_idx = 0;
+	int wm_idx = 0;
 	struct cam_isp_resource_node              *wm_res_local = NULL;
 	struct cam_vfe_bus_ver2_wm_resource_data  *rsrc_data = NULL;
 
