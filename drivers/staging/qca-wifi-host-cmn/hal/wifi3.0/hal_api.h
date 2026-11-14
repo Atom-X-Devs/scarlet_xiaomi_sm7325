@@ -371,7 +371,8 @@ static inline void hal_write32_mb_confirm(struct hal_soc *hal_soc,
 					hal_soc->dev_base_addr + offset);
 		qdf_iowrite32(new_addr, value);
 		hal_reg_write_result_check(hal_soc,
-					   new_addr - hal_soc->dev_base_addr,
+					   (unsigned long)new_addr -
+					   (unsigned long)hal_soc->dev_base_addr,
 					   value);
 	} else {
 		hal_lock_reg_access(hal_soc, &flags);
@@ -439,7 +440,7 @@ void hal_write_address_32_mb(struct hal_soc *hal_soc,
 	if (!hal_soc->use_register_windowing)
 		return qdf_iowrite32(addr, value);
 
-	offset = addr - hal_soc->dev_base_addr;
+	offset = (unsigned long)addr - (unsigned long)hal_soc->dev_base_addr;
 
 	if (qdf_unlikely(wr_confirm))
 		hal_write32_mb_confirm(hal_soc, offset, value);
@@ -836,7 +837,7 @@ uint32_t hal_read_address_32_mb(struct hal_soc *soc,
 	if (!soc->use_register_windowing)
 		return qdf_ioread32(addr);
 
-	offset = addr - soc->dev_base_addr;
+	offset = (unsigned long)addr - (unsigned long)soc->dev_base_addr;
 	ret = hal_read32_mb(soc, offset);
 	return ret;
 }
