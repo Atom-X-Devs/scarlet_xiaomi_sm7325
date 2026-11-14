@@ -1282,7 +1282,7 @@ static int __iface_cmdq_write(struct venus_hfi_device *device,
 	int rc = __iface_cmdq_write_relaxed(device, pkt, &needs_interrupt, sid);
 
 	if (!rc && needs_interrupt)
-		call_venus_op(device, raise_interrupt, device, sid);
+		call_venus_op_void(device, raise_interrupt, device, sid);
 
 	return rc;
 }
@@ -1316,7 +1316,7 @@ static int __iface_msgq_read(struct venus_hfi_device *device, void *pkt)
 	if (!__read_queue(q_info, (u8 *)pkt, &tx_req_is_set)) {
 		__hal_sim_modify_msg_packet((u8 *)pkt, device);
 		if (tx_req_is_set)
-			call_venus_op(device, raise_interrupt, device,
+			call_venus_op_void(device, raise_interrupt, device,
 				DEFAULT_SID);
 		rc = 0;
 	} else
@@ -1348,7 +1348,7 @@ static int __iface_dbgq_read(struct venus_hfi_device *device, void *pkt)
 
 	if (!__read_queue(q_info, (u8 *)pkt, &tx_req_is_set)) {
 		if (tx_req_is_set)
-			call_venus_op(device, raise_interrupt, device,
+			call_venus_op_void(device, raise_interrupt, device,
 				DEFAULT_SID);
 		rc = 0;
 	} else
@@ -1624,7 +1624,7 @@ static int __interface_queues_init(struct venus_hfi_device *dev)
 		}
 	}
 
-	call_venus_op(dev, setup_ucregion_memmap, dev, DEFAULT_SID);
+	call_venus_op_void(dev, setup_ucregion_memmap, dev, DEFAULT_SID);
 	return 0;
 fail_alloc_queue:
 	return -ENOMEM;
@@ -2912,7 +2912,7 @@ static void venus_hfi_core_work_handler(struct work_struct *work)
 		goto err_no_work;
 	}
 
-	call_venus_op(device, core_clear_interrupt, device);
+	call_venus_op_void(device, core_clear_interrupt, device);
 	num_responses = __response_handler(device);
 
 err_no_work:
@@ -3216,7 +3216,7 @@ static inline int __prepare_enable_clks(struct venus_hfi_device *device,
 		s_vpr_h(sid, "Clock: %s prepared and enabled\n", cl->name);
 	}
 
-	call_venus_op(device, clock_config_on_enable, device, sid);
+	call_venus_op_void(device, clock_config_on_enable, device, sid);
 	return rc;
 
 fail_clk_enable:
@@ -3829,7 +3829,7 @@ static int __venus_power_on(struct venus_hfi_device *device, u32 sid)
 	 */
 	__set_registers(device, sid);
 
-	call_venus_op(device, interrupt_init, device, sid);
+	call_venus_op_void(device, interrupt_init, device, sid);
 	device->intr_status = 0;
 	enable_irq(device->hal_data->irq);
 
@@ -3866,7 +3866,7 @@ static inline int __suspend(struct venus_hfi_device *device)
 
 	__disable_subcaches(device, DEFAULT_SID);
 
-	call_venus_op(device, power_off, device);
+	call_venus_op_void(device, power_off, device);
 	d_vpr_h("Venus power off\n");
 	return rc;
 
@@ -3911,7 +3911,7 @@ static inline int __resume(struct venus_hfi_device *device, u32 sid)
 	if (__enable_hw_power_collapse(device, sid))
 		s_vpr_e(sid, "Failed to enabled inter-frame PC\n");
 
-	call_venus_op(device, setup_ucregion_memmap, device, sid);
+	call_venus_op_void(device, setup_ucregion_memmap, device, sid);
 
 	/* Wait for boot completion */
 	rc = call_venus_op(device, boot_firmware, device, sid);
@@ -3935,7 +3935,7 @@ exit:
 err_reset_core:
 	__tzbsp_set_video_state(TZBSP_VIDEO_STATE_SUSPEND, sid);
 err_set_video_state:
-	call_venus_op(device, power_off, device);
+	call_venus_op_void(device, power_off, device);
 err_venus_power_on:
 	s_vpr_e(sid, "Failed to resume from power collapse\n");
 	return rc;
@@ -4004,7 +4004,7 @@ fail_protect_mem:
 		subsystem_put(device->resources.fw.cookie);
 	device->resources.fw.cookie = NULL;
 fail_load_fw:
-	call_venus_op(device, power_off, device);
+	call_venus_op_void(device, power_off, device);
 fail_venus_power_on:
 fail_init_pkt:
 	__deinit_resources(device);
@@ -4024,7 +4024,7 @@ static void __unload_fw(struct venus_hfi_device *device)
 
 	subsystem_put(device->resources.fw.cookie);
 	__interface_queues_release(device);
-	call_venus_op(device, power_off, device);
+	call_venus_op_void(device, power_off, device);
 	device->resources.fw.cookie = NULL;
 	__deinit_resources(device);
 
@@ -4164,7 +4164,7 @@ static int venus_hfi_noc_error_info(void *dev)
 	mutex_lock(&device->lock);
 	d_vpr_e("%s: non error information\n", __func__);
 
-	call_venus_op(device, noc_error_info, device);
+	call_venus_op_void(device, noc_error_info, device);
 
 	mutex_unlock(&device->lock);
 
