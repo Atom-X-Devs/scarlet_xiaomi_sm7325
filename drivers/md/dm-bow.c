@@ -516,7 +516,7 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 {
 	struct bow_context *bc = container_of(kobj, struct bow_context,
 					      kobj_holder.kobj);
-	enum state state, original_state;
+	int state, original_state;
 	int ret;
 
 	state = buf[0] - '0';
