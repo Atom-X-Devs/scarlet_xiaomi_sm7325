@@ -177,7 +177,7 @@ __wlan_cfg80211_set_interop_issues_ap_config(struct wiphy *wiphy,
 	struct hdd_adapter *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_INTEROP_ISSUES_AP_MAX + 1];
 	struct nlattr *attr;
-	uint32_t count = 0;
+	int count = 0;
 	struct wlan_interop_issues_ap_info interop_issues_ap = {0};
 	struct wlan_objmgr_psoc *psoc;
 	struct wlan_objmgr_vdev *vdev;
