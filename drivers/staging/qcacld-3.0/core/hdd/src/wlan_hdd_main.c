@@ -18093,7 +18093,7 @@ static void hdd_svc_fw_crashed_ind(void)
 
 	hdd_ctx ? wlan_hdd_send_svc_nlink_msg(hdd_ctx->radio_index,
 					      WLAN_SVC_FW_CRASHED_IND,
-					      NULL, 0) : 0;
+					      NULL, 0) : (void)0;
 }
 
 /**
