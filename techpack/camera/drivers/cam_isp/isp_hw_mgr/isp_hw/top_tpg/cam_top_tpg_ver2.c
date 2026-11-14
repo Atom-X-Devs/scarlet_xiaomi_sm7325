@@ -196,7 +196,6 @@ static int cam_top_tpg_ver2_stop(
 	struct cam_hw_soc_info                       *soc_info;
 	struct cam_isp_resource_node                 *tpg_res;
 	const struct cam_top_tpg_ver2_reg_offset     *tpg_reg;
-	struct cam_top_tpg_cfg                       *tpg_data;
 
 	if (!hw_priv || !stop_args ||
 		(arg_size != sizeof(struct cam_isp_resource_node))) {
@@ -208,7 +207,6 @@ static int cam_top_tpg_ver2_stop(
 	tpg_hw = (struct cam_top_tpg_hw   *)tpg_hw_info->core_info;
 	tpg_reg = tpg_hw->tpg_info->tpg_reg;
 	tpg_res = (struct cam_isp_resource_node  *) stop_args;
-	tpg_data = (struct cam_top_tpg_cfg  *)tpg_res->res_state;
 	soc_info = &tpg_hw->hw_info->soc_info;
 
 	if ((tpg_res->res_type != CAM_ISP_RESOURCE_TPG) ||
