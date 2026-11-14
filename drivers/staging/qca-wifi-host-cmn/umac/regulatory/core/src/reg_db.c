@@ -1783,7 +1783,6 @@ const uint32_t reg_5g_sub_dmn_code[REG_DOMAINS_5G_MAX] = {
 	[APL17] = 0x1210,
 	[APL23] = 0x1280,
 	[APL20] = 0x1250,
-	[APL23] = 0x1280,
 	[MKK3] = 0x0340,
 	[MKK5] = 0x0540,
 	[MKK11] = 0x1140,
