@@ -1340,7 +1340,7 @@ static inline qdf_iomem_t hal_get_window_address_6750(struct hal_soc *hal_soc,
 	uint32_t window;
 	uint8_t scale;
 
-	offset = addr - hal_soc->dev_base_addr;
+	offset = (unsigned long)addr - (unsigned long)hal_soc->dev_base_addr;
 	window = (offset >> WINDOW_SHIFT) & WINDOW_VALUE_MASK;
 
 	/* UMAC: 2nd window, CE: 3rd window, CMEM: 4th window */
