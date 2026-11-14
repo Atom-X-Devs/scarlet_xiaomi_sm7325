@@ -9632,13 +9632,15 @@ static int hdd_get_channel_width(struct hdd_adapter *adapter,
 {
 	enum eSirMacHTChannelWidth chwidth;
 	uint8_t nl80211_chwidth;
+	int ret;
 
-	chwidth = wma_cli_get_command(adapter->vdev_id, WMI_VDEV_PARAM_CHWIDTH,
-				      VDEV_CMD);
-	if (chwidth < 0) {
+	ret = wma_cli_get_command(adapter->vdev_id, WMI_VDEV_PARAM_CHWIDTH,
+				  VDEV_CMD);
+	if (ret < 0) {
 		hdd_err("Failed to get chwidth");
 		return -EINVAL;
 	}
+	chwidth = ret;
 
 	nl80211_chwidth = hdd_chwidth_to_nl80211_chwidth(chwidth);
 	if (nla_put_u8(skb, QCA_WLAN_VENDOR_ATTR_CONFIG_CHANNEL_WIDTH,
