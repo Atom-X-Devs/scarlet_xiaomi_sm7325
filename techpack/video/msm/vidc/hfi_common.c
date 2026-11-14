@@ -2440,7 +2440,7 @@ err_create_pkt:
 }
 
 static int __check_core_registered(struct hal_device_data core,
-		phys_addr_t fw_addr, u8 *reg_addr, u32 reg_size,
+		phys_addr_t fw_addr, phys_addr_t reg_addr, u32 reg_size,
 		phys_addr_t irq)
 {
 	struct venus_hfi_device *device;
@@ -2461,14 +2461,14 @@ static int __check_core_registered(struct hal_device_data core,
 					FIRMWARE_SIZE, fw_addr) ||
 			CONTAINS(fw_addr, FIRMWARE_SIZE,
 					hal_data->firmware_base) ||
-			CONTAINS(hal_data->register_base,
+			CONTAINS(hal_data->register_base_phys,
 					reg_size, reg_addr) ||
 			CONTAINS(reg_addr, reg_size,
-					hal_data->register_base) ||
-			OVERLAPS(hal_data->register_base,
+					hal_data->register_base_phys) ||
+			OVERLAPS(hal_data->register_base_phys,
 					reg_size, reg_addr, reg_size) ||
 			OVERLAPS(reg_addr, reg_size,
-					hal_data->register_base,
+					hal_data->register_base_phys,
 					reg_size) ||
 			OVERLAPS(hal_data->firmware_base,
 					FIRMWARE_SIZE, fw_addr,
@@ -2967,8 +2967,7 @@ static int __init_regs_and_interrupts(struct venus_hfi_device *device,
 	int rc = 0;
 
 	rc = __check_core_registered(hal_ctxt, res->firmware_base,
-			(u8 *)(uintptr_t)res->register_base,
-			res->register_size, res->irq);
+			res->register_base, res->register_size, res->irq);
 	if (!rc) {
 		d_vpr_e("Core present/Already added\n");
 		rc = -EEXIST;
@@ -2985,6 +2984,7 @@ static int __init_regs_and_interrupts(struct venus_hfi_device *device,
 
 	hal->irq = res->irq;
 	hal->firmware_base = res->firmware_base;
+	hal->register_base_phys = res->register_base;
 	hal->register_base = devm_ioremap_nocache(&res->pdev->dev,
 			res->register_base, res->register_size);
 	hal->register_size = res->register_size;
