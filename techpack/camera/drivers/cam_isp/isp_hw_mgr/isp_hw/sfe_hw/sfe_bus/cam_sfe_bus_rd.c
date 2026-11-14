@@ -367,7 +367,7 @@ static int cam_sfe_bus_acquire_rm(
 	struct cam_isp_resource_node          **rm_res,
 	uint32_t                                unpacker_fmt)
 {
-	uint32_t                                rm_idx = 0;
+	int                                     rm_idx = 0;
 	struct cam_isp_resource_node           *rm_res_local = NULL;
 	struct cam_sfe_bus_rd_rm_resource_data *rsrc_data = NULL;
 
