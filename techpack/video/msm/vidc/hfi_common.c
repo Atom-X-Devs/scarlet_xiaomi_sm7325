@@ -3092,7 +3092,7 @@ static int __handle_reset_clk(struct msm_vidc_platform_resources *res,
 		break;
 	case ASSERT:
 		if (!rst) {
-			rc = PTR_ERR(rst);
+			rc = -EINVAL;
 			goto failed_to_reset;
 		}
 
@@ -3100,7 +3100,7 @@ static int __handle_reset_clk(struct msm_vidc_platform_resources *res,
 		break;
 	case DEASSERT:
 		if (!rst) {
-			rc = PTR_ERR(rst);
+			rc = -EINVAL;
 			goto failed_to_reset;
 		}
 		rc = reset_control_deassert(rst);
