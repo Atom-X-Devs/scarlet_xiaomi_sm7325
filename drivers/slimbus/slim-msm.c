@@ -1138,10 +1138,10 @@ init_pipes:
 	if (dev->port_nums && !dev->pipes) {
 		dev->pipes = kcalloc(dev->port_nums,
 				     sizeof(struct msm_slim_endp), GFP_KERNEL);
-		if (IS_ERR_OR_NULL(dev->pipes)) {
+		if (!dev->pipes) {
 			dev_err(dev->dev, "no memory for data ports\n");
 			sps_deregister_bam_device(bam_handle);
-			return PTR_ERR(dev->pipes);
+			return -ENOMEM;
 		}
 		/* assign the ports now */
 		msm_slim_data_port_assign(dev);
