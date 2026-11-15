@@ -76,7 +76,7 @@ bool ipa3_mhi_stop_gsi_channel(enum ipa_client_type client)
 	ipa_ep_idx = ipa3_get_ep_mapping(client);
 	if (ipa_ep_idx == -1) {
 		IPA_MHI_ERR("Invalid client.\n");
-		return -EINVAL;
+		return false;
 	}
 
 	ep = &ipa3_ctx->ep[ipa_ep_idx];
