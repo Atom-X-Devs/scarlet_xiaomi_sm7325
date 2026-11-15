@@ -158,12 +158,15 @@ static int cpu_thermal_init(void)
 		if (!i) {
 			pr_err("%s: CPUFreq table not found or has no valid entries\n",
 			       __func__);
+			cpufreq_cpu_put(policy);
 			return -ENODEV;
 		}
 
 		cpufreq_dev = kzalloc(sizeof(*cpufreq_dev), GFP_KERNEL);
-		if (!cpufreq_dev)
+		if (!cpufreq_dev) {
+			cpufreq_cpu_put(policy);
 			return -ENOMEM;
+		}
 
 		cpufreq_dev->policy = policy;
 		cpufreq_dev->qos_req = req;
@@ -173,8 +176,11 @@ static int cpu_thermal_init(void)
 		cpufreq_dev->id = policy->cpu;
 
 		cpufreq_dev->freq_table = kmalloc_array(i, sizeof(*cpufreq_dev->freq_table), GFP_KERNEL);
-		if (!cpufreq_dev->freq_table)
+		if (!cpufreq_dev->freq_table) {
+			kfree(cpufreq_dev);
+			cpufreq_cpu_put(policy);
 			return -ENOMEM;
+		}
 
 		/* Fill freq-table in descending order of frequencies */
 		for (i = 0, freq = -1; i <= cpufreq_dev->max_level; i++) {
@@ -192,6 +198,9 @@ static int cpu_thermal_init(void)
 		if (ret < 0) {
 			pr_err("%s: Failed to add freq constraint (%d)\n",
 			       __func__, ret);
+			kfree(cpufreq_dev->freq_table);
+			kfree(cpufreq_dev);
+			cpufreq_cpu_put(policy);
 			return ret;
 		}
 		mutex_lock(&cpufreq_list_lock);
