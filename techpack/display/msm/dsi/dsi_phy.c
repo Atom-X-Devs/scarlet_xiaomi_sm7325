@@ -1140,7 +1140,7 @@ int dsi_phy_conv_logical_to_phy_lane(
 {
 	int i = 0;
 
-	if (lane > (DSI_LANE_MAX - 1))
+	if (lane >= (DSI_LANE_MAX - 1))
 		return -EINVAL;
 
 	for (i = DSI_LOGICAL_LANE_0; i < (DSI_LANE_MAX - 1); i++) {
