@@ -785,7 +785,9 @@ int __ipa3_del_hdr(u32 hdr_hdl, bool by_user)
 			entry->phys_base,
 			entry->hdr_len,
 			DMA_TO_DEVICE);
-		__ipa3_del_hdr_proc_ctx(entry->proc_ctx->id, false, false);
+		if (entry->proc_ctx)
+			__ipa3_del_hdr_proc_ctx(entry->proc_ctx->id, false,
+						false);
 	}
 	/* move the offset entry to appropriate free list */
 	list_move(&entry->offset_entry->link,
