@@ -29,9 +29,6 @@ int ksu_task_fix_setuid(struct cred *new, const struct cred *old, int flags)
 
 int ksu_bprm_check(struct linux_binprm *bprm)
 {
-#ifdef CONFIG_KSU_FEATURE_SULOG
-	ksu_sulog_emit_bprm((const char *)bprm->filename);
-#endif
 	return 0;
 }
 
@@ -54,6 +51,13 @@ int ksu_file_permission(struct file *file, int mask)
 int ksu_hide_setprocattr(const char *name, void *value, size_t size)
 {
 	ksu_hide_setprocattr_inline(name, value, size);
+	return 0;
+}
+
+// NOTE: 3-args only. other args unused.
+int ksu_hide_inode_setxattr(const char *name, void *value, size_t size)
+{
+	ksu_hide_setxattr_inline(name, value, size);
 	return 0;
 }
 

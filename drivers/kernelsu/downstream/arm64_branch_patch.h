@@ -11,8 +11,8 @@
  *
  */
 
-#ifndef __KSU_H_ARM64_BL_PATCH
-#define __KSU_H_ARM64_BL_PATCH
+#ifndef __H_ARM64_BRANCH_PATCH
+#define __H_ARM64_BRANCH_PATCH
 
 #include <linux/version.h>
 #include <linux/uaccess.h>
@@ -146,4 +146,4 @@ bail:
 #define arm64_bl_patch(tgt, width, symaddr, hookaddr)		arm64_branch_patch(tgt, width, symaddr, hookaddr, BRANCH_TYPE_BL)
 #define arm64_b_or_bl_patch(tgt, width, symaddr, hookaddr)	arm64_branch_patch(tgt, width, symaddr, hookaddr, BRANCH_TYPE_B_OR_BL)
 
-#endif // __KSU_H_ARM64_BL_PATCH
+#endif // __H_ARM64_BRANCH_PATCH
