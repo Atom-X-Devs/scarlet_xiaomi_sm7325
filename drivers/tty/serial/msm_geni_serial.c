@@ -3552,8 +3552,9 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	place_marker(boot_marker);
 
 exit_geni_serial_probe:
-	IPC_LOG_MSG(dev_port->ipc_log_misc, "%s: ret:%d\n",
-		    __func__, ret);
+	if (!IS_ERR_OR_NULL(dev_port))
+		IPC_LOG_MSG(dev_port->ipc_log_misc, "%s: ret:%d\n",
+			    __func__, ret);
 	return ret;
 }
 
