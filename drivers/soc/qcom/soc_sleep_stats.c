@@ -201,7 +201,7 @@ static int soc_sleep_stats_probe(struct platform_device *pdev)
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
-		return PTR_ERR(res);
+		return -ENODEV;
 
 	if (drv->config->offset_addr) {
 		offset_addr = devm_ioremap_nocache(&pdev->dev, res->start +
