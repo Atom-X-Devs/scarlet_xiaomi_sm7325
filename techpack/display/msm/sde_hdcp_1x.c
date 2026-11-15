@@ -1355,7 +1355,7 @@ static bool sde_hdcp_1x_feature_supported(void *input)
 
 	if (!hdcp) {
 		pr_err("invalid input\n");
-		return -EINVAL;
+		return false;
 	}
 
 	feature_supported = hdcp1_feature_supported(hdcp->hdcp1_handle);
