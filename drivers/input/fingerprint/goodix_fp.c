@@ -255,7 +255,7 @@ static inline int gf_remove(struct platform_device *pdev)
 
 	if (gf_dev->input) {
 		input_unregister_device(gf_dev->input);
-		input_free_device(gf_dev->input);
+		gf_dev->input = NULL;
 	}
 	mutex_lock(&gf_lock);
 	list_del(&gf_dev->device_entry);
