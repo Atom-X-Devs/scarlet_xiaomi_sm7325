@@ -3356,7 +3356,7 @@ static int reg_dma_ltm_check(struct sde_hw_dspp *ctx, void *cfg,
 	if (IS_ERR_OR_NULL(dma_ops))
 		return -EINVAL;
 
-	if (!hw_cfg->ctl || ctx->idx >= DSPP_MAX ||
+	if (!hw_cfg->ctl || (enum sde_ltm)ctx->idx >= LTM_MAX ||
 		feature >= REG_DMA_FEATURES_MAX) {
 		DRM_ERROR("invalid ctl %pK dspp idx %d feature %d\n",
 			hw_cfg->ctl, ctx->idx, feature);
