@@ -983,8 +983,8 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 	 * by DP driver as well.
 	 */
 	phy->base = devm_ioremap_nocache(dev, res->start, resource_size(res));
-	if (IS_ERR_OR_NULL(phy->base)) {
-		ret = PTR_ERR(phy->base);
+	if (!phy->base) {
+		ret = -ENOMEM;
 		goto err;
 	}
 
