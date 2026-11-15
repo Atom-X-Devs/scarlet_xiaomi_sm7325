@@ -2594,6 +2594,7 @@ uint8_t csr_construct_rsn_ie(struct mac_context *mac, uint32_t sessionId,
 	uint8_t *rsn_ie = (uint8_t *)pRSNIe;
 	uint8_t ie_len = 0;
 	tDot11fBeaconIEs *local_ap_ie = ap_ie;
+	tDot11fIERSN ap_rsn;
 	uint16_t rsn_cap = 0, self_rsn_cap, orig_rsn_cap;
 	int32_t rsn_val, orig_rsn_val;
 	struct wlan_crypto_pmksa pmksa, *pmksa_peer;
@@ -2604,7 +2605,8 @@ uint8_t csr_construct_rsn_ie(struct mac_context *mac, uint32_t sessionId,
 	     (mac, pSirBssDesc, &local_ap_ie))))
 		return ie_len;
 
-	if (!ap_ie && local_ap_ie)
+	ap_rsn = local_ap_ie->RSN;
+	if (!ap_ie)
 		/* locally allocated */
 		qdf_mem_free(local_ap_ie);
 
@@ -2663,8 +2665,8 @@ uint8_t csr_construct_rsn_ie(struct mac_context *mac, uint32_t sessionId,
 	wlan_crypto_set_vdev_param(vdev, WLAN_CRYPTO_PARAM_ORIG_RSN_CAP,
 				   orig_rsn_cap);
 
-	csr_update_key_mgmt_crypto_param(vdev, local_ap_ie->RSN);
-	csr_update_ucast_cipher_crypto_param(vdev, local_ap_ie->RSN);
+	csr_update_key_mgmt_crypto_param(vdev, ap_rsn);
+	csr_update_ucast_cipher_crypto_param(vdev, ap_rsn);
 
 	qdf_mem_zero(&pmksa, sizeof(pmksa));
 	if (pSirBssDesc->fils_info_element.is_cache_id_present) {
