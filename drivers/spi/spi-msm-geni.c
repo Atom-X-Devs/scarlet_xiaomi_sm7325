@@ -2191,15 +2191,15 @@ static int spi_geni_probe(struct platform_device *pdev)
 	spi->dev.of_node = pdev->dev.of_node;
 	wrapper_ph_node = of_parse_phandle(pdev->dev.of_node,
 					"qcom,wrapper-core", 0);
-	if (IS_ERR_OR_NULL(wrapper_ph_node)) {
-		ret = PTR_ERR(wrapper_ph_node);
+	if (!wrapper_ph_node) {
+		ret = -ENODEV;
 		dev_err(&pdev->dev, "No wrapper core defined\n");
 		goto spi_geni_probe_err;
 	}
 	wrapper_pdev = of_find_device_by_node(wrapper_ph_node);
 	of_node_put(wrapper_ph_node);
-	if (IS_ERR_OR_NULL(wrapper_pdev)) {
-		ret = PTR_ERR(wrapper_pdev);
+	if (!wrapper_pdev) {
+		ret = -ENODEV;
 		dev_err(&pdev->dev, "Cannot retrieve wrapper device\n");
 		goto spi_geni_probe_err;
 	}
