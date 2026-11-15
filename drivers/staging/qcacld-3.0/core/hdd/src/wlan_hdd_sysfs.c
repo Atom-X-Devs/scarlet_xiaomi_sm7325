@@ -529,7 +529,7 @@ static void hdd_sysfs_create_version_interface(struct wlan_objmgr_psoc *psoc)
 	}
 
 	psoc_id = wlan_psoc_get_nif_phy_version(psoc);
-	scnprintf(buf, PAGE_SIZE, "%d", psoc_id);
+	scnprintf(buf, sizeof(buf), "%d", psoc_id);
 
 	psoc_kobject = kobject_create_and_add(buf, fw_kobject);
 	if (!psoc_kobject) {
