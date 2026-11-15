@@ -346,7 +346,7 @@ void sde_setup_dspp_ltm_hist_ctrlv1(struct sde_hw_dspp *ctx, void *cfg,
 		return;
 	}
 
-	if (ctx->idx >= DSPP_MAX) {
+	if ((enum sde_ltm)ctx->idx >= LTM_MAX) {
 		DRM_ERROR("Invalid idx %d\n", ctx->idx);
 		return;
 	}
