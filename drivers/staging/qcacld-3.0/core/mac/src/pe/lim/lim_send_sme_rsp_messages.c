@@ -1885,7 +1885,8 @@ void lim_handle_csa_offload_msg(struct mac_context *mac_ctx,
 
 err:
 	qdf_mem_free(csa_params);
-	session_entry->cal_tpc_post_csa = true;
+	if (session_entry)
+		session_entry->cal_tpc_post_csa = true;
 }
 
 /*--------------------------------------------------------------------------
