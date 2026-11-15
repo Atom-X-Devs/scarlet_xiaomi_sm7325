@@ -49,7 +49,13 @@
  *	- edge-case protection, ERANGE + scan_depth thingy, (26110?)
  *
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0) && defined(CONFIG_KALLSYMS) && defined(CONFIG_ARM64)
+#ifndef __H_ARM64_SYSCALL_TABLE_MIRROR
+#define __H_ARM64_SYSCALL_TABLE_MIRROR
+
+#if !defined(__aarch64__)
+static_assert(1 == 0, "ARM64 only!");
+#endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0) && defined(CONFIG_KALLSYMS)
 
 #define sct_slots 512
 
@@ -196,9 +202,9 @@ static void try_mirror_syscall_table(void)
 #endif
 }
 
-#else 
-
+#else /* < 4.9 */
 #define try_mirror_syscall_table()	do { } while(0)
 #endif
 
+#endif // __H_ARM64_SYSCALL_TABLE_MIRROR
 

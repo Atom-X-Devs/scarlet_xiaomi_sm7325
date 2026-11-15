@@ -22,6 +22,13 @@ static int hook_setprocattr(struct task_struct *p, char *name, void *value, size
 	return orig_setprocattr(p, name, value, size);
 }
 
+static int (*orig_inode_setxattr) (struct dentry *dentry, const char *name, const void *value, size_t size, int flags) __read_mostly = nullptr;
+static int hook_inode_setxattr(struct dentry *dentry, const char *name, const void *value, size_t size, int flags)
+{
+	ksu_hide_setxattr_inline(name, value, size);
+	return orig_inode_setxattr(dentry, name, value, size, flags);
+}
+
 static int (*orig_inode_rename) (struct inode *old_dir, struct dentry *old_dentry,
 			     struct inode *new_dir, struct dentry *new_dentry) __read_mostly = nullptr;
 static int hook_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
@@ -29,15 +36,6 @@ static int hook_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
 {
 	ksu_rename_observer(old_dentry, new_dentry);
 	return orig_inode_rename(old_inode, old_dentry, new_inode, new_dentry);
-}
-
-static int (*orig_bprm_check_security)(struct linux_binprm *bprm) __read_mostly = nullptr;
-static int hook_bprm_check_security(struct linux_binprm *bprm)
-{
-#ifdef CONFIG_KSU_FEATURE_SULOG
-	ksu_sulog_emit_bprm((const char *)bprm->filename);
-#endif
-	return orig_bprm_check_security(bprm);
 }
 
 static int (*orig_task_fix_setuid) (struct cred *new, const struct cred *old, int flags) __read_mostly = nullptr;
@@ -342,13 +340,11 @@ static int ksu_register_lsm_hook(void *data)
 	orig_setprocattr = ops->setprocattr;
 	ops->setprocattr = hook_setprocattr;
 
+	orig_inode_setxattr = ops->inode_setxattr;
+	ops->inode_setxattr = hook_inode_setxattr;
+
 	orig_task_fix_setuid = ops->task_fix_setuid;
 	ops->task_fix_setuid = hook_task_fix_setuid;
-
-#ifdef CONFIG_KSU_FEATURE_SULOG
-	orig_bprm_check_security = ops->bprm_check_security;
-	ops->bprm_check_security = hook_bprm_check_security;
-#endif
 
 #if !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
 	orig_file_permission = ops->file_permission;
