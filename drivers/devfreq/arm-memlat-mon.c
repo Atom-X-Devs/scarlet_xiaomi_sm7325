@@ -6,6 +6,7 @@
 #define pr_fmt(fmt) "arm-memlat-mon: " fmt
 
 #include <linux/kernel.h>
+#include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/io.h>
@@ -206,8 +207,8 @@ static void update_counts(struct memlat_cpu_grp *cpu_grp)
 				common_evs[CYC_IDX].last_delta;
 		else
 			cpu_data->stall_pct = common_evs[CYC_IDX].last_delta ?
-				mult_frac(100, common_evs[STALL_IDX].last_delta,
-					  common_evs[CYC_IDX].last_delta) :
+				div64_u64((u64)common_evs[STALL_IDX].last_delta *
+					  100, common_evs[CYC_IDX].last_delta) :
 				common_evs[STALL_IDX].last_delta;
 	}
 
