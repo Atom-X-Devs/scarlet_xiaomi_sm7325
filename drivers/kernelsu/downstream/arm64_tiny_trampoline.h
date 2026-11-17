@@ -27,13 +27,14 @@ static_assert(1 == 0, "ARM64 only!");
 #endif
 
 /**
- * small 4-insn aarch64 trampoline
+ * small 4-word aarch64 trampoline
  *
- * in reality, its more of a landing pad.
+ * in reality, its more of a landing pad. no register-stack-register spill
  * all this does is extend the branching range to full 64 bit address space.
  *
  *  Changelog:
  *	- init, 261115
+ *	- small build fixups, 261116
  *
  * printf '%s\n' '.text' '.global tp' 'tp:' 'ldr x16, #8' 'br x16' '.quad 0x12345678FFFFFFFF' | aarch64-linux-gnu-as -o test.o
  *
@@ -42,9 +43,7 @@ static_assert(1 == 0, "ARM64 only!");
  * 8:	ffffffff 	.word	0xffffffff
  * c:	12345678 	.word	0x12345678
  *
- * alternatives: 
- * printf '%s\n' '.text' '.global tp' 'tp:' 'adrp x16, 0x0' 'add x16, x16, #123' 'br x16' | aarch64-linux-gnu-as -o test.o
- * 	- needs pc-relative encoding/decoding and offset_in_page has to be handled.
+ * alternative:
  * printf '%s\n' '.text' '.global tp' 'tp:' 'adrp x16, 0x0' 'br x16'| aarch64-linux-gnu-as -o test.o
  * 	- needs pc-relative encoding/decoding + __attribute__((aligned(4096))) functions to jump to
  *
@@ -67,6 +66,7 @@ static inline void generate_trampoline(uint32_t buf[], uint64_t target)
 nodiscard static void *hunt_entry_text_code_cave(void)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
+	extern char __entry_text_start[], __entry_text_end[];
 	uintptr_t entry_text_start_p = (uintptr_t)__entry_text_start;
 	uintptr_t entry_text_end_p = (uintptr_t)__entry_text_end;
 #else
@@ -161,10 +161,10 @@ nodiscard static uintptr_t create_landing_pad(uintptr_t target)
 	generate_trampoline(arr_insn, target);
 
 #if 1 // debug
-	pr_info("%s: .inst 0x%x to 0x%lx\n", __func__, arr_insn[0], (uintptr_t)arr_addr[0]);
-	pr_info("%s: .inst 0x%x to 0x%lx\n", __func__, arr_insn[1], (uintptr_t)arr_addr[1]);
-	pr_info("%s: .inst 0x%x to 0x%lx\n", __func__, arr_insn[2], (uintptr_t)arr_addr[2]);
-	pr_info("%s: .inst 0x%x to 0x%lx\n", __func__, arr_insn[3], (uintptr_t)arr_addr[3]);
+	pr_info("%s: .inst 0x%08x to 0x%lx\n", __func__, arr_insn[0], (uintptr_t)arr_addr[0]);
+	pr_info("%s: .inst 0x%08x to 0x%lx\n", __func__, arr_insn[1], (uintptr_t)arr_addr[1]);
+	pr_info("%s: .inst 0x%08x to 0x%lx\n", __func__, arr_insn[2], (uintptr_t)arr_addr[2]);
+	pr_info("%s: .inst 0x%08x to 0x%lx\n", __func__, arr_insn[3], (uintptr_t)arr_addr[3]);
 #endif
 	int res = aarch64_insn_patch_text(arr_addr, arr_insn, 4);
 	if (res) {

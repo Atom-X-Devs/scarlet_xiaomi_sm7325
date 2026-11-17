@@ -5,6 +5,7 @@
 
 // for OOT builds like on ddk, just enable everything
 #ifndef CONFIG_KSU_HEURISTIC_IN_TREE_BUILD
+	// #define LSM_USES_BRANCH_LINK 1
 	#define CONFIG_KSU_LSM_SECURITY_HOOKS 1
 	#define CONFIG_KSU_HACK_ARM64_BRANCH_LINK 1
 	#define CONFIG_KSU_FEATURE_ADBROOT 1
@@ -147,7 +148,7 @@
 #include "hook/setuid_hook.c"
 
 #ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
-	#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+	#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0) || defined(LSM_USES_BRANCH_LINK)
 	#include "hook/lsm_hooks_static.c"
 	#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
 	#include "hook/lsm_hooks_list.c"
@@ -220,7 +221,6 @@
 
 static inline void ksu_print_build_info(void)
 {
-	pr_info("welcome to KernelSU version " __stringify(KERNEL_SU_VERSION) ", package name " KSU_PACKAGE_NAME "\n");
 	pr_info("Initialized on: %s (%s)%s\n", UTS_RELEASE, UTS_MACHINE, EXTRA_FEATURES);
 
 #if defined(__VERSION__) && defined(__STDC_VERSION__)
@@ -235,6 +235,7 @@ static inline void ksu_print_build_info(void)
 
 static int __init kernelsu_init(void)
 {
+	pr_info("welcome to KernelSU version " __stringify(KERNEL_SU_VERSION) ", package name " KSU_PACKAGE_NAME "\n");
 	ksu_print_build_info();
 
 #ifdef CONFIG_KSU_DEBUG
@@ -265,6 +266,7 @@ static int __init kernelsu_init(void)
 #endif
 	ksu_selinux_hide_init();
 	ksu_shell_su_adb_only_init();
+
 	ksu_supercalls_init();
 
 	ksu_allowlist_init();

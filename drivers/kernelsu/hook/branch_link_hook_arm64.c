@@ -34,6 +34,7 @@
  *	- smaller stub code p.2, gcc fix, thx to lh_mouse @ #gcc (260728)
  *	- limit insn scan to symbol size or 32 insn (260809)
  *	- recurse. have the hook call itself and patch that branch it makes to itself. (261017)
+ *	- wire up sys_faccessat->getname_flags branch for < 4.17. (261117)
  *
  * NOTES:
  *	- not everyone is expected to understand how this works.
@@ -71,6 +72,31 @@ KEEP_SYMBOL_NO_TAIL long ksu_do_faccessat(int dfd, const char __user *filename, 
 }
 #endif // 5.7+ || faccessat2
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+// on 4.14 a lot of times, sys_faccessat branches here. we might as well use it.
+static struct filename *ksu_getname_flags(const char __user *filename, int flags, int *empty)
+{
+	assume(!!&getname_flags);
+	struct filename *filename_post = ((typeof(ksu_getname_flags) *)getname_flags)(filename, flags, empty);
+	if (likely(IS_ERR(filename_post)))
+		return filename_post;
+
+	char *filename_ptr = (char *)filename_post->name;
+	if (likely(!is_su_allowed((const void **)&filename_ptr)))
+		return filename_post;
+
+	if (likely(!is_kernel_filename_su((const char **)&filename_ptr)))
+		return filename_post;
+
+	write_sulog('a');
+	pr_info("su_compat: sys_faccessat->getname su->sh!%s\n", (is_compat_task()) ? " [compat]" : "" );
+	constexpr char sh[16] = SH_PATH;
+	memcpy_inline(filename_ptr, sh, sizeof(sh));
+
+	return filename_post;
+}
+#endif
+
 // vfs_statx, vfs_fstatat
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0) || defined(KSU_HAS_VFS_STATX2)
 /**
@@ -87,20 +113,7 @@ KEEP_SYMBOL_NO_TAIL int ksu_vfs_statx(int dfd, struct filename *restrict filenam
 	if (likely(!is_su_allowed((const void **)&filename_ptr)))
 		goto orig_fn;
 
-	// see sucompat.c
-	constexpr char su[16] = SU_PATH;
-	uint64_t *su_p = (uint64_t *)su;
-	uint64_t *fn_p = (uint64_t *)filename_ptr;
-
-	// getname_flags pads this so nothing to worry about
-	assume_restricted((void *)su_p, (void *)fn_p);
-	assume_dereferenceable((void *)fn_p, 16);
-
-	// https://godbolt.org/z/j8Yovv6bE
-	if (likely((fn_p[1] & 0x00FFFFFFFFFFFFFFULL) != (su_p[1] & 0x00FFFFFFFFFFFFFFULL)))
-		goto orig_fn;
-
-	if (unlikely(fn_p[0] != su_p[0]))
+	if (likely(!is_kernel_filename_su((const char **)&filename_ptr)))
 		goto orig_fn;
 
 	write_sulog('s');
@@ -191,6 +204,24 @@ static int bl_hook_faccessat(void *data)
 	int ret;
 	uintptr_t target_callsite;
 	uintptr_t symbol_addr;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+	if (!__builtin_types_compatible_p(typeof(getname_flags), typeof(ksu_getname_flags)))
+		goto not_compatible;
+
+	target_callsite = syscall_lookup("sys_faccessat");
+	symbol_addr = kallsyms_lookup_retry("getname_flags");
+	if (!symbol_addr)
+		goto bail;
+
+	ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size32(target_callsite), symbol_addr, (uintptr_t)&ksu_getname_flags);
+	pr_info("hook_site: sys_faccessat->getname_flags ret: %d \n", ret);
+	if (!ret)
+		goto unhook_sct;
+
+bail:
+not_compatible:;
+#endif
 
 	target_callsite = syscall_lookup("sys_faccessat");
 	symbol_addr = kallsyms_lookup_retry("do_faccessat");
