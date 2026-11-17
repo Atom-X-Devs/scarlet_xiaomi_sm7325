@@ -25,11 +25,13 @@ use kernel::{
     sync::{GlobalGuard, GlobalLockedBy, UniqueArc},
 };
 
-// Only updated with ASHMEM_MUTEX held, but the shrinker will read it without the mutex.
-pub(crate) static LRU_COUNT: AtomicUsize = AtomicUsize::new(0);
+// Saturated copy of `AshmemLru::lru_count` (`min(lru_count, usize::MAX)`).
+// Only updated with `ASHMEM_MUTEX` held, and read locklessly by `Shrinker::count_objects`.
+static LRU_COUNT_SATURATED: AtomicUsize = AtomicUsize::new(0);
 
 pub(crate) struct AshmemLru {
     lru_list: List<Range, 0>,
+    lru_count: u128,
 }
 
 /// Represents ownership of the `ASHMEM_MUTEX` lock.
@@ -51,6 +53,25 @@ impl core::ops::DerefMut for AshmemGuard {
 }
 
 impl AshmemGuard {
+    pub(crate) fn lru_count(&self) -> u128 {
+        self.lru_count
+    }
+
+    fn sync_lru_count(&self) {
+        let saturated = usize::try_from(self.lru_count).unwrap_or(usize::MAX);
+        LRU_COUNT_SATURATED.store(saturated, Ordering::Relaxed);
+    }
+
+    fn add_lru_count(&mut self, pages: usize) {
+        self.lru_count += pages as u128;
+        self.sync_lru_count();
+    }
+
+    fn sub_lru_count(&mut self, pages: usize) {
+        self.lru_count -= pages as u128;
+        self.sync_lru_count();
+    }
+
     fn shrink_range(&mut self, range: &Range, pgstart: usize, pgend: usize) {
         let old_size = range.size(self);
         {
@@ -62,19 +83,16 @@ impl AshmemGuard {
 
         // Only change the counter if the range is on the lru list.
         if !range.purged(self) {
-            let mut lru_count = LRU_COUNT.load(Ordering::Relaxed);
-            lru_count -= old_size;
-            lru_count += new_size;
-            LRU_COUNT.store(lru_count, Ordering::Relaxed);
+            self.lru_count -= old_size as u128;
+            self.lru_count += new_size as u128;
+            self.sync_lru_count();
         }
     }
 
     fn insert_lru(&mut self, range: ListArc<Range>) {
         // Don't insert the range if it's already purged.
         if !range.purged(self) {
-            let mut lru_count = LRU_COUNT.load(Ordering::Relaxed);
-            lru_count += range.size(self);
-            LRU_COUNT.store(lru_count, Ordering::Relaxed);
+            self.add_lru_count(range.size(self));
             self.lru_list.push_front(range);
         }
     }
@@ -86,9 +104,7 @@ impl AshmemGuard {
 
         // Only decrement lru_count if the range was actually in the list.
         if ret.is_some() {
-            let mut lru_count = LRU_COUNT.load(Ordering::Relaxed);
-            lru_count -= range.size(self);
-            LRU_COUNT.store(lru_count, Ordering::Relaxed);
+            self.sub_lru_count(range.size(self));
         }
 
         ret
@@ -100,6 +116,7 @@ kernel::sync::global_lock! {
     // there are no calls to `lock` before `init` is called.
     pub(crate) unsafe(uninit) static ASHMEM_MUTEX: Mutex<AshmemLru> = AshmemLru {
         lru_list: List::new(),
+        lru_count: 0,
     };
 }
 
@@ -385,18 +402,16 @@ impl<'a> NewRange<'a> {
 }
 
 impl AshmemGuard {
-    pub(crate) fn free_lru(&mut self, stop_after: usize) -> usize {
-        let mut freed = 0;
+    pub(crate) fn free_lru(&mut self, stop_after: Option<usize>) -> usize {
+        let mut freed: usize = 0;
         while let Some(range) = self.lru_list.pop_back() {
             let start = range.pgstart(self) * PAGE_SIZE;
             let end = (range.pgend(self) + 1) * PAGE_SIZE;
             let size = range.size(self);
             range.set_purged(self);
-            freed += size;
+            freed = freed.saturating_add(size);
 
-            let mut lru_count = LRU_COUNT.load(Ordering::Relaxed);
-            lru_count -= size;
-            LRU_COUNT.store(lru_count, Ordering::Relaxed);
+            self.sub_lru_count(size);
 
             // C ashmem releases the mutex and uses a different mechanism to ensure mutual
             // exclusion with `pin_unpin` operations, but we only hold `ASHMEM_MUTEX` here and in
@@ -404,8 +419,10 @@ impl AshmemGuard {
             // all of the other ashmem operations.
             range.file.punch_hole(start, end - start);
 
-            if freed >= stop_after {
-                break;
+            if let Some(stop_after) = stop_after {
+                if freed >= stop_after {
+                    break;
+                }
             }
 
             if super::shrinker_should_stop() {
@@ -421,7 +438,7 @@ impl Shrinker for super::AshmemModule {
     type Ptr = ();
 
     fn count_objects(_: (), _sc: ShrinkControl<'_>) -> CountObjects {
-        let count = LRU_COUNT.load(super::Ordering::Relaxed);
+        let count = LRU_COUNT_SATURATED.load(super::Ordering::Relaxed);
         if count == 0 {
             CountObjects::EMPTY
         } else {
@@ -429,7 +446,7 @@ impl Shrinker for super::AshmemModule {
         }
     }
 
-    fn scan_objects(_: (), sc: ShrinkControl<'_>) -> ScanObjects {
+    fn scan_objects(_: (), mut sc: ShrinkControl<'_>) -> ScanObjects {
         if !sc.reclaim_fs_allowed() {
             return ScanObjects::STOP;
         }
@@ -439,7 +456,14 @@ impl Shrinker for super::AshmemModule {
         };
         let mut guard = AshmemGuard(guard);
 
-        let num_freed = guard.free_lru(sc.nr_to_scan());
+        let nr_to_scan = sc.nr_to_scan();
+        let num_freed = guard.free_lru(Some(nr_to_scan));
+        if num_freed == 0 {
+            return ScanObjects::STOP;
+        }
+        if num_freed > nr_to_scan {
+            sc.set_nr_scanned(num_freed);
+        }
         ScanObjects::from_count(num_freed)
     }
 }

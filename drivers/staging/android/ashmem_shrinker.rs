@@ -203,8 +203,10 @@ impl CountObjects {
 
     /// The maximum possible number of freeable objects.
     pub const MAX: Self = Self {
-        // The shrinker code assumes that it can multiply this value by two without overflow.
-        inner: c_ulong::MAX / 2,
+        // `do_shrink_slab` stores the return value in a signed `long` and adds `delta` (up to
+        // `4 * freeable` when `seeks == 1`) to `nr` (up to `2 * freeable`), so keep it at or below
+        // `c_long::MAX / 8` to avoid signed overflow.
+        inner: (c_long::MAX / 8) as c_ulong,
     };
 
     /// Creates a new `CountObjects` with the given value.
@@ -302,6 +304,7 @@ impl<'a> ShrinkControl<'a> {
 
     /// The callback should set this value to the number of objects inspected by the shrinker.
     pub fn set_nr_scanned(&mut self, val: usize) {
+        let val = usize::min(val, CountObjects::MAX.inner as usize);
         // SAFETY: Okay by type invariants.
         unsafe { (*self.ptr.as_ptr()).nr_scanned = val as c_ulong };
     }
