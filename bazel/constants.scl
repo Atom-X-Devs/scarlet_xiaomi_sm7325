@@ -1,7 +1,7 @@
 BRANCH="android18-7.3"
 KMI_GENERATION=0
 CLANG_VERSION="r596125"
-RUSTC_VERSION="1.96.0"
+RUSTC_VERSION="1.97.0"
 AARCH64_NDK_TRIPLE="aarch64-linux-android31"
 X86_64_NDK_TRIPLE="x86_64-linux-android31"
 ARM_NDK_TRIPLE="armv7a-linux-androideabi31"
