@@ -12,7 +12,7 @@
  */
 
 /**
- *  syscall_table_mirror.c - lets own the full table ourselves.
+ *  syscall_table_mirror - lets own the full table ourselves.
  *
  *  Due to some kernel protection bullshit, vmapping as writable is no go.
  *  either by straight up blocking EL2 MMU access or due to integrity checks. (e.g. checksums against the table)
