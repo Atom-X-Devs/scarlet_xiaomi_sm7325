@@ -1,6 +1,8 @@
 #ifndef _LINUX_MMAP_LOCK_H
 #define _LINUX_MMAP_LOCK_H
 
+#include <linux/mmdebug.h>
+
 static inline void mmap_init_lock(struct mm_struct *mm)
 {
 	init_rwsem(&mm->mmap_sem);
@@ -49,6 +51,18 @@ static inline bool mmap_read_trylock(struct mm_struct *mm)
 static inline void mmap_read_unlock(struct mm_struct *mm)
 {
 	up_read(&mm->mmap_sem);
+}
+
+static inline void mmap_assert_locked(struct mm_struct *mm)
+{
+	lockdep_assert_held(&mm->mmap_sem);
+	VM_BUG_ON_MM(!rwsem_is_locked(&mm->mmap_sem), mm);
+}
+
+static inline void mmap_assert_write_locked(struct mm_struct *mm)
+{
+	lockdep_assert_held_write(&mm->mmap_sem);
+	VM_BUG_ON_MM(!rwsem_is_locked(&mm->mmap_sem), mm);
 }
 
 #endif /* _LINUX_MMAP_LOCK_H */
