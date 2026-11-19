@@ -5,12 +5,14 @@
 
 // for OOT builds like on ddk, just enable everything
 #ifndef CONFIG_KSU_HEURISTIC_IN_TREE_BUILD
-	// #define LSM_USES_BRANCH_LINK 1
 	#define CONFIG_KSU_LSM_SECURITY_HOOKS 1
 	#define CONFIG_KSU_HACK_ARM64_BRANCH_LINK 1
 	#define CONFIG_KSU_FEATURE_ADBROOT 1
 	#define CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED 1
 #endif // CONFIG_KSU_HEURISTIC_IN_TREE_BUILD
+
+// for both in-tree and out-of-tree builds
+#define LSM_USES_BRANCH_LINK 1
 
 // for in-tree, this has to be detected
 #ifndef CONFIG_KALLSYMS_ALL
