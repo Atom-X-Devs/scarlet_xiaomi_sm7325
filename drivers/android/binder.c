@@ -3195,7 +3195,7 @@ static int binder_proc_transaction(struct binder_transaction *t,
 		binder_release_entire_buffer(proc, NULL, buffer, true);
 		binder_alloc_free_buf(&proc->alloc, buffer);
 		binder_free_txn_fixups(t_outdated);
-		kfree(t_outdated);
+		kmem_cache_free(binder_transaction_pool, t_outdated);
 		binder_stats_deleted(BINDER_STAT_TRANSACTION);
 	}
 
@@ -5269,7 +5269,7 @@ retry:
 			binder_uintptr_t cookie = freeze->cookie;
 
 			binder_inner_proc_unlock(proc);
-			kfree(freeze);
+			kmem_cache_free(binder_ref_freeze_pool, freeze);
 			if (put_user(BR_CLEAR_FREEZE_NOTIFICATION_DONE, (uint32_t __user *)ptr))
 				return -EFAULT;
 			ptr += sizeof(uint32_t);
@@ -5487,7 +5487,7 @@ static void binder_release_work(struct binder_proc *proc,
 			binder_debug(BINDER_DEBUG_DEAD_TRANSACTION,
 				     "undelivered freeze notification, %016llx\n",
 				     (u64)freeze->cookie);
-			kfree(freeze);
+			kmem_cache_free(binder_ref_freeze_pool, freeze);
 		} break;
 		default:
 			pr_err("unexpected work type, %d, not freed\n",
