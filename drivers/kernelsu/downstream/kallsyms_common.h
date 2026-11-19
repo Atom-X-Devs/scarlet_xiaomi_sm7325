@@ -100,7 +100,19 @@ size_is_sufficient:
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0)
-__weak int sprint_symbol_no_offset(char *buffer, unsigned long address) { return sprint_symbol(buffer, address); }
+__weak int sprint_symbol_no_offset(char *buffer, unsigned long address)
+{ 
+	int ret = sprint_symbol(buffer, address);
+	if (!(ret > 0))
+		return ret;
+	
+	char *plus = strnchr(buffer, KSYM_SYMBOL_LEN, '+');
+	if (plus) {
+		plus[0] = 0;
+		ret = plus - buffer; // cut
+	}
+	return ret;
+}
 #endif
 
 #ifdef MODULE

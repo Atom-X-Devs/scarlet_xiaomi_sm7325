@@ -22,7 +22,7 @@ config KSU_HACK_ARM64_BRANCH_LINK
 	  Successful patching relies on symbol stability, so hooking success will
 	  vary across different compliers, optimization, tweaks and backports.
 	  When patching fails, it keeps syscall table hook for the target symbol.
-	  Verified on 3.10 ~ 7.1. Recommended for 4.14+.
+	  Verified on 3.10 ~ 7.1. Recommended for 4.4+.
 
 config KSU_TAMPER_SYSCALL_TABLE
 	bool "tamper sys_call_table for sucompat + sys_reboot"

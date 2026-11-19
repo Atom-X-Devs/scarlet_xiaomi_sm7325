@@ -117,11 +117,8 @@ loop_start:
 }
 #endif // !CONFIG_KSU_TAMPER_SYSCALL_TABLE && !CONFIG_KSU_HACK_ARM64_BRANCH_LINK
 
-#define SETPROCATTR_TYPE_lsmid	int lsmid, const char *name, void *, size_t
-#define SETPROCATTR_TYPE_lsm	const char *lsm, const char *name, void *, size_t
-#define SETPROCATTR_TYPE_name	const char *name, void *, size_t
-
-static int ksu_setprocattr_lsmid(int lsmid, const char *name, void *value, size_t size)
+#define SETPROCATTR_TYPE_lsmid	int lsmid, const char *name, void *value, size_t size
+__overloaded static int ksu_setprocattr_lsmid(SETPROCATTR_TYPE_lsmid)
 {
 	ksu_hide_setprocattr_inline(name, value, size);
 
@@ -129,7 +126,8 @@ static int ksu_setprocattr_lsmid(int lsmid, const char *name, void *value, size_
 	return ((typeof(ksu_setprocattr_lsmid) *)security_setprocattr)(lsmid, name, value, size);
 }
 
-static int ksu_setprocattr_lsm(const char *lsm, const char *name, void *value, size_t size)
+#define SETPROCATTR_TYPE_lsm	const char *lsm, const char *name, void *value, size_t size
+__overloaded static int ksu_setprocattr_lsm(SETPROCATTR_TYPE_lsm)
 {
 	ksu_hide_setprocattr_inline(name, value, size);
 
@@ -137,7 +135,8 @@ static int ksu_setprocattr_lsm(const char *lsm, const char *name, void *value, s
 	return ((typeof(ksu_setprocattr_lsm) *)security_setprocattr)(lsm, name, value, size);
 }
 
-static int ksu_setprocattr_name(const char *name, void *value, size_t size)
+#define SETPROCATTR_TYPE_name	const char *name, void *value, size_t size
+__overloaded static int ksu_setprocattr_name(SETPROCATTR_TYPE_name)
 {
 	ksu_hide_setprocattr_inline(name, value, size);
 
@@ -153,13 +152,8 @@ static int ksu_setprocattr_name(const char *name, void *value, size_t size)
 )
 
 struct mnt_idmap;
-struct user_namespace;
-#define INODE_SETXATTR_TYPE_idmap	struct mnt_idmap *, struct dentry *, const char *, const void *, size_t, int
-#define INODE_SETXATTR_TYPE_userns	struct user_namespace *, struct dentry *, const char *, const void *, size_t, int
-#define INODE_SETXATTR_TYPE_legacy	struct dentry *, const char *, const void *, size_t, int
-
-static int ksu_inode_setxattr_idmap(struct mnt_idmap *idmap, struct dentry *dentry,
-			const char *name, const void *value, size_t size, int flags)
+#define INODE_SETXATTR_TYPE_idmap	struct mnt_idmap *idmap, struct dentry *dentry, const char *name, const void *value, size_t size, int flags
+__overloaded static int ksu_inode_setxattr_idmap(INODE_SETXATTR_TYPE_idmap)
 {
 	ksu_hide_setxattr_inline(name, value, size);
 
@@ -167,8 +161,9 @@ static int ksu_inode_setxattr_idmap(struct mnt_idmap *idmap, struct dentry *dent
 	return ((typeof(ksu_inode_setxattr_idmap) *)security_inode_setxattr)(idmap, dentry, name, value, size, flags);
 }
 
-static int ksu_inode_setxattr_userns(struct user_namespace *mnt_userns, struct dentry *dentry, 
-			const char *name, const void *value, size_t size, int flags)
+struct user_namespace;
+#define INODE_SETXATTR_TYPE_userns	struct user_namespace *mnt_userns, struct dentry *dentry, const char *name, const void *value, size_t size, int flags
+__overloaded static int ksu_inode_setxattr_userns(INODE_SETXATTR_TYPE_userns)
 {
 	ksu_hide_setxattr_inline(name, value, size);
 
@@ -176,7 +171,8 @@ static int ksu_inode_setxattr_userns(struct user_namespace *mnt_userns, struct d
 	return ((typeof(ksu_inode_setxattr_userns) *)security_inode_setxattr)(mnt_userns, dentry, name, value, size, flags);
 }
 
-static int ksu_inode_setxattr_legacy(struct dentry *dentry, const char *name, const void *value, size_t size, int flags)
+#define INODE_SETXATTR_TYPE_legacy	struct dentry *dentry, const char *name, const void *value, size_t size, int flags
+__overloaded static int ksu_inode_setxattr_legacy(INODE_SETXATTR_TYPE_legacy)
 {
 	ksu_hide_setxattr_inline(name, value, size);
 
@@ -191,29 +187,16 @@ static int ksu_inode_setxattr_legacy(struct dentry *dentry, const char *name, co
 	int (*)(INODE_SETXATTR_TYPE_legacy) :ksu_inode_setxattr_legacy	\
 )
 
-#define estimated_sz (256 * sizeof(uint32_t))
-static int arm64_branch_patch_trampolined(uintptr_t callsite, uintptr_t symbol_addr, void *hook_addr)
-{
-	int ret = arm64_b_or_bl_patch(callsite, ksu_get_ksym_size(callsite, estimated_sz), symbol_addr, (uintptr_t)hook_addr);
-	if (ret != -ERANGE)
-		return ret;
-	
-	uintptr_t trampoline = create_landing_pad((uintptr_t)hook_addr);
-	if (trampoline)
-		ret = arm64_b_or_bl_patch(callsite, ksu_get_ksym_size(callsite, estimated_sz), symbol_addr, trampoline);
-	return ret;	
-}
-
+#define __ksym_size(callsite)	ksu_get_ksym_size(callsite, (256 * sizeof(uint32_t)))
 static void print_branch_targets(uintptr_t callsite, uintptr_t symbol_addr, char *hook_name)
 {
 	char buf1[KSYM_SYMBOL_LEN];
 	sprint_symbol_no_offset(buf1, symbol_addr);
 	pr_info("LSM: Initializing hook for %s -> %s \n", buf1, hook_name);
 }
-#define do_arm64_branch_patch_trampolined arm64_branch_patch_trampolined
-#define arm64_branch_patch_trampolined(callsite, symbol_addr, hook_fn) ({		\
-	print_branch_targets(callsite, symbol_addr, #hook_fn);				\
-	do_arm64_branch_patch_trampolined(callsite, symbol_addr, (void *)hook_fn);	\
+#define patch_arm64_branches_trampolined(callsite, symbol_addr, hook) ({					\
+	print_branch_targets(callsite, symbol_addr, #hook);							\
+	arm64_branch_patch_trampolined(callsite, __ksym_size(callsite), symbol_addr, (uintptr_t)hook, true);	\
 })
 
 static void __init ksu_lsm_hook_init(void)
@@ -227,7 +210,7 @@ static void __init ksu_lsm_hook_init(void)
 	if (!target_callsite)
 		target_callsite = kallsyms_lookup_retry("do_renameat2");
 	symbol_addr = kallsyms_lookup_retry("vfs_rename");
-	ret = arm64_branch_patch_trampolined(target_callsite, symbol_addr, ksu_vfs_rename);
+	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_vfs_rename);
 	pr_info("LSM: vfs_rename: ret %d \n", ret);
 	if (!ret)
 		goto rename_hook_done;
@@ -236,25 +219,15 @@ static void __init ksu_lsm_hook_init(void)
 	if (!target_callsite)
 		target_callsite = kallsyms_lookup_retry("vfs_rename");
 	symbol_addr = kallsyms_lookup_retry("security_inode_rename");
-	ret = arm64_branch_patch_trampolined(target_callsite, symbol_addr, ksu_inode_rename);
+	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_inode_rename);
 	pr_info("LSM: security_inode_rename: ret %d \n", ret);
 rename_hook_done:
-
-	target_callsite = kallsyms_lookup_retry("proc_pid_attr_write"); // fn ptr on dispatch table
-	symbol_addr = kallsyms_lookup_retry("security_setprocattr");
-	ret = arm64_branch_patch_trampolined(target_callsite, symbol_addr, ksu_setprocattr_overloaded);
-	pr_info("LSM: security_setprocattr: ret %d \n", ret);
-
-	target_callsite = kallsyms_lookup_retry("__vfs_setxattr_locked"); // exported symbol
-	symbol_addr = kallsyms_lookup_retry("security_inode_setxattr");
-	ret = arm64_branch_patch_trampolined(target_callsite, symbol_addr, ksu_inode_setxattr_overloaded);
-	pr_info("LSM: security_inode_setxattr: ret %d \n", ret);
 
 	target_callsite = kallsyms_lookup_retry("__sys_setresuid");
 	if (!target_callsite)
 		target_callsite = kallsyms_lookup_retry("__arm64_sys_setresuid");
 	symbol_addr = kallsyms_lookup_retry("security_task_fix_setuid");
-	ret = arm64_branch_patch_trampolined(target_callsite, symbol_addr, ksu_task_fix_setuid);
+	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_task_fix_setuid);
 	if (ret) {
 		pr_info("LSM: security_task_fix_setuid: err: %d ! fallback to sys_setresuid!\n", ret);
 		replace_syscall((void *)&aarch64_setresuid, __AARCH64_setresuid, (void *)hook_aarch64_setresuid, native_sct);
@@ -274,8 +247,29 @@ rename_hook_done:
 
 }
 
-#undef arm64_branch_patch_trampolined
-#undef estimated_sz
+// see selinux_hide.c
+static void ksu_decide_inode_setxattr(bool sh_hooked)
+{
+	if (sh_hooked)
+		return;
+	uintptr_t target_callsite = kallsyms_lookup_retry("__vfs_setxattr_locked"); // exported symbol
+	uintptr_t symbol_addr = kallsyms_lookup_retry("security_inode_setxattr");
+	int ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_inode_setxattr_overloaded);
+	pr_info("LSM: security_inode_setxattr: ret %d \n", ret);
+}
+
+static void ksu_decide_setprocattr(bool sh_hooked)
+{
+	if (sh_hooked)
+		return;
+	uintptr_t target_callsite = kallsyms_lookup_retry("proc_pid_attr_write"); // fn ptr on dispatch table
+	uintptr_t symbol_addr = kallsyms_lookup_retry("security_setprocattr");
+	int ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, ksu_setprocattr_overloaded);
+	pr_info("LSM: security_setprocattr: ret %d \n", ret);
+}
+
+#undef patch_arm64_branches_trampolined
+#undef __ksym_size
 
 #undef INODE_SETXATTR_TYPE_idmap
 #undef INODE_SETXATTR_TYPE_userns
@@ -286,3 +280,4 @@ rename_hook_done:
 #undef SETPROCATTR_TYPE_lsm
 #undef SETPROCATTR_TYPE_name
 #undef ksu_setprocattr_overloaded
+

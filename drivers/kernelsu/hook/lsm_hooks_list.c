@@ -43,9 +43,6 @@ static __nocfi int ksu_file_permission(struct file *file, int mask)
 static int (*bprm_set_creds_fn)(struct linux_binprm *bprm) __read_mostly = nullptr;
 static __nocfi int ksu_bprm_set_creds(struct linux_binprm *bprm)
 {
-	if (likely(ksu_boot_completed))
-		goto capability_fn;
-
 	if (likely(!is_init(current_cred())))
 		goto capability_fn;
 
@@ -69,13 +66,13 @@ capability_fn:
 #define SETPROCATTR_TYPE_lsmid	int lsmid, const char *name, void *, size_t
 
 static void *setprocattr_fn __read_mostly = nullptr;
-static __nocfi int ksu_setprocattr_new(const char *name, void *value, size_t size)
+__overloaded static __nocfi int ksu_setprocattr_new(const char *name, void *value, size_t size)
 {
 	ksu_hide_setprocattr_inline(name, value, size);
 	return ((typeof(ksu_setprocattr_new) *)setprocattr_fn)(name, value, size);
 }
 
-static __nocfi int ksu_setprocattr_task(struct task_struct *p, char *name, void *value, size_t size)
+__overloaded static __nocfi int ksu_setprocattr_task(struct task_struct *p, char *name, void *value, size_t size)
 {
 	ksu_hide_setprocattr_inline(name, value, size);
 	return ((typeof(ksu_setprocattr_task) *)setprocattr_fn)(p, name, value, size);
@@ -89,26 +86,26 @@ static __nocfi int ksu_setprocattr_task(struct task_struct *p, char *name, void 
 	int (*)(SETPROCATTR_TYPE_lsmid) :ksu_setprocattr_new	\
 )
 
-struct mnt_idmap;
-struct user_namespace;
-#define INODE_SETXATTR_TYPE_idmap	struct mnt_idmap *idmap, struct dentry *, const char *, const void *, size_t, int
-#define INODE_SETXATTR_TYPE_userns	struct user_namespace *mnt_userns, struct dentry *, const char *, const void *, size_t, int
-#define INODE_SETXATTR_TYPE_legacy	struct dentry *, const char *, const void *, size_t, int
-
 static void *inode_setxattr_fn __read_mostly = nullptr;
-static __nocfi int ksu_inode_setxattr_idmap(struct mnt_idmap *idmap, struct dentry *dentry, const char *name, const void *value, size_t size, int flags)
+
+struct mnt_idmap;
+#define INODE_SETXATTR_TYPE_idmap	struct mnt_idmap *idmap, struct dentry *dentry, const char *name, const void *value, size_t size, int flags
+__overloaded static __nocfi int ksu_inode_setxattr_idmap(INODE_SETXATTR_TYPE_idmap)
 {
 	ksu_hide_setxattr_inline(name, value, size);
 	return ((typeof(ksu_inode_setxattr_idmap) *)inode_setxattr_fn)(idmap, dentry, name, value, size, flags);
 }
 
-static __nocfi int ksu_inode_setxattr_userns(struct user_namespace *mnt_userns, struct dentry *dentry, const char *name, const void *value, size_t size, int flags)
+struct user_namespace;
+#define INODE_SETXATTR_TYPE_userns	struct user_namespace *mnt_userns, struct dentry *dentry, const char *name, const void *value, size_t size, int flags
+__overloaded static __nocfi int ksu_inode_setxattr_userns(INODE_SETXATTR_TYPE_userns)
 {
 	ksu_hide_setxattr_inline(name, value, size);
 	return ((typeof(ksu_inode_setxattr_userns) *)inode_setxattr_fn)(mnt_userns, dentry, name, value, size, flags);
 }
 
-static __nocfi int ksu_inode_setxattr_legacy(struct dentry *dentry, const char *name, const void *value, size_t size, int flags)
+#define INODE_SETXATTR_TYPE_legacy	struct dentry *dentry, const char *name, const void *value, size_t size, int flags
+__overloaded static __nocfi int ksu_inode_setxattr_legacy(INODE_SETXATTR_TYPE_legacy)
 {
 	ksu_hide_setxattr_inline(name, value, size);
 	return ((typeof(ksu_inode_setxattr_legacy) *)inode_setxattr_fn)(dentry, name, value, size, flags);
@@ -270,14 +267,8 @@ do {												\
 static int ksu_restore_file_permission(void *data)
 {
 	set_user_nice(current, 19); // low prio
-
-loop_start:
-	msleep(1000);
-	if (*(volatile bool *)&ksu_vfs_read_hook)
-		goto loop_start;
-
-	msleep(1000);
-
+	while (*(volatile bool *)&ksu_vfs_read_hook)
+		msleep(5000);
 	LSM_HACK_RESTORE(file_permission);
 	return 0;
 }
@@ -286,18 +277,25 @@ loop_start:
 static int ksu_restore_bprm_set_creds(void *data)
 {
 	set_user_nice(current, 19); // low prio
-
-loop_start:
-	msleep(5000);
-	if (!*(volatile bool *)&ksu_boot_completed)
-		goto loop_start;
-
-	msleep(1000);
-
+	while (!*(volatile bool *)&ksu_boot_completed)
+		msleep(10000);
 	LSM_HACK_RESTORE(bprm_set_creds);
 	return 0;
 }
 #endif
+
+static void ksu_decide_inode_setxattr(bool sh_hooked)
+{
+	if (!sh_hooked)
+		return;
+	LSM_HACK_RESTORE(inode_setxattr);
+}
+static void ksu_decide_setprocattr(bool sh_hooked)
+{
+	if (!sh_hooked)
+		return;
+	LSM_HACK_RESTORE(setprocattr);
+}
 
 static __init void ksu_lsm_hook_init(void)
 {

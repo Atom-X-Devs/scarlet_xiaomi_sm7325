@@ -53,7 +53,8 @@ __maybe_unused void ksu_slow_avc_audit(u32 *tsid) { return; } // dummy
 
 extern typeof(slow_avc_audit) slow_avc_audit;
 
-static int ksu_slow_avc_audit_handler_1(u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a)
+#define SLOW_AVC_AUDIT_TYPE_1	u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a
+__overloaded static int ksu_slow_avc_audit_handler_1(SLOW_AVC_AUDIT_TYPE_1)
 {
 	ksu_slow_avc_audit_inline(&tsid);
 
@@ -61,7 +62,8 @@ static int ksu_slow_avc_audit_handler_1(u32 ssid, u32 tsid, u16 tclass, u32 requ
 	return ((typeof(ksu_slow_avc_audit_handler_1) *)slow_avc_audit)(ssid, tsid, tclass, requested, audited, denied, result, a);
 }
 
-static int ksu_slow_avc_audit_handler_2(struct selinux_state *state, u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a)
+#define SLOW_AVC_AUDIT_TYPE_2	struct selinux_state *state, u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a
+__overloaded static int ksu_slow_avc_audit_handler_2(SLOW_AVC_AUDIT_TYPE_2)
 {
 	ksu_slow_avc_audit_inline(&tsid);
 
@@ -69,7 +71,8 @@ static int ksu_slow_avc_audit_handler_2(struct selinux_state *state, u32 ssid, u
 	return ((typeof(ksu_slow_avc_audit_handler_2) *)slow_avc_audit)(state, ssid, tsid, tclass, requested, audited, denied, result, a);
 }
 
-static int ksu_slow_avc_audit_handler_3(struct selinux_state *state, u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a, unsigned int flags)
+#define SLOW_AVC_AUDIT_TYPE_3	struct selinux_state *state, u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a, unsigned int flags
+__overloaded static int ksu_slow_avc_audit_handler_3(SLOW_AVC_AUDIT_TYPE_3)
 {
 	ksu_slow_avc_audit_inline(&tsid);
 
@@ -77,18 +80,14 @@ static int ksu_slow_avc_audit_handler_3(struct selinux_state *state, u32 ssid, u
 	return ((typeof(ksu_slow_avc_audit_handler_3) *)slow_avc_audit)(state, ssid, tsid, tclass, requested, audited, denied, result, a, flags);
 }
 
-static int ksu_slow_avc_audit_handler_4(u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a, unsigned int flags)
+#define SLOW_AVC_AUDIT_TYPE_4	u32 ssid, u32 tsid, u16 tclass, u32 requested, u32 audited, u32 denied, int result, struct common_audit_data *a, unsigned int flags
+__overloaded static int ksu_slow_avc_audit_handler_4(SLOW_AVC_AUDIT_TYPE_4)
 {
 	ksu_slow_avc_audit_inline(&tsid);
 
 	assume(!!&slow_avc_audit);
 	return ((typeof(ksu_slow_avc_audit_handler_4) *)slow_avc_audit)(ssid, tsid, tclass, requested, audited, denied, result, a, flags);
 }
-
-#define SLOW_AVC_AUDIT_TYPE_1 u32, u32, u16, u32, u32, u32, int, struct common_audit_data *
-#define SLOW_AVC_AUDIT_TYPE_2 struct selinux_state *, u32, u32, u16, u32, u32, u32, int, struct common_audit_data *
-#define SLOW_AVC_AUDIT_TYPE_3 struct selinux_state *, u32, u32, u16, u32, u32, u32, int, struct common_audit_data *, unsigned int
-#define SLOW_AVC_AUDIT_TYPE_4 u32, u32, u16, u32, u32, u32, int, struct common_audit_data *, unsigned int
 
 #define ksu_slow_avc_audit_overloaded _Generic(				\
 (slow_avc_audit),							\
@@ -110,27 +109,40 @@ static void ksu_init_slow_avc_audit_hook(void)
 	if (!target)
 		goto bail;
 
-	// trampoline demo
-	uintptr_t landing_pad = create_landing_pad((uintptr_t)&ksu_slow_avc_audit_overloaded);
-	if (!landing_pad)
-		landing_pad = (uintptr_t)&ksu_slow_avc_audit_overloaded;
-
+	uintptr_t landing_pad = 0x0;
 	uintptr_t callsite = kallsyms_lookup_retry("avc_has_extended_perms");
 	if (!callsite)
 		goto skip1;
-	ret = arm64_bl_patch(callsite, ksu_get_ksym_size(callsite, 384 * sizeof(uint32_t)), target, landing_pad);
+	ret = arm64_bl_patch(callsite, ksu_get_ksym_size(callsite, 384 * sizeof(uint32_t)), target, (uintptr_t)&ksu_slow_avc_audit_overloaded);
+	if (ret == -ERANGE) {
+		landing_pad = create_landing_pad_kernel((uintptr_t)&ksu_slow_avc_audit_overloaded);
+		if (!!landing_pad)
+			ret = arm64_bl_patch(callsite, ksu_get_ksym_size(callsite, 384 * sizeof(uint32_t)), target, landing_pad);
+	}
 	pr_info("avc_spoof: hook on slow_avc_audit on avc_has_extended_perms ret: %d\n", ret);
 skip1:
 	callsite = kallsyms_lookup_retry("avc_has_perm_flags");
 	if (!callsite)
 		goto skip2;
-	ret = arm64_bl_patch(callsite, ksu_get_ksym_size(callsite, 384 * sizeof(uint32_t)), target, landing_pad);
+	ret = arm64_bl_patch(callsite, ksu_get_ksym_size(callsite, 384 * sizeof(uint32_t)), target, (uintptr_t)&ksu_slow_avc_audit_overloaded);
+	if (ret == -ERANGE) {
+		if (!landing_pad)
+			landing_pad = create_landing_pad_kernel((uintptr_t)&ksu_slow_avc_audit_overloaded);	
+		if (!!landing_pad)
+			ret = arm64_bl_patch(callsite, ksu_get_ksym_size(callsite, 384 * sizeof(uint32_t)), target, landing_pad);
+	}
 	pr_info("avc_spoof: hook on slow_avc_audit on avc_has_perm_flags ret: %d\n", ret);
 skip2:
 	callsite = kallsyms_lookup_retry("avc_has_perm");
 	if (!callsite)
 		goto bail;
-	ret = arm64_bl_patch(callsite, ksu_get_ksym_size(callsite, 384 * sizeof(uint32_t)), target, landing_pad);
+	ret = arm64_bl_patch(callsite, ksu_get_ksym_size(callsite, 384 * sizeof(uint32_t)), target, (uintptr_t)&ksu_slow_avc_audit_overloaded);
+	if (ret == -ERANGE) {
+		if (!landing_pad)
+			landing_pad = create_landing_pad_kernel((uintptr_t)&ksu_slow_avc_audit_overloaded);	
+		if (!!landing_pad)
+			ret = arm64_bl_patch(callsite, ksu_get_ksym_size(callsite, 384 * sizeof(uint32_t)), target, landing_pad);
+	}
 	pr_info("avc_spoof: hook on slow_avc_audit on avc_has_perm ret: %d\n", ret);
 
 bail:;

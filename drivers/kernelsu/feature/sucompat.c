@@ -346,7 +346,7 @@ static __always_inline void ksu_sucompat_user_common(const char __user **filenam
 }
 
 // sys_faccessat
-SUCOMPAT_HOOK_TYPE ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *__unused_flags)
+SUCOMPAT_HOOK_TYPE ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *flags)
 {
 	ksu_sucompat_user_common(filename_user, "sys_faccessat");
 	return 0;
