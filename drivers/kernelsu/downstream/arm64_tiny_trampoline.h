@@ -35,6 +35,7 @@ static_assert(1 == 0, "ARM64 only!");
  *  Changelog:
  *	- init, 261115
  *	- small build fixups, 261116
+ *	- add local nop bank, 261118
  *
  * printf '%s\n' '.text' '.global tp' 'tp:' 'ldr x16, #8' 'br x16' '.quad 0x12345678FFFFFFFF' | aarch64-linux-gnu-as -o test.o
  *
@@ -125,13 +126,12 @@ bail:;
 
 static DEFINE_MUTEX(trampoline_routine_mutex);
 
-nodiscard static uintptr_t create_landing_pad(uintptr_t target)
+nodiscard static noinline uintptr_t create_landing_pad_kernel(uintptr_t target)
 {
-	guarded_mutex_lock(&trampoline_routine_mutex);
-
 	if (!target)
 		return 0x0;
 
+	guarded_mutex_lock(&trampoline_routine_mutex);
 	might_sleep();
 
 	uint32_t ibuf; // test that target is reachable
@@ -160,7 +160,7 @@ nodiscard static uintptr_t create_landing_pad(uintptr_t target)
 
 	generate_trampoline(arr_insn, target);
 
-#if 1 // debug
+#ifdef CONFIG_KSU_DEBUG
 	pr_info("%s: .inst 0x%08x to 0x%lx\n", __func__, arr_insn[0], (uintptr_t)arr_addr[0]);
 	pr_info("%s: .inst 0x%08x to 0x%lx\n", __func__, arr_insn[1], (uintptr_t)arr_addr[1]);
 	pr_info("%s: .inst 0x%08x to 0x%lx\n", __func__, arr_insn[2], (uintptr_t)arr_addr[2]);
@@ -172,8 +172,102 @@ nodiscard static uintptr_t create_landing_pad(uintptr_t target)
 		return 0x0;
 	}
 
+	ptrdiff_t delta = (ptrdiff_t)trampoline_start - (ptrdiff_t)target;
+	pr_info("%s: trampoline: 0x%lx target: 0x%lx delta: %ld bytes\n", __func__, trampoline_start, target, __builtin_labs(delta));
 	pr_info("%s: trampoline written to: 0x%lx ret: %d\n", __func__, trampoline_start, res);
 	return trampoline_start;
 }
+
+#define NOP_COUNT 32
+#define __tt_stringify2(x) #x
+#define __tt_stringify(x) __tt_stringify2(x)
+asm(
+	".text					\n"
+	".p2align 4				\n" // aligned to 2^4, trampoline is 16 bytes
+	".global arm64_nop_bank			\n"
+"arm64_nop_bank:				\n"
+	".rept "__tt_stringify(NOP_COUNT)"	\n"
+	"nop					\n"
+	".endr					\n"
+);
+extern uint128_t arm64_nop_bank[];
+constexpr unsigned int arm64_nop_bank_max = NOP_COUNT / 4; // 4 nops per trampoline
+static unsigned int arm64_nop_bank_curr = 0;
+
+// tiny bump allocator, locally owned nops
+nodiscard static noinline uintptr_t create_landing_pad_local(uintptr_t target)
+{
+	if (!target)
+		return 0x0;
+
+	guarded_mutex_lock(&trampoline_routine_mutex);
+	might_sleep();
+
+	if (arm64_nop_bank_curr >= arm64_nop_bank_max) {
+		pr_info("%s: nop bank full! \n", __func__);	
+		return 0x0;
+	}
+
+	uint32_t ibuf; // test that target is reachable
+	if (!!copy_from_kernel_nofault(&ibuf, (void *)target, sizeof(uint32_t))) {
+		pr_info("%s: target unreachable!\n", __func__);
+		return 0x0;
+	}
+
+	uintptr_t trampoline_start = (uintptr_t)(void *)&arm64_nop_bank[arm64_nop_bank_curr];
+
+	uint32_t arr_insn[4];
+	void *arr_addr[] = { 
+		(void*)(trampoline_start + 0 * sizeof(uint32_t)),
+		(void*)(trampoline_start + 1 * sizeof(uint32_t)),
+		(void*)(trampoline_start + 2 * sizeof(uint32_t)),
+		(void*)(trampoline_start + 3 * sizeof(uint32_t))
+	};
+
+	generate_trampoline(arr_insn, target);
+
+#ifdef CONFIG_KSU_DEBUG
+	pr_info("%s: .inst 0x%08x to 0x%lx\n", __func__, arr_insn[0], (uintptr_t)arr_addr[0]);
+	pr_info("%s: .inst 0x%08x to 0x%lx\n", __func__, arr_insn[1], (uintptr_t)arr_addr[1]);
+	pr_info("%s: .inst 0x%08x to 0x%lx\n", __func__, arr_insn[2], (uintptr_t)arr_addr[2]);
+	pr_info("%s: .inst 0x%08x to 0x%lx\n", __func__, arr_insn[3], (uintptr_t)arr_addr[3]);
+#endif
+	int res = aarch64_insn_patch_text(arr_addr, arr_insn, 4);
+	if (res) {
+		pr_info("%s: err: %d\n", __func__, res);
+		return 0x0;
+	}
+
+	// bump
+	arm64_nop_bank_curr++;
+
+
+	ptrdiff_t delta = (ptrdiff_t)trampoline_start - (ptrdiff_t)target;
+	pr_info("%s: trampoline: 0x%lx target: 0x%lx delta: %ld bytes\n", __func__, trampoline_start, target, __builtin_labs(delta));
+	pr_info("%s: trampolines: %u of %u used\n", __func__, arm64_nop_bank_curr, arm64_nop_bank_max);
+
+	return trampoline_start;
+}
+
+#ifdef __H_ARM64_BRANCH_PATCH
+nodiscard static int arm64_branch_patch_trampolined(uintptr_t callsite, ptrdiff_t size, uintptr_t symbol_addr, uintptr_t target, bool is_kernel)
+{
+	int ret = arm64_b_or_bl_patch(callsite, size, symbol_addr, target);
+	if (ret != -ERANGE)
+		return ret;
+
+	uintptr_t trampoline = 0x0;
+
+	if (is_kernel)
+		trampoline = create_landing_pad_kernel(target);
+	else
+		trampoline = create_landing_pad_local(target);
+
+	if (!trampoline)
+		return ret;
+
+	return arm64_b_or_bl_patch(callsite, size, symbol_addr, trampoline);
+}
+#endif
 
 #endif // __H_ARM64_TINY_TRAMPOLINE

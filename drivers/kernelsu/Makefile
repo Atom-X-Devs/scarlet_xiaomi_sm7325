@@ -12,8 +12,8 @@ MDIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 $(info -- KDIR: $(KDIR))
 $(info -- MDIR: $(MDIR))
 
-# compliant to last upstream kernel change as of 9c3eb8b2
-CFLAGS_ksu.o += -DKSU_VERSION=32825
+# compliant to last upstream kernel change as of 8e585df7
+CFLAGS_ksu.o += -DKSU_VERSION=32827
 
 KSU_PACKAGE_NAME := me.weishu.kernelsu
 KSU_EXPECTED_SIZE := 0x033b

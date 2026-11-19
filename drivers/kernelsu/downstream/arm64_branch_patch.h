@@ -78,7 +78,7 @@ nodiscard static noinline int arm64_branch_patch(uintptr_t target_callsite, ptrd
 	ptrdiff_t hook_to_start = (ptrdiff_t)hook_addr - (ptrdiff_t)start_addr;
 	ptrdiff_t hook_to_end = (ptrdiff_t)hook_addr - (ptrdiff_t)end_addr;
 	if (__builtin_labs(hook_to_start) >= bl_max_delta || __builtin_labs(hook_to_end) >= bl_max_delta) {
-		pr_info("%s: scan window start: 0x%lx end: 0x%lx out of range to hook: 0x%lx!\n", __func__, start_addr, end_addr, hook_addr);
+		pr_info("%s: callsite: 0x%lx ~ 0x%lx hook: 0x%lx out of range!\n", __func__, start_addr, end_addr, hook_addr);
 		return -ERANGE;
 	}
 //	pr_info("%s: scan window start: 0x%lx end: 0x%lx in range to hook: 0x%lx deltas: %ld / %ld \n", __func__, start_addr, end_addr, hook_addr, hook_to_start, hook_to_end);
@@ -128,7 +128,7 @@ start_scan:
 		return -ERANGE;
 	}
 
-	pr_info("%s: callsite 0x%lx to hook 0x%lx inside range! (delta: %ld bytes)\n",  __func__, curr_addr, hook_addr, delta);
+	pr_info("%s: callsite: 0x%lx hook: 0x%lx (delta: %ld bytes)\n",  __func__, curr_addr, hook_addr, delta);
 
 	uint32_t insn;
 	if (aarch64_insn_is_bl(raw_instruction))
@@ -140,8 +140,9 @@ start_scan:
 	uint32_t arr_insn[] = { insn };
 
 	int res = aarch64_insn_patch_text(arr_addr, arr_insn, 1);
-	pr_info("%s: patched callsite: 0x%lx ret: %d\n", __func__, curr_addr, res);
-	patched++;
+	pr_info("%s: callsite: 0x%lx patch result: %d\n", __func__, curr_addr, res);
+	if (!res)
+		patched++;
 
 step_up:
 	curr_addr = curr_addr + sizeof(uint32_t);
