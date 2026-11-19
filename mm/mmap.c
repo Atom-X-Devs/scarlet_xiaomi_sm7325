@@ -297,11 +297,8 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	 */
 	mas_set(&mas, oldbrk);
 	next = mas_find(&mas, newbrk - 1 + PAGE_SIZE + stack_guard_gap);
-	if (next) {
-		vma_start_write(next);
-		if (newbrk + PAGE_SIZE > vm_start_gap(next))
-			goto out;
-	}
+	if (next && newbrk + PAGE_SIZE > vm_start_gap(next))
+		goto out;
 
 	brkvma = mas_prev(&mas, mm->start_brk);
 	/* Ok, looks good - let it rip. */
@@ -2818,29 +2815,35 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	if (vm_flags & VM_SPECIAL)
 		goto cannot_expand;
 
-	/* Attempt to expand an old mapping */
-	/* Check next */
-	if (next)
+	/*
+	 * Reject neighbors that cannot merge before waiting for their faults.
+	 * The mmap write lock protects these checks. Take the VMA write lock
+	 * before checking anon_vma, which faults can update.
+	 */
+	if (next && next->vm_start == end && next->vm_file == file &&
+	    !vma_policy(next)) {
 		vma_start_write(next);
-	if (next && next->vm_start == end && !vma_policy(next) &&
-	    can_vma_merge_before(next, vm_flags, NULL, file, pgoff+pglen,
-				 NULL_VM_UFFD_CTX, NULL)) {
-		merge_end = next->vm_end;
-		vma = next;
-		vm_pgoff = next->vm_pgoff - pglen;
+		if (can_vma_merge_before(next, vm_flags, NULL, file, pgoff + pglen,
+					 NULL_VM_UFFD_CTX, NULL)) {
+			merge_end = next->vm_end;
+			vma = next;
+			vm_pgoff = next->vm_pgoff - pglen;
+		}
 	}
 
-	/* Check prev */
-	if (prev)
+	if (prev && prev->vm_end == addr && prev->vm_file == file &&
+	    !vma_policy(prev)) {
+		struct anon_vma *anon_vma = vma ? vma->anon_vma : NULL;
+		struct vm_userfaultfd_ctx uffd_ctx = vma ? vma->vm_userfaultfd_ctx :
+							  NULL_VM_UFFD_CTX;
+
 		vma_start_write(prev);
-	if (prev && prev->vm_end == addr && !vma_policy(prev) &&
-	    (vma ? can_vma_merge_after(prev, vm_flags, vma->anon_vma, file,
-				       pgoff, vma->vm_userfaultfd_ctx, NULL) :
-		   can_vma_merge_after(prev, vm_flags, NULL, file, pgoff,
-				       NULL_VM_UFFD_CTX, NULL))) {
-		merge_start = prev->vm_start;
-		vma = prev;
-		vm_pgoff = prev->vm_pgoff;
+		if (can_vma_merge_after(prev, vm_flags, anon_vma, file, pgoff,
+					uffd_ctx, NULL)) {
+			merge_start = prev->vm_start;
+			vma = prev;
+			vm_pgoff = prev->vm_pgoff;
+		}
 	}
 
 
