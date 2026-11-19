@@ -6677,7 +6677,7 @@ binder_defer_work(struct binder_proc *proc, enum binder_deferred_state defer)
 	mutex_unlock(&binder_deferred_lock);
 }
 
-#ifdef CONFIG_FTRACE
+#if defined(CONFIG_FTRACE) || defined(CONFIG_ANDROID_BINDER_LOGS)
 static const char *const binder_return_strings[] = {
 	"BR_ERROR",
 	"BR_OK",
