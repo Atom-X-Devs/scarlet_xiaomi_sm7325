@@ -5,7 +5,7 @@
 //! Provides knobs for Rust ashmem.
 
 use crate::{ashmem_range, IGNORE_UNSET_PROT_EXEC, IGNORE_UNSET_PROT_READ};
-use core::{marker::PhantomData, sync::atomic::Ordering};
+use core::marker::PhantomData;
 use kernel::{
     c_str,
     error::to_result,
@@ -13,6 +13,7 @@ use kernel::{
     iov::{IovIterDest, IovIterSource},
     miscdevice::{MiscDevice, MiscDeviceOptions, MiscDeviceRegistration},
     prelude::*,
+    sync::atomic::Relaxed,
 };
 
 fn kstrtobool(kstr: &CStr) -> Result<bool> {
@@ -79,11 +80,11 @@ pub(crate) struct AshmemToggleRead;
 impl AshmemToggle for AshmemToggleRead {
     const NAME: &'static CStr = c_str!("ashmem_ignore_unset_prot_read");
     fn set(enabled: bool) -> Result<()> {
-        IGNORE_UNSET_PROT_READ.store(enabled, Ordering::Relaxed);
+        IGNORE_UNSET_PROT_READ.store(enabled, Relaxed);
         Ok(())
     }
     fn get() -> bool {
-        IGNORE_UNSET_PROT_READ.load(Ordering::Relaxed)
+        IGNORE_UNSET_PROT_READ.load(Relaxed)
     }
 }
 
@@ -92,10 +93,10 @@ pub(crate) struct AshmemToggleExec;
 impl AshmemToggle for AshmemToggleExec {
     const NAME: &'static CStr = c_str!("ashmem_ignore_unset_prot_exec");
     fn set(enabled: bool) -> Result<()> {
-        IGNORE_UNSET_PROT_EXEC.store(enabled, Ordering::Relaxed);
+        IGNORE_UNSET_PROT_EXEC.store(enabled, Relaxed);
         Ok(())
     }
     fn get() -> bool {
-        IGNORE_UNSET_PROT_EXEC.load(Ordering::Relaxed)
+        IGNORE_UNSET_PROT_EXEC.load(Relaxed)
     }
 }

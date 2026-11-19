@@ -12,8 +12,7 @@
 
 use core::{
     pin::Pin,
-    ptr::null_mut,
-    sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering},
+    ptr::{null, null_mut},
 };
 use kernel::{
     bindings::{self, ASHMEM_GET_PIN_STATUS, ASHMEM_PIN, ASHMEM_UNPIN},
@@ -29,7 +28,10 @@ use kernel::{
     page::{page_align, PAGE_MASK, PAGE_SIZE},
     prelude::*,
     seq_file::{seq_print, SeqFile},
-    sync::{new_mutex, Mutex, UniqueArc},
+    sync::{
+        atomic::{Atomic, AtomicFlag, Relaxed},
+        new_mutex, Mutex, UniqueArc,
+    },
     task::Task,
     types::ForeignOwnable,
     uaccess::{UserSlice, UserSliceReader, UserSliceWriter},
@@ -71,13 +73,13 @@ fn has_cap_sys_admin() -> bool {
     unsafe { bindings::capable(CAP_SYS_ADMIN as c_int) }
 }
 
-static NUM_PIN_IOCTLS_WAITING: AtomicUsize = AtomicUsize::new(0);
-static IGNORE_UNSET_PROT_READ: AtomicBool = AtomicBool::new(false);
-static IGNORE_UNSET_PROT_EXEC: AtomicBool = AtomicBool::new(false);
-static ASHMEM_FOPS_PTR: AtomicPtr<bindings::file_operations> = AtomicPtr::new(null_mut());
+static NUM_PIN_IOCTLS_WAITING: Atomic<usize> = Atomic::new(0);
+static IGNORE_UNSET_PROT_READ: AtomicFlag = AtomicFlag::new(false);
+static IGNORE_UNSET_PROT_EXEC: AtomicFlag = AtomicFlag::new(false);
+static ASHMEM_FOPS_PTR: Atomic<*const bindings::file_operations> = Atomic::new(null());
 
 fn shrinker_should_stop() -> bool {
-    NUM_PIN_IOCTLS_WAITING.load(Ordering::Relaxed) > 0
+    NUM_PIN_IOCTLS_WAITING.load(Relaxed) > 0
 }
 
 #[cfg(CONFIG_COMPAT)]
@@ -125,7 +127,7 @@ impl kernel::Module for AshmemModule {
         // SAFETY: ashmem_miscdevice_registration is pinned and is never destroyed, so reading
         // and storing the fops pointer this way should be fine.
         let fops_ptr = unsafe { (*ashmem_miscdevice_ptr).fops };
-        ASHMEM_FOPS_PTR.store(fops_ptr.cast_mut(), Ordering::Relaxed);
+        ASHMEM_FOPS_PTR.store(fops_ptr, Relaxed);
 
         Ok(Self {
             _misc: ashmem_miscdevice_registration,
@@ -371,12 +373,12 @@ impl Ashmem {
             prot |= PROT_EXEC;
         }
 
-        if IGNORE_UNSET_PROT_READ.load(Ordering::Relaxed) {
+        if IGNORE_UNSET_PROT_READ.load(Relaxed) {
             // Add back PROT_READ if asma.prot_mask has it.
             prot |= asma.prot_mask & PROT_READ;
         }
 
-        if IGNORE_UNSET_PROT_EXEC.load(Ordering::Relaxed) {
+        if IGNORE_UNSET_PROT_EXEC.load(Relaxed) {
             // Add back PROT_EXEC if asma.prot_mask has it.
             prot |= asma.prot_mask & PROT_EXEC;
         }
@@ -434,9 +436,9 @@ impl Ashmem {
             Some(UniqueArc::new_uninit(GFP_KERNEL)?)
         };
 
-        NUM_PIN_IOCTLS_WAITING.fetch_add(1, Ordering::Relaxed);
+        NUM_PIN_IOCTLS_WAITING.add(1, Relaxed);
         let mut guard = AshmemGuard(ASHMEM_MUTEX.lock());
-        NUM_PIN_IOCTLS_WAITING.fetch_sub(1, Ordering::Relaxed);
+        NUM_PIN_IOCTLS_WAITING.fetch_sub(1, Relaxed);
 
         // C ashmem waits for in-flight shrinkers here using a separate mechanism, but we don't
         // release the lock when calling `punch_hole` in the shrinker, so we don't need to do that.
@@ -684,7 +686,7 @@ fn ashmem_memfd_ioctl_inner(file: &File, cmd: u32, arg: usize) -> Result<isize> 
 /// The caller must ensure that `file` is valid for the duration of this function.
 #[no_mangle]
 unsafe extern "C" fn is_ashmem_file(file: *mut bindings::file) -> bool {
-    let ashmem_fops_ptr = ASHMEM_FOPS_PTR.load(Ordering::Relaxed);
+    let ashmem_fops_ptr = ASHMEM_FOPS_PTR.load(Relaxed);
     if file.is_null() || ashmem_fops_ptr.is_null() {
         return false;
     }

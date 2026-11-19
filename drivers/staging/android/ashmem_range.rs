@@ -12,22 +12,21 @@ use crate::{
     shmem::ShmemFile,
     AshmemModule,
 };
-use core::{
-    mem::MaybeUninit,
-    pin::Pin,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::{mem::MaybeUninit, pin::Pin};
 use kernel::{
     c_str,
     list::{List, ListArc, ListLinks},
     page::PAGE_SIZE,
     prelude::*,
-    sync::{GlobalGuard, GlobalLockedBy, UniqueArc},
+    sync::{
+        atomic::{Atomic, Relaxed},
+        GlobalGuard, GlobalLockedBy, UniqueArc,
+    },
 };
 
 // Saturated copy of `AshmemLru::lru_count` (`min(lru_count, usize::MAX)`).
 // Only updated with `ASHMEM_MUTEX` held, and read locklessly by `Shrinker::count_objects`.
-static LRU_COUNT_SATURATED: AtomicUsize = AtomicUsize::new(0);
+static LRU_COUNT_SATURATED: Atomic<usize> = Atomic::new(0);
 
 pub(crate) struct AshmemLru {
     lru_list: List<Range, 0>,
@@ -59,7 +58,7 @@ impl AshmemGuard {
 
     fn sync_lru_count(&self) {
         let saturated = usize::try_from(self.lru_count).unwrap_or(usize::MAX);
-        LRU_COUNT_SATURATED.store(saturated, Ordering::Relaxed);
+        LRU_COUNT_SATURATED.store(saturated, Relaxed);
     }
 
     fn add_lru_count(&mut self, pages: usize) {
@@ -438,7 +437,7 @@ impl Shrinker for super::AshmemModule {
     type Ptr = ();
 
     fn count_objects(_: (), _sc: ShrinkControl<'_>) -> CountObjects {
-        let count = LRU_COUNT_SATURATED.load(super::Ordering::Relaxed);
+        let count = LRU_COUNT_SATURATED.load(Relaxed);
         if count == 0 {
             CountObjects::EMPTY
         } else {
