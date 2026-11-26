@@ -176,7 +176,7 @@ int hmm_mirror_register(struct hmm_mirror *mirror, struct mm_struct *mm)
 {
 	struct mmu_notifier *mn;
 
-	lockdep_assert_held_write(&mm->mmap_sem);
+	lockdep_assert_held_write(&mm->mmap_lock);
 
 	/* Sanity check */
 	if (!mm || !mirror || !mirror->ops)
@@ -239,7 +239,7 @@ static int hmm_vma_do_fault(struct mm_walk *walk, unsigned long addr,
 
 	ret = handle_mm_fault(vma, addr, flags);
 	if (ret & VM_FAULT_RETRY) {
-		/* Note, handle_mm_fault did up_read(&mm->mmap_sem)) */
+		/* Note, handle_mm_fault did mmap_read_unlock(mm)) */
 		return -EAGAIN;
 	}
 	if (ret & VM_FAULT_ERROR)
@@ -896,7 +896,7 @@ long hmm_range_fault(struct hmm_range *range, unsigned int flags)
 	struct vm_area_struct *vma;
 	int ret;
 
-	lockdep_assert_held(&hmm->mmu_notifier.mm->mmap_sem);
+	lockdep_assert_held(&hmm->mmu_notifier.mm->mmap_lock);
 
 	do {
 		/* If range is no longer valid force retry. */

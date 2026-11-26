@@ -475,10 +475,10 @@ static inline u64 ksu_ktime_get_ns(void) { return ktime_to_ns(ktime_get()); }
 __weak unsigned long vm_mmap(struct file *file, unsigned long addr, unsigned long len,
 			unsigned long prot, unsigned long flags, unsigned long offset)
 {
-	// The caller must hold down_write(&current->mm->mmap_sem).
-	down_write(&current->mm->mmap_sem);
+	// The caller must hold mmap_write_lock(current->mm).
+	mmap_write_lock(current->mm);
 	unsigned long ret = do_mmap_pgoff(file, addr, len, prot, flags, offset >> PAGE_SHIFT);
-	up_write(&current->mm->mmap_sem);
+	mmap_write_unlock(current->mm);
 	return ret;
 }
 #endif
