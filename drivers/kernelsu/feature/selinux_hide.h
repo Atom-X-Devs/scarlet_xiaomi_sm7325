@@ -79,7 +79,7 @@ check_buf:
 	__atomic_store_n(slot, buf, __ATOMIC_RELAXED);
 	smp_mb();
 
-	if (buf != __atomic_load_n(g_buf, __ATOMIC_ACQUIRE))
+	if (unlikely(buf != __atomic_load_n(g_buf, __ATOMIC_ACQUIRE)))
 		goto check_buf;
 
 	return buf;
@@ -311,16 +311,14 @@ static __always_inline bool ksu_parse_access_tokens(const char *str, size_t limi
 	return (*t1_len > 0) || (*t2_len > 0);
 }
 
-static __always_inline bool ksu_type_is_hidden(const char *type_ptr, size_t type_len)
+// callers must hold the buf pinned via ksu_selinux_hide_get_buf/put_buf
+static __always_inline bool ksu_type_buf_is_hidden(struct ksu_hide_buf *type_buf,
+						   const char *type_ptr, size_t type_len)
 {
-	if (!type_ptr || !type_len)
+	if (!type_buf || !type_ptr || !type_len)
 		return false;
 
 	bool matched = false;
-	struct ksu_hide_buf *type_buf __cleanup(ksu_selinux_hide_put_buf) = ksu_selinux_hide_get_buf(&ksu_hide_type_list);
-	if (unlikely(!type_buf))
-		return false;
-
 	size_t offset = 0;
 	while (type_buf->len > offset) {
 		const struct ksu_hide_entry *e = (const struct ksu_hide_entry *)(type_buf->data + offset);
@@ -332,17 +330,23 @@ static __always_inline bool ksu_type_is_hidden(const char *type_ptr, size_t type
 	return matched;
 }
 
-static __always_inline bool ksu_rule_is_hidden(const char *src_type, size_t src_len,
-					       const char *tgt_type, size_t tgt_len)
+static __always_inline bool ksu_type_is_hidden(const char *type_ptr, size_t type_len)
 {
-	if (!src_type || !src_len || !tgt_type || !tgt_len)
+	if (!type_ptr || !type_len)
+		return false;
+
+	struct ksu_hide_buf *type_buf __cleanup(ksu_selinux_hide_put_buf) = ksu_selinux_hide_get_buf(&ksu_hide_type_list);
+	return ksu_type_buf_is_hidden(type_buf, type_ptr, type_len);
+}
+
+static __always_inline bool ksu_rule_buf_is_hidden(struct ksu_hide_buf *rule_buf,
+						   const char *src_type, size_t src_len,
+						   const char *tgt_type, size_t tgt_len)
+{
+	if (!rule_buf || !src_type || !src_len || !tgt_type || !tgt_len)
 		return false;
 
 	bool matched = false;
-	struct ksu_hide_buf *rule_buf __cleanup(ksu_selinux_hide_put_buf) = ksu_selinux_hide_get_buf(&ksu_hide_rule_list);
-	if (unlikely(!rule_buf))
-		return false;
-
 	size_t offset = 0;
 	while (rule_buf->len > offset) {
 		const struct ksu_hide_entry *src_e = (const struct ksu_hide_entry *)(rule_buf->data + offset);
@@ -359,6 +363,30 @@ static __always_inline bool ksu_rule_is_hidden(const char *src_type, size_t src_
 	}
 
 	return matched;
+}
+
+static __always_inline bool ksu_type_pair_is_hidden(const char *src_ptr, size_t src_len,
+						    const char *tgt_ptr, size_t tgt_len)
+{
+	struct ksu_hide_buf *type_buf __cleanup(ksu_selinux_hide_put_buf) = ksu_selinux_hide_get_buf(&ksu_hide_type_list);
+	return ksu_type_buf_is_hidden(type_buf, src_ptr, src_len) ||
+	       ksu_type_buf_is_hidden(type_buf, tgt_ptr, tgt_len);
+}
+
+static __always_inline void ksu_type_pair_hits(const char *src_ptr, size_t src_len,
+					       const char *tgt_ptr, size_t tgt_len,
+					       bool *src_hit, bool *tgt_hit)
+{
+	struct ksu_hide_buf *type_buf __cleanup(ksu_selinux_hide_put_buf) = ksu_selinux_hide_get_buf(&ksu_hide_type_list);
+	*src_hit = ksu_type_buf_is_hidden(type_buf, src_ptr, src_len);
+	*tgt_hit = ksu_type_buf_is_hidden(type_buf, tgt_ptr, tgt_len);
+}
+
+static __always_inline bool ksu_rule_pair_is_hidden(const char *src_ptr, size_t src_len,
+						    const char *tgt_ptr, size_t tgt_len)
+{
+	struct ksu_hide_buf *rule_buf __cleanup(ksu_selinux_hide_put_buf) = ksu_selinux_hide_get_buf(&ksu_hide_rule_list);
+	return ksu_rule_buf_is_hidden(rule_buf, src_ptr, src_len, tgt_ptr, tgt_len);
 }
 
 static __always_inline void ksu_corrupt_type_char(char *type_ptr, bool do_corrupt)
@@ -394,9 +422,10 @@ static __always_inline bool ksu_sanitize_access_buf(char *str, size_t limit)
 	if (!ksu_parse_access_tokens(str, limit, &t1_off, &t1_len, &t2_off, &t2_len))
 		return false;
 
-	bool hit1 = ksu_type_is_hidden(str + t1_off, t1_len);
-	bool hit2 = ksu_type_is_hidden(str + t2_off, t2_len);
-	bool hit_rule = ksu_rule_is_hidden(str + t1_off, t1_len, str + t2_off, t2_len);
+	bool hit1 = false;
+	bool hit2 = false;
+	ksu_type_pair_hits(str + t1_off, t1_len, str + t2_off, t2_len, &hit1, &hit2);
+	bool hit_rule = ksu_rule_pair_is_hidden(str + t1_off, t1_len, str + t2_off, t2_len);
 
 	if (hit1)
 		ksu_corrupt_type_char(str + t1_off, true);
@@ -408,7 +437,7 @@ static __always_inline bool ksu_sanitize_access_buf(char *str, size_t limit)
 
 static __always_inline bool ksu_should_destroy_context(const char *str, size_t limit, const bool types_only)
 {
-	if (!str || !limit)
+	if (unlikely(!str || !limit))
 		return false;
 
 	if (types_only) {
@@ -423,11 +452,10 @@ static __always_inline bool ksu_should_destroy_context(const char *str, size_t l
 	if (!ksu_parse_access_tokens(str, limit, &t1_off, &t1_len, &t2_off, &t2_len))
 		return false;
 
-	if (ksu_type_is_hidden(str + t1_off, t1_len) ||
-	    ksu_type_is_hidden(str + t2_off, t2_len))
+	if (ksu_type_pair_is_hidden(str + t1_off, t1_len, str + t2_off, t2_len))
 		return true;
 
-	return ksu_rule_is_hidden(str + t1_off, t1_len, str + t2_off, t2_len);
+	return ksu_rule_pair_is_hidden(str + t1_off, t1_len, str + t2_off, t2_len);
 }
 
 #endif
