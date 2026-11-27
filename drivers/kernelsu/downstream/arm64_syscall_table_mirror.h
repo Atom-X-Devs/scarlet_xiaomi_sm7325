@@ -64,7 +64,7 @@ static uintptr_t sys_call_table_mpage[sct_slots * 2] __aligned(4096);
 static uintptr_t compat_sys_call_table_mpage[sct_slots * 2] __aligned(4096);
 #endif
 
-static int bruteforce_sct_adrp(uintptr_t *target_table, uintptr_t insn_addr_start, ptrdiff_t scan_depth, void *new_page, void *new_table)
+static int arm64_adrp_patch(uintptr_t *target_table, uintptr_t insn_addr_start, ptrdiff_t scan_depth, void *new_page, void *new_table)
 {
 	uintptr_t insn_p = insn_addr_start;
 	uintptr_t insn_end = insn_addr_start + scan_depth;
@@ -132,7 +132,7 @@ bail:
 	return 0;
 }
 
-static int do_mirror_syscall_table(const char *native_sym, const char *compat_sym, ptrdiff_t scan_depth)
+static int mirror_syscall_table(const char *native_sym, const char *compat_sym, ptrdiff_t scan_depth)
 {
 	uintptr_t addr = (uintptr_t)native_sct;
 	uintptr_t base = addr & ~0xFFFUL;
@@ -151,7 +151,7 @@ static int do_mirror_syscall_table(const char *native_sym, const char *compat_sy
 	ssize_t new_scan_depth = ksu_get_ksym_size(target, scan_depth);
 	pr_info("%s: target: %s @ 0x%lx sz: %zu\n", __func__, native_sym, target, new_scan_depth);
 
-	int ret = bruteforce_sct_adrp((uintptr_t *)&native_sct, target, new_scan_depth, (void *)sys_call_table_mpage, new_table);
+	int ret = arm64_adrp_patch((uintptr_t *)&native_sct, target, new_scan_depth, (void *)sys_call_table_mpage, new_table);
 	if (ret)
 		return ret;
 
@@ -175,7 +175,7 @@ static int do_mirror_syscall_table(const char *native_sym, const char *compat_sy
 	new_scan_depth = ksu_get_ksym_size(target, scan_depth);
 	pr_info("%s: target: %s @ 0x%lx sz: %zu\n", __func__, compat_sym, target, new_scan_depth);
 
-	ret = bruteforce_sct_adrp((uintptr_t *)&compat_sct, target, new_scan_depth, (void *)compat_sys_call_table_mpage, new_table);
+	ret = arm64_adrp_patch((uintptr_t *)&compat_sct, target, new_scan_depth, (void *)compat_sys_call_table_mpage, new_table);
 	if (ret)
 		return ret;
 
@@ -187,18 +187,18 @@ static int do_mirror_syscall_table(const char *native_sym, const char *compat_sy
 static void try_mirror_syscall_table(void)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
-	int ret = do_mirror_syscall_table("do_el0_svc", "do_el0_svc_compat", 64 * 4);
+	int ret = mirror_syscall_table("do_el0_svc", "do_el0_svc_compat", 64 * 4);
 	if (!ret)
 		return;
 
-	ret = do_mirror_syscall_table("el0_svc_handler", "el0_svc_compat_handler", 64 * 4);
+	ret = mirror_syscall_table("el0_svc_handler", "el0_svc_compat_handler", 64 * 4);
 	if (!ret)
 		return;
 
 	// for heavily inlined shit
-	do_mirror_syscall_table("el0_svc", "el0_svc_compat", 256 * 4);
+	mirror_syscall_table("el0_svc", "el0_svc_compat", 256 * 4);
 #else
-	do_mirror_syscall_table("el0_svc", "el0_svc_compat", 16 * 4);
+	mirror_syscall_table("el0_svc", "el0_svc_compat", 16 * 4);
 #endif
 }
 

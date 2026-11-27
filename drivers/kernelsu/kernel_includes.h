@@ -519,6 +519,9 @@ static inline void kfree_byref(void *buf) { kfree(*(void **)buf); }
 #endif // CONFIG_KSU_NOPRINTK && !CONFIG_KSU_DEBUG
 
 // no ratelimit
+#ifdef pr_warn_ratelimited
+#undef pr_warn_ratelimited
+#endif
 #define pr_warn_ratelimited pr_warn
 
 /**

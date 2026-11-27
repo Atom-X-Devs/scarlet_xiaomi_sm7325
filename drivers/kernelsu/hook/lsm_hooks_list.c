@@ -170,7 +170,7 @@ static int ksu_hack_lsm_slot(void *hook_head, uintptr_t *old_ptr, uintptr_t new_
 		return 1;
 	}
 
-#if defined(MODULE) // kallsyms strstr check
+#if defined(CONFIG_KALLSYMS) // kallsyms strstr check
 	char symbuf[KSYM_NAME_LEN];
 	sprint_symbol_no_offset(symbuf, current_hook);
 	if (!strstr(symbuf, hook_name)) {
@@ -180,8 +180,8 @@ static int ksu_hack_lsm_slot(void *hook_head, uintptr_t *old_ptr, uintptr_t new_
 	pr_info("LSM: expected: %s on 0x%lx matches ksym: %s\n", hook_name, current_hook, symbuf);
 #endif
 
-	WRITE_ONCE(*old_ptr, current_hook);
-	smp_mb();
+	// *old_ptr = current_hook;
+	patch_ptr_slot_kick_cpu((void **)old_ptr, (void *)current_hook);
 
 	if (sizeof(struct security_hook_list) == 5 * sizeof(uintptr_t))
 		pr_info("LSM: 0x%lx found at 0x%lx slot, name: %s \n", current_hook, hook_slot_addr, *(char **)(node + 4 * sizeof(uintptr_t)));
@@ -196,7 +196,7 @@ static int ksu_hack_lsm_slot(void *hook_head, uintptr_t *old_ptr, uintptr_t new_
 	return 0;
 }
 
-#if defined(MODULE)
+#if defined(CONFIG_KALLSYMS)
 static void ksu_bruteforce_lsm_slot(uintptr_t *old_ptr, uintptr_t new_ptr, const char *hook_name)
 {
 	// context: https://github.com/PhoenixKernel/linux-staging/commit/63074fbdb6971ec43f39934b96f4b475eedcaf7e
@@ -248,7 +248,7 @@ increment:
 do {												\
 	pr_info("LSM: Initializing hook for %s -> %s\n", #hook_name, #hook_fn);			\
 	void *hook_head = (void *)&security_hook_heads.hook_name;				\
-	uintptr_t *old_ptr = (uintptr_t *)&hook_name##_fn;					\
+	uintptr_t *old_ptr = (uintptr_t *)&hook_name##_fn; /* storage, fnp */			\
 	int ret = ksu_hack_lsm_slot(hook_head, old_ptr, (uintptr_t)(hook_fn), #hook_name);	\
 	if (ret == 2)										\
 		ksu_bruteforce_lsm_slot(old_ptr, (uintptr_t)(hook_fn), #hook_name);		\
@@ -258,10 +258,12 @@ do {												\
 do {												\
 	if (!hook_name##_fn)									\
 		break;										\
-	uintptr_t dummy_int;									\
+	uintptr_t __dummy; /* dummy storage */							\
 	pr_info("LSM: Restoring original hook for %s\n", #hook_name);				\
 	void *hook_head = (void *)&security_hook_heads.hook_name;				\
-	ksu_hack_lsm_slot(hook_head, &dummy_int, (uintptr_t)hook_name##_fn, #hook_name);	\
+	int r = ksu_hack_lsm_slot(hook_head, &__dummy, (uintptr_t)hook_name##_fn, #hook_name);	\
+	if (r == 2)										\
+		ksu_bruteforce_lsm_slot(&__dummy, (uintptr_t)hook_name##_fn, #hook_name);	\
 } while (0)
 
 static int ksu_restore_file_permission(void *data)

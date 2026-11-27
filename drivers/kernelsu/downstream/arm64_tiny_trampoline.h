@@ -178,7 +178,7 @@ nodiscard static noinline uintptr_t create_landing_pad_kernel(uintptr_t target)
 	return trampoline_start;
 }
 
-#define NOP_COUNT 32
+#define NOP_COUNT 64
 #define __tt_stringify2(x) #x
 #define __tt_stringify(x) __tt_stringify2(x)
 asm(
@@ -267,6 +267,20 @@ nodiscard static int arm64_branch_patch_trampolined(uintptr_t callsite, ptrdiff_
 		return ret;
 
 	return arm64_b_or_bl_patch(callsite, size, symbol_addr, trampoline);
+}
+
+// caller is resposnible for zero initing trampoline
+nodiscard static int arm64_branch_patch_trampolined_reusable(uintptr_t *trampoline, uintptr_t callsite, uintptr_t symbol_addr, uintptr_t target_hook)
+{
+	ptrdiff_t depth = ksu_get_ksym_size(callsite, 256 * sizeof(uint32_t));
+	int ret = arm64_b_or_bl_patch(callsite, depth, symbol_addr, target_hook);
+	if (ret != -ERANGE)
+		return ret;
+	if (!*trampoline)
+		*trampoline = create_landing_pad_kernel(target_hook);
+	if (!!*trampoline)
+		ret = arm64_b_or_bl_patch(callsite, depth, symbol_addr, *trampoline);
+	return ret;
 }
 #endif
 

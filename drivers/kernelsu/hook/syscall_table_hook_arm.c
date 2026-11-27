@@ -149,7 +149,7 @@ asmlinkage long hook_armeabi_execveat(int fd, const char __user * filename, cons
  * ENDPROC(sys_execve_wrapper)
  *
  */
-#include <asm/ptrace.h>
+struct pt_regs;
 static void *armeabi_execve __read_mostly = nullptr;
 __attribute__((used))
 asmlinkage long hook_sys_execve(const char __user *filenamei, const char __user *const __user *argv, const char __user *const __user *envp, struct pt_regs *regs)
@@ -159,14 +159,16 @@ asmlinkage long hook_sys_execve(const char __user *filenamei, const char __user 
 }
 
 #define S_OFF "8"
-__attribute__((naked))
-asmlinkage void hook_armeabi_execve()
-{
-	asm volatile(
-		"add r3, sp, #" S_OFF "\n"
-		"b   hook_sys_execve\n"
-	);
-}
+asm(
+".text				\n"
+".p2align 2			\n"
+".global hook_armeabi_execve	\n"
+"hook_armeabi_execve:		\n"
+"	add r3, sp, #" S_OFF "	\n"
+"	b   hook_sys_execve	\n"
+);
+extern void hook_armeabi_execve(void);
+#undef S_OFF
 
 #endif /* sys_execve_oabi */
 

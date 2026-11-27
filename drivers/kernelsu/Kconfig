@@ -18,7 +18,7 @@ config KSU_HACK_ARM64_BRANCH_LINK
 	help
 	  Opportunistically attempts to provide faster sucompat by scanning kernel text
 	  and overwriting caller's branch insn ('b' or 'bl') directly to our hooks,
-	  bypassing trampoline overhead and CFI. Inspired by ARM64 optprobes.
+	  bypassing traditional trampoline overhead and CFI. Inspired by ARM64 optprobes.
 	  Successful patching relies on symbol stability, so hooking success will
 	  vary across different compliers, optimization, tweaks and backports.
 	  When patching fails, it keeps syscall table hook for the target symbol.
