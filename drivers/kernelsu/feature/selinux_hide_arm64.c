@@ -94,29 +94,13 @@ static char *sh_simple_transaction_get(struct file *file, const char __user *buf
 
 	char *data = simple_transaction_get(file, buf, size);
 	if (IS_ERR(data))
-		return PTR_ERR(data);
+		return data;
 
-	if (ino == SEL_CONTEXT && ksu_should_destroy_context(data, size, true)) {
-		pr_info_ratelimited("selinux_hide: simple_transaction_get: context: destroy: %s \n", data);
-		do_useless_alloc(size);
-		do_useless_alloc(size);
-		do_useless_alloc(size);
-		return ERR_PTR(-EINVAL);
+	if (ino == SEL_CONTEXT)
+		ksu_sanitize_single_context(data, size);
+	else if (ino == SEL_ACCESS)
+		ksu_sanitize_access_buf(data, size);
 
-//		replace_after_second_colon(data, size);
-//		do_useless_alloc(size);
-	}
-
-	if (ino == SEL_ACCESS && ksu_should_destroy_context(data, size, false)) {
-		pr_info("selinux_hide: simple_transaction_get: access: destroy: %s \n", data);
-		do_useless_alloc(size);
-		do_useless_alloc(size);
-		do_useless_alloc(size);
-		return ERR_PTR(-EINVAL);
-
-//		replace_after_second_colon(data, size);
-//		do_useless_alloc(size);
-	}
 	return data;
 
 skip_destroy:;
@@ -190,20 +174,20 @@ static void sh_security_compute_av_user(u32 ssid, u32 tsid, u16 tclass, struct a
 
 static void patch_branches_selinux_transaction_write(void)
 {
-	uintptr_t target_callsite = kallsyms_lookup_retry("selinux_transaction_write");
+	uintptr_t tx_write_callsite = kallsyms_lookup_retry("selinux_transaction_write");
 	uintptr_t symbol_addr = kallsyms_lookup_retry("simple_transaction_get");
-	if (!symbol_addr || !target_callsite)
+	if (!symbol_addr || !tx_write_callsite)
 		goto hook_classic;
 
 	uintptr_t trampoline = 0x0;
-	int ret = arm64_branch_patch_trampolined_reusable(&trampoline, target_callsite, symbol_addr, (uintptr_t)&sh_simple_transaction_get);
+	int ret = arm64_branch_patch_trampolined_reusable(&trampoline, tx_write_callsite, symbol_addr, (uintptr_t)&sh_simple_transaction_get);
 	pr_info("selinux_hide: hook_site: selinux_transaction_write->simple_transaction_get ret: %d \n", ret);
 	if (ret)
 		goto hook_classic;
 
 #if 0
 	symbol_addr = kallsyms_lookup_retry("simple_transaction_set");
-	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, (uintptr_t)&sh_simple_transaction_set);
+	ret = patch_arm64_branches_trampolined(tx_write_callsite, symbol_addr, (uintptr_t)&sh_simple_transaction_set);
 	pr_info("selinux_hide: hook_site: selinux_transaction_write->simple_transaction_set ret: %d \n", ret);
 	if (!ret)
 		return;
@@ -234,22 +218,23 @@ static void patch_branches_selinux_transaction_write(void)
 	 * so if second hook fails, we just gc the first one and fallback to fnptr
 	 */
 #else
-	target_callsite = kallsyms_lookup_retry("sel_write_access");
+	uintptr_t access_callsite = kallsyms_lookup_retry("sel_write_access");
 	symbol_addr = kallsyms_lookup_retry("security_compute_av_user");
-	if (!symbol_addr || !target_callsite)
-		goto hook_classic;
+	if (!symbol_addr || !access_callsite)
+		goto unhook_tx_get;
 
-	ret = patch_arm64_branches_trampolined(target_callsite, symbol_addr, (uintptr_t)&sh_security_compute_av_user);
+	ret = patch_arm64_branches_trampolined(access_callsite, symbol_addr, (uintptr_t)&sh_security_compute_av_user);
 	pr_info("selinux_hide: hook_site: sel_write_access->security_compute_av_user ret: %d \n", ret);
 	if (!ret)
 		return;
 #endif
+unhook_tx_get:
 	symbol_addr = kallsyms_lookup_retry("simple_transaction_get");
 	assume(!!symbol_addr);
 	if (!!trampoline)
-		ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 32 * 4), trampoline, symbol_addr);
+		ret = arm64_b_or_bl_patch(tx_write_callsite, __ksym_size(tx_write_callsite), trampoline, symbol_addr);
 	else
-		ret = arm64_b_or_bl_patch(target_callsite, ksu_get_ksym_size(target_callsite, 32 * 4), (uintptr_t)&sh_simple_transaction_get, symbol_addr);
+		ret = arm64_b_or_bl_patch(tx_write_callsite, __ksym_size(tx_write_callsite), (uintptr_t)&sh_simple_transaction_get, symbol_addr);
 	pr_info("selinux_hide: unhook_site: selinux_transaction_write->transaction_get ret: %d \n", ret);
 	if (ret) // uh oh, indeterminate state, just warn and limp on
 		pr_info("selinux_hide: unhook_site: selinux_transaction_write->transaction_get unhook failed! indeterminate state!\n");
@@ -260,85 +245,96 @@ hook_classic:
 }
 
 static void *security_context_to_sid_core_fn __read_mostly = nullptr;
-static __always_inline int should_ret_einval(const char *scontext, u32 scontext_len)
+#define KSU_SH_STACK_CTX_MAX 256
+
+static __always_inline const char *sh_sanitize_scontext(const char *scontext, u32 scontext_len,
+							char *buf, size_t buf_sz)
 {
 	if (unlikely(!ksu_selinux_hide_enabled))
-		return 0;
+		return scontext;
 
 	if (!ksu_is_seccomp_enabled())
-		return 0;
+		return scontext;
 
 	if (current_uid().val < 10000)
-		return 0;
+		return scontext;
 
-	if (!ksu_should_destroy_context(scontext, scontext_len, true))
-		return 0;
+	if (unlikely(!scontext || !scontext_len))
+		return scontext;
 
-	pr_info_ratelimited("selinux_hide: security_context_to_sid: destroy: %.*s\n", scontext_len, scontext);
-//	replace_after_second_colon(data, size);
-	do_useless_alloc(scontext_len);
-	do_useless_alloc(scontext_len);
-	do_useless_alloc(scontext_len);
-	return -EINVAL;
+	size_t type_len = 0;
+	size_t type_off = ksu_extract_context_type(scontext, scontext_len, &type_len);
+	if (!type_len)
+		return scontext;
+
+	bool hidden = ksu_type_is_hidden(scontext + type_off, type_len);
+
+	if (likely(scontext_len < buf_sz)) {
+		memcpy(buf, scontext, scontext_len);
+		buf[scontext_len] = '\0';
+		ksu_corrupt_type_char(buf + type_off, hidden);
+		return buf;
+	}
+
+	return hidden ? nullptr : scontext;
 }
-
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0) && defined(KSU_COMPAT_HAS_SELINUX_STATE)
 static __nocfi int sh_security_context_to_sid_core(struct selinux_state *state, const char *scontext, u32 scontext_len, u32 *sid, u32 def_sid, gfp_t gfp_flags, int force)
 {
-	int fret = should_ret_einval(scontext, scontext_len);
-	if (fret)
-		return fret;
+	char kbuf[KSU_SH_STACK_CTX_MAX];
+	const char *ctx = sh_sanitize_scontext(scontext, scontext_len, kbuf, sizeof(kbuf));
+	if (unlikely(!ctx))
+		return -EINVAL;
 
-	int ret = ((typeof (sh_security_context_to_sid_core) *)security_context_to_sid_core_fn)(state, scontext, scontext_len, sid, def_sid, gfp_flags, force);
-	return ret;
+	return ((typeof(sh_security_context_to_sid_core) *)security_context_to_sid_core_fn)(state, ctx, scontext_len, sid, def_sid, gfp_flags, force);
 }
 #else
 static __nocfi int sh_security_context_to_sid_core(const char *scontext, u32 scontext_len, u32 *sid, u32 def_sid, gfp_t gfp_flags, int force)
 {
-	int fret = should_ret_einval(scontext, scontext_len);
-	if (fret)
-		return fret;
+	char kbuf[KSU_SH_STACK_CTX_MAX];
+	const char *ctx = sh_sanitize_scontext(scontext, scontext_len, kbuf, sizeof(kbuf));
+	if (unlikely(!ctx))
+		return -EINVAL;
 
-	int ret = ((typeof (sh_security_context_to_sid_core) *)security_context_to_sid_core_fn)(scontext, scontext_len, sid, def_sid, gfp_flags, force);
-	return ret;
+	return ((typeof(sh_security_context_to_sid_core) *)security_context_to_sid_core_fn)(ctx, scontext_len, sid, def_sid, gfp_flags, force);
 }
 #endif
 
 #define SECURITY_CONTEXT_TO_SID_sstate	struct selinux_state *state, const char *scontext, u32 scontext_len, u32 *sid, gfp_t gfp
 __overloaded static int sh_security_context_to_sstate(SECURITY_CONTEXT_TO_SID_sstate)
 {
-	int fret = should_ret_einval(scontext, scontext_len);
-	if (fret)
-		return fret;
+	char kbuf[KSU_SH_STACK_CTX_MAX];
+	const char *ctx = sh_sanitize_scontext(scontext, scontext_len, kbuf, sizeof(kbuf));
+	if (unlikely(!ctx))
+		return -EINVAL;
 
 	assume(!!&security_context_to_sid);
-	int ret = ((typeof(sh_security_context_to_sstate) *)(void *)security_context_to_sid)(state, scontext, scontext_len, sid, gfp);
-	return ret;
+	return ((typeof(sh_security_context_to_sstate) *)(void *)security_context_to_sid)(state, ctx, scontext_len, sid, gfp);
 }
 
 #define SECURITY_CONTEXT_TO_SID_gfp	const char *scontext, u32 scontext_len, u32 *sid, gfp_t gfp
 __overloaded static int sh_security_context_to_sid_gfp(SECURITY_CONTEXT_TO_SID_gfp)
 {
-	int fret = should_ret_einval(scontext, scontext_len);
-	if (fret)
-		return fret;
+	char kbuf[KSU_SH_STACK_CTX_MAX];
+	const char *ctx = sh_sanitize_scontext(scontext, scontext_len, kbuf, sizeof(kbuf));
+	if (unlikely(!ctx))
+		return -EINVAL;
 
 	assume(!!&security_context_to_sid);
-	int ret = ((typeof(sh_security_context_to_sid_gfp) *)(void *)security_context_to_sid)(scontext, scontext_len, sid, gfp);
-	return ret;
+	return ((typeof(sh_security_context_to_sid_gfp) *)(void *)security_context_to_sid)(ctx, scontext_len, sid, gfp);
 }
 
 #define SECURITY_CONTEXT_TO_SID_legacy	const char *scontext, u32 scontext_len, u32 *sid
 __overloaded static int sh_security_context_to_sid_legacy(SECURITY_CONTEXT_TO_SID_legacy)
 {
-	int fret = should_ret_einval(scontext, scontext_len);
-	if (fret)
-		return fret;
+	char kbuf[KSU_SH_STACK_CTX_MAX];
+	const char *ctx = sh_sanitize_scontext(scontext, scontext_len, kbuf, sizeof(kbuf));
+	if (unlikely(!ctx))
+		return -EINVAL;
 
 	assume(!!&security_context_to_sid);
-	int ret = ((typeof(sh_security_context_to_sid_legacy) *)(void *)security_context_to_sid)(scontext, scontext_len, sid);
-	return ret;
+	return ((typeof(sh_security_context_to_sid_legacy) *)(void *)security_context_to_sid)(ctx, scontext_len, sid);
 }
 
 #define sh_security_context_to_sid_overloaded _Generic(					\
