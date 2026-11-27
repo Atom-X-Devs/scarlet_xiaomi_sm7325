@@ -430,19 +430,4 @@ static __always_inline bool ksu_should_destroy_context(const char *str, size_t l
 	return ksu_rule_is_hidden(str + t1_off, t1_len, str + t2_off, t2_len);
 }
 
-static noinline void do_useless_alloc(size_t sz)
-{
-	volatile uint32_t random = get_random_u32();
-	volatile uint8_t *s = (volatile uint8_t *)&random;
-	volatile int n = ((s[0] ?: 64) + (s[1] ?: 32) + (s[2] ?: 16) + (s[3] ?: 8)) / 2;
-	volatile char *stack = __builtin_alloca(n);
-
-	if (sz > 256)
-		sz = 256;
-
-	volatile char *heap __zoffstack(sz * 4 + n);
-	memset_explicit(heap, s[0], sz * 4 + n);
-	memset_explicit(stack, s[1], n);
-}
-
 #endif

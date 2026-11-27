@@ -61,12 +61,7 @@ static __always_inline int ksu_hide_setprocattr_inline(const char *name, void *v
 	if (!str || !str[0])
 		return 0;
 
-	if (!ksu_should_destroy_context(str, size, true))
-		return 0;
-	
-	pr_info_ratelimited("selinux_hide: setprocattr: destroy: %.*s\n", size, str);
-	replace_after_second_colon((char *)str, size);
-	do_useless_alloc(size);
+	ksu_sanitize_single_context(str, size);
 	return 0;
 }
 
@@ -138,18 +133,17 @@ static __nocfi ssize_t ksu_selinux_transaction_write(struct file *file, const ch
 	if (ino != SEL_CONTEXT && ino != SEL_ACCESS)
 		goto skip_destroy;
 
-	// two cachelines
-	char kbuf[128];
-	size_t len = (size < 128) ? size : 127;
+	char kbuf[256];
+	size_t len = (size < sizeof(kbuf)) ? size : (sizeof(kbuf) - 1);
 
 	if (!!copy_from_user(kbuf, buf, len))
 		goto skip_destroy;
 
 	kbuf[len] = '\0';
-	if (ksu_should_destroy_context(kbuf, len, false)) {
-		pr_info_ratelimited("selinux_hide: selinux_transaction_write: destroy: %s \n", kbuf);
-		// buf = (const char __user *)current->mm->start_stack;
-		do_useless_alloc(len);
+	if (ksu_should_destroy_context(kbuf, len, ino == SEL_CONTEXT)) {
+		char *tx = simple_transaction_get(file, buf, size);
+		if (IS_ERR(tx))
+			return PTR_ERR(tx);
 		return -EINVAL;
 	}
 
