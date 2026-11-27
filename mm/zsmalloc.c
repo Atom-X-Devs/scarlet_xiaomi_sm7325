@@ -62,6 +62,7 @@
 #include <linux/types.h>
 #include <linux/debugfs.h>
 #include <linux/zsmalloc.h>
+#include <linux/zpool.h>
 #include <linux/mount.h>
 #include <linux/pseudo_fs.h>
 #include <linux/migrate.h>
@@ -429,6 +430,71 @@ static bool valid_unallocated_handle(const struct zs_handle *handle)
 	return handle && IS_ALIGNED((unsigned long)handle, __alignof__(*handle)) &&
 	       !object_is_on_stack(handle) && !zs_handle_is_allocated(handle);
 }
+
+/* zpool driver */
+
+#ifdef CONFIG_ZPOOL
+
+static void *zs_zpool_create(const char *name, gfp_t gfp,
+			     const struct zpool_ops *ops, struct zpool *zpool)
+{
+	/* The caller of zs_malloc() supplies the allocation flags. */
+	return zs_create_pool(name);
+}
+
+static void zs_zpool_destroy(void *pool)
+{
+	zs_destroy_pool(pool);
+}
+
+static int zs_zpool_malloc(void *pool, struct zs_handle *handle,
+			   size_t size, gfp_t gfp)
+{
+	return zs_malloc(pool, handle, size, gfp);
+}
+
+static void zs_zpool_write(void *pool, const struct zs_handle *handle,
+			   void *src, size_t size)
+{
+	zs_obj_write(pool, handle, src, size);
+}
+
+static void zs_zpool_free(void *pool, struct zs_handle *handle)
+{
+	zs_free(pool, handle);
+}
+
+static void zs_zpool_read_sg_begin(void *pool, const struct zs_handle *handle,
+				   struct scatterlist *sg, size_t size)
+{
+	zs_obj_read_sg_begin(pool, handle, sg, size);
+}
+
+static void zs_zpool_read_sg_end(void *pool, const struct zs_handle *handle)
+{
+	zs_obj_read_sg_end(pool, handle);
+}
+
+static u64 zs_zpool_total_size(void *pool)
+{
+	return zs_get_total_pages(pool) << PAGE_SHIFT;
+}
+
+static struct zpool_driver zs_zpool_driver = {
+	.type =			  "zsmalloc",
+	.owner =		  THIS_MODULE,
+	.create =		  zs_zpool_create,
+	.destroy =		  zs_zpool_destroy,
+	.zs_malloc =		  zs_zpool_malloc,
+	.zs_write =		  zs_zpool_write,
+	.zs_free =		  zs_zpool_free,
+	.zs_read_sg_begin =	  zs_zpool_read_sg_begin,
+	.zs_read_sg_end =	  zs_zpool_read_sg_end,
+	.total_size =		  zs_zpool_total_size,
+};
+
+MODULE_ALIAS("zpool-zsmalloc");
+#endif /* CONFIG_ZPOOL */
 
 static __maybe_unused int is_first_page(struct page *page)
 {
@@ -2288,6 +2354,10 @@ static int __init zs_init(void)
 	if (ret)
 		goto out;
 
+#ifdef CONFIG_ZPOOL
+	zpool_register_driver(&zs_zpool_driver);
+#endif
+
 	zs_stat_init();
 
 out:
@@ -2296,6 +2366,9 @@ out:
 
 static void __exit zs_exit(void)
 {
+#ifdef CONFIG_ZPOOL
+	zpool_unregister_driver(&zs_zpool_driver);
+#endif
 	zsmalloc_unmount();
 
 	zs_stat_exit();

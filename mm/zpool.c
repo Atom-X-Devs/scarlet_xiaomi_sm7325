@@ -304,51 +304,79 @@ int zpool_shrink(struct zpool *zpool, unsigned int pages,
 }
 
 /**
- * zpool_obj_read_begin() - Start reading from a previously allocated handle.
+ * zpool_map_handle() - Map a previously allocated handle into memory
  * @zpool:	The zpool that the handle was allocated from
- * @handle:	The handle to read from
- * @local_copy:	A local buffer to use if needed.
+ * @handle:	The handle to map
+ * @mapmode:	How the memory should be mapped
  *
- * This starts a read operation of a previously allocated handle. The passed
- * @local_copy buffer may be used if needed by copying the memory into.
- * zpool_obj_read_end() MUST be called after the read is completed to undo any
- * actions taken (e.g. release locks).
+ * This maps a previously allocated handle into memory.  The @mapmode
+ * param indicates to the implementation how the memory will be
+ * used, i.e. read-only, write-only, read-write.  If the
+ * implementation does not support it, the memory will be treated
+ * as read-write.
  *
- * Returns: A pointer to the handle memory to be read, if @local_copy is used,
- * the returned pointer is @local_copy.
+ * This may hold locks, disable interrupts, and/or preemption,
+ * and the zpool_unmap_handle() must be called to undo those
+ * actions.  The code that uses the mapped handle should complete
+ * its operations on the mapped handle memory quickly and unmap
+ * as soon as possible.  As the implementation may use per-cpu
+ * data, multiple handles should not be mapped concurrently on
+ * any cpu.
+ *
+ * Returns: A pointer to the handle's mapped memory area.
  */
-void *zpool_obj_read_begin(struct zpool *zpool, unsigned long handle,
-			   void *local_copy)
+void *zpool_map_handle(struct zpool *zpool, unsigned long handle,
+			enum zpool_mapmode mapmode)
 {
-	return zpool->driver->obj_read_begin(zpool->pool, handle, local_copy);
+	return zpool->driver->map(zpool->pool, handle, mapmode);
 }
 
 /**
- * zpool_obj_read_end() - Finish reading from a previously allocated handle.
+ * zpool_unmap_handle() - Unmap a previously mapped handle
  * @zpool:	The zpool that the handle was allocated from
- * @handle:	The handle to read from
- * @handle_mem:	The pointer returned by zpool_obj_read_begin()
+ * @handle:	The handle to unmap
  *
- * Finishes a read operation previously started by zpool_obj_read_begin().
+ * This unmaps a previously mapped handle.  Any locks or other
+ * actions that the implementation took in zpool_map_handle()
+ * will be undone here.  The memory area returned from
+ * zpool_map_handle() should no longer be used after this.
  */
-void zpool_obj_read_end(struct zpool *zpool, unsigned long handle,
-			void *handle_mem)
+void zpool_unmap_handle(struct zpool *zpool, unsigned long handle)
 {
-	zpool->driver->obj_read_end(zpool->pool, handle, handle_mem);
+	zpool->driver->unmap(zpool->pool, handle);
 }
 
-/**
- * zpool_obj_write() - Write to a previously allocated handle.
- * @zpool:	The zpool that the handle was allocated from
- * @handle:	The handle to read from
- * @handle_mem:	The memory to copy from into the handle.
- * @mem_len:	The length of memory to be written.
- *
- */
-void zpool_obj_write(struct zpool *zpool, unsigned long handle,
-		     void *handle_mem, size_t mem_len)
+bool zpool_uses_zs_handles(struct zpool *zpool)
 {
-	zpool->driver->obj_write(zpool->pool, handle, handle_mem, mem_len);
+	return zpool->driver->zs_malloc != NULL;
+}
+
+int zpool_zs_malloc(struct zpool *zpool, struct zs_handle *handle,
+		    size_t size, gfp_t gfp)
+{
+	return zpool->driver->zs_malloc(zpool->pool, handle, size, gfp);
+}
+
+void zpool_zs_write(struct zpool *zpool, const struct zs_handle *handle,
+		    void *src, size_t size)
+{
+	zpool->driver->zs_write(zpool->pool, handle, src, size);
+}
+
+void zpool_zs_free(struct zpool *zpool, struct zs_handle *handle)
+{
+	zpool->driver->zs_free(zpool->pool, handle);
+}
+
+void zpool_zs_read_sg_begin(struct zpool *zpool, const struct zs_handle *handle,
+			    struct scatterlist *sg, size_t size)
+{
+	zpool->driver->zs_read_sg_begin(zpool->pool, handle, sg, size);
+}
+
+void zpool_zs_read_sg_end(struct zpool *zpool, const struct zs_handle *handle)
+{
+	zpool->driver->zs_read_sg_end(zpool->pool, handle);
 }
 
 /**
